@@ -1,49 +1,53 @@
-import { Suspense } from "react";
-import { getLeads, getStats } from "@/lib/actions";
-import StatsCards from "@/components/StatsCards";
-import LeadTable from "@/components/LeadTable";
-import Toolbar from "@/components/Toolbar";
-
-type Props = {
-  searchParams: Promise<{ search?: string; status?: string; source?: string }>;
-};
-
-export default async function Home({ searchParams }: Props) {
-  const params = await searchParams;
-  const [leads, stats] = await Promise.all([
-    getLeads(params.search, params.status || "tous", params.source || "tous"),
-    getStats(),
-  ]);
-
+export default function Home() {
   return (
-    <div className="min-h-screen">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-              M
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                CRM Bacs Blancs
-              </h1>
-              <p className="text-sm text-gray-500">
-                Les Matinées du Bac &mdash; Gestion des leads
-              </p>
-            </div>
+    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white">
+      <div className="max-w-4xl mx-auto px-4 py-12">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">Les Matinées du Bac</h1>
+          <p className="text-xl text-gray-600">Bacs blancs en visio avec coaching personnalisé</p>
+        </div>
+
+        {/* Two cards */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Espace élève */}
+          <div className="bg-white rounded-2xl shadow-lg border-2 border-purple-200 p-8 text-center hover:shadow-xl transition-shadow">
+            <div className="text-5xl mb-4">🎓</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Mon espace élève</h2>
+            <p className="text-gray-600 mb-6">
+              Consulte tes bacs blancs à venir, rejoins ton salon visio, et télécharge tes corrections.
+            </p>
+            <a
+              href="/espace-eleve"
+              className="inline-block px-6 py-3 rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-colors"
+            >
+              Accéder →
+            </a>
+          </div>
+
+          {/* Inscription */}
+          <div className="bg-white rounded-2xl shadow-lg border-2 border-blue-200 p-8 text-center hover:shadow-xl transition-shadow">
+            <div className="text-5xl mb-4">✍️</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">M'inscrire</h2>
+            <p className="text-gray-600 mb-6">
+              Remplis le formulaire pour t'inscrire à un bac blanc en visio et reçois ton lien de salon.
+            </p>
+            <a
+              href="/inscription"
+              className="inline-block px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
+            >
+              S'inscrire →
+            </a>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        <StatsCards stats={stats} />
-
-        <Suspense fallback={null}>
-          <Toolbar />
-        </Suspense>
-
-        <LeadTable leads={leads} />
-      </main>
+        {/* Info */}
+        <div className="mt-12 bg-purple-50 rounded-xl p-6 text-center">
+          <p className="text-gray-700">
+            <strong>Nouveau ?</strong> Inscris-toi d'abord, puis accède à ton espace pour voir tes bacs blancs et rejoindre les appels visio.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

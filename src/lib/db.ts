@@ -37,6 +37,23 @@ function getLocalDb() {
       )
     `);
     try { db.exec('ALTER TABLE "Lead" ADD COLUMN "contactLink" TEXT'); } catch {}
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS "PartnerSchool" (
+        id TEXT PRIMARY KEY NOT NULL,
+        etablissement TEXT NOT NULL,
+        ville TEXT,
+        "typeContact" TEXT NOT NULL DEFAULT 'Association parents',
+        "nomContact" TEXT,
+        fonction TEXT,
+        email TEXT,
+        telephone TEXT,
+        lien TEXT,
+        statut TEXT NOT NULL DEFAULT 'à contacter',
+        notes TEXT,
+        "createdAt" TEXT NOT NULL DEFAULT (datetime('now')),
+        "updatedAt" TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
     g.sqliteDb = db;
   }
   return g.sqliteDb as {
@@ -73,6 +90,23 @@ async function getPgPool() {
       )
     `);
     try { await g.pgPool.query('ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "contactLink" TEXT'); } catch {}
+    await g.pgPool.query(`
+      CREATE TABLE IF NOT EXISTS "PartnerSchool" (
+        id TEXT PRIMARY KEY NOT NULL,
+        etablissement TEXT NOT NULL,
+        ville TEXT,
+        "typeContact" TEXT NOT NULL DEFAULT 'Association parents',
+        "nomContact" TEXT,
+        fonction TEXT,
+        email TEXT,
+        telephone TEXT,
+        lien TEXT,
+        statut TEXT NOT NULL DEFAULT 'à contacter',
+        notes TEXT,
+        "createdAt" TEXT NOT NULL DEFAULT NOW()::TEXT,
+        "updatedAt" TEXT NOT NULL DEFAULT NOW()::TEXT
+      )
+    `);
     g.pgInitDone = true;
   }
   return g.pgPool;
