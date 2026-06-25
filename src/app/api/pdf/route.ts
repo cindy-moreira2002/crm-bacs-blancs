@@ -28,9 +28,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'HTML manquant' }, { status: 400 });
     }
 
-    const id = randomUUID();
-    const htmlPath = join(tmpdir(), `dossier-${id}.html`);
-    const pdfPath = join(tmpdir(), `dossier-${id}.pdf`);
+    const fileId = randomUUID();
+    const htmlPath = join(tmpdir(), `dossier-${fileId}.html`);
+    const pdfPath = join(tmpdir(), `dossier-${fileId}.pdf`);
 
     await writeFile(htmlPath, dossierDocument(body), 'utf8');
 
