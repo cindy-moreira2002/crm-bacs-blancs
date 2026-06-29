@@ -17,6 +17,7 @@ const sourceFilters = [
   { value: "tous", label: "Toutes sources" },
   { value: "Contact direct", label: "Contact direct" },
   { value: "LinkedIn", label: "LinkedIn" },
+  { value: "LinkedIn EDHEC", label: "LinkedIn EDHEC" },
   { value: "Superprof", label: "Superprof" },
   { value: "Site web", label: "Site web" },
   { value: "Annuaire", label: "Annuaire" },

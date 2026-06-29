@@ -33,6 +33,7 @@ const subjects = [
 const sources = [
   "Contact direct",
   "LinkedIn",
+  "LinkedIn EDHEC",
   "Superprof",
   "Site web",
   "Annuaire",

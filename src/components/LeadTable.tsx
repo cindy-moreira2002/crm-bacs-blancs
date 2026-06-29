@@ -10,6 +10,7 @@ import type { Lead } from "@/lib/actions";
 const sourceColors: Record<string, string> = {
   "Contact direct": "bg-green-100 text-green-700",
   LinkedIn: "bg-blue-100 text-blue-700",
+  "LinkedIn EDHEC": "bg-indigo-100 text-indigo-700",
   Superprof: "bg-orange-100 text-orange-700",
   "Site web": "bg-purple-100 text-purple-700",
   Annuaire: "bg-yellow-100 text-yellow-700",
