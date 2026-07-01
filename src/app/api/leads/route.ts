@@ -5,7 +5,8 @@ export async function GET(request: Request) {
   const search = url.searchParams.get("search") || undefined;
   const status = url.searchParams.get("status") || undefined;
   const source = url.searchParams.get("source") || undefined;
-  const leads = await getLeads(search, status, source);
+  const contacted = url.searchParams.get("contacted") || undefined;
+  const leads = await getLeads(search, status, source, contacted);
   return Response.json(leads);
 }
 

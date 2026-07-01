@@ -29,6 +29,7 @@ export default function Toolbar() {
   const searchParams = useSearchParams();
   const currentStatus = searchParams.get("status") || "tous";
   const currentSource = searchParams.get("source") || "tous";
+  const currentContacted = searchParams.get("contacted") || "tous";
   const currentSearch = searchParams.get("search") || "";
 
   function updateParams(key: string, value: string) {
@@ -86,6 +87,26 @@ export default function Toolbar() {
 
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="flex gap-1 flex-wrap">
+            <span className="text-xs text-gray-400 self-center mr-1">Contact:</span>
+            {[
+              { value: "tous", label: "Tous" },
+              { value: "non", label: "Pas contactés" },
+              { value: "oui", label: "Contactés" },
+            ].map((c) => (
+              <button
+                key={c.value}
+                onClick={() => updateParams("contacted", c.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  currentContacted === c.value
+                    ? "bg-teal-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 flex-wrap sm:ml-4">
             <span className="text-xs text-gray-400 self-center mr-1">Statut:</span>
             {statuses.map((s) => (
               <button

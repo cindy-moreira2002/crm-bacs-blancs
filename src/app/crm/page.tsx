@@ -5,13 +5,23 @@ import LeadTable from "@/components/LeadTable";
 import Toolbar from "@/components/Toolbar";
 
 type Props = {
-  searchParams: Promise<{ search?: string; status?: string; source?: string }>;
+  searchParams: Promise<{
+    search?: string;
+    status?: string;
+    source?: string;
+    contacted?: string;
+  }>;
 };
 
 export default async function CrmPage({ searchParams }: Props) {
   const params = await searchParams;
   const [leads, stats] = await Promise.all([
-    getLeads(params.search, params.status || "tous", params.source || "tous"),
+    getLeads(
+      params.search,
+      params.status || "tous",
+      params.source || "tous",
+      params.contacted
+    ),
     getStats(),
   ]);
 

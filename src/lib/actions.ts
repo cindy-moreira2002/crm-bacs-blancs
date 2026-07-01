@@ -17,6 +17,7 @@ export type Lead = {
   notes: string | null;
   source: string | null;
   contactLink: string | null;
+  contacted: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -38,7 +39,8 @@ export type LeadFormData = {
 export async function getLeads(
   search?: string,
   status?: string,
-  source?: string
+  source?: string,
+  contacted?: string
 ): Promise<Lead[]> {
   const params: string[] = [];
 
@@ -58,6 +60,12 @@ export async function getLeads(
     params.push(source);
   }
 
+  if (contacted === "oui" || contacted === "non") {
+    sqliteSql += ` AND contacted = ?`;
+    pgSql += ` AND contacted = $${paramIdx++}`;
+    params.push(contacted === "oui" ? "1" : "0");
+  }
+
   if (search) {
     const like = `%${search}%`;
     sqliteSql +=
@@ -69,15 +77,17 @@ export async function getLeads(
   sqliteSql += ' ORDER BY "updatedAt" DESC';
   pgSql += ' ORDER BY "updatedAt" DESC';
 
-  return (await dbAll(sqliteSql, pgSql, params)) as Lead[];
+  const rows = await dbAll(sqliteSql, pgSql, params);
+  return rows.map((r) => ({ ...r, contacted: !!r.contacted })) as Lead[];
 }
 
 export async function getLead(id: string): Promise<Lead | undefined> {
-  return (await dbGet(
+  const row = (await dbGet(
     'SELECT * FROM "Lead" WHERE id = ?',
     'SELECT * FROM "Lead" WHERE id = $1',
     [id]
-  )) as Lead | undefined;
+  )) as Record<string, unknown> | undefined;
+  return row ? ({ ...row, contacted: !!row.contacted } as Lead) : undefined;
 }
 
 export async function createLead(data: LeadFormData) {
@@ -138,6 +148,15 @@ export async function updateLead(id: string, data: LeadFormData) {
   );
 
   revalidatePath("/");
+}
+
+export async function toggleLeadContacted(id: string, contacted: boolean) {
+  await dbRun(
+    'UPDATE "Lead" SET contacted=?, "updatedAt"=? WHERE id=?',
+    'UPDATE "Lead" SET contacted=$1, "updatedAt"=$2 WHERE id=$3',
+    [contacted ? 1 : 0, new Date().toISOString(), id]
+  );
+  revalidatePath("/crm");
 }
 
 export async function deleteLead(id: string) {

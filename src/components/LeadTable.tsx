@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import StatusBadge from "./StatusBadge";
 import LeadForm from "./LeadForm";
-import { deleteLead } from "@/lib/actions";
+import { deleteLead, toggleLeadContacted } from "@/lib/actions";
 
 import type { Lead } from "@/lib/actions";
 
@@ -20,10 +21,12 @@ const sourceColors: Record<string, string> = {
 };
 
 export default function LeadTable({ leads }: { leads: Lead[] }) {
+  const router = useRouter();
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [contactedOverrides, setContactedOverrides] = useState<Record<string, boolean>>({});
 
   function handleDelete(id: string) {
     if (!confirm("Supprimer ce lead ?")) return;
@@ -31,6 +34,14 @@ export default function LeadTable({ leads }: { leads: Lead[] }) {
     startTransition(async () => {
       await deleteLead(id);
       setDeletingId(null);
+    });
+  }
+
+  function handleToggleContacted(id: string, contacted: boolean) {
+    setContactedOverrides((prev) => ({ ...prev, [id]: contacted }));
+    startTransition(async () => {
+      await toggleLeadContacted(id, contacted);
+      router.refresh();
     });
   }
 
@@ -50,6 +61,7 @@ export default function LeadTable({ leads }: { leads: Lead[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left text-gray-500 text-xs uppercase tracking-wider">
+              <th className="px-4 py-3 font-medium">Contacté</th>
               <th className="px-4 py-3 font-medium">Nom</th>
               <th className="px-4 py-3 font-medium">Contact</th>
               <th className="px-4 py-3 font-medium">Matiere</th>
@@ -61,12 +73,23 @@ export default function LeadTable({ leads }: { leads: Lead[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {leads.map((lead) => (
+            {leads.map((lead) => {
+              const contacted = contactedOverrides[lead.id] ?? lead.contacted;
+              return (
               <tr
                 key={lead.id}
                 className="hover:bg-gray-50 transition-colors cursor-pointer"
                 onClick={() => setExpandedId(expandedId === lead.id ? null : lead.id)}
               >
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={contacted}
+                    onChange={(e) => handleToggleContacted(lead.id, e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                    aria-label={`Marquer ${lead.firstName} ${lead.lastName} comme contacté`}
+                  />
+                </td>
                 <td className="px-4 py-3">
                   <div className="font-medium text-gray-900">
                     {lead.firstName} {lead.lastName}
@@ -133,7 +156,8 @@ export default function LeadTable({ leads }: { leads: Lead[] }) {
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -32,11 +32,13 @@ function getLocalDb() {
         notes TEXT,
         source TEXT,
         "contactLink" TEXT,
+        contacted INTEGER NOT NULL DEFAULT 0,
         "createdAt" TEXT NOT NULL DEFAULT (datetime('now')),
         "updatedAt" TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
     try { db.exec('ALTER TABLE "Lead" ADD COLUMN "contactLink" TEXT'); } catch {}
+    try { db.exec('ALTER TABLE "Lead" ADD COLUMN contacted INTEGER NOT NULL DEFAULT 0'); } catch {}
     db.exec(`
       CREATE TABLE IF NOT EXISTS "PartnerSchool" (
         id TEXT PRIMARY KEY NOT NULL,
@@ -85,11 +87,13 @@ async function getPgPool() {
         notes TEXT,
         source TEXT,
         "contactLink" TEXT,
+        contacted BOOLEAN NOT NULL DEFAULT FALSE,
         "createdAt" TEXT NOT NULL DEFAULT NOW()::TEXT,
         "updatedAt" TEXT NOT NULL DEFAULT NOW()::TEXT
       )
     `);
     try { await g.pgPool.query('ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "contactLink" TEXT'); } catch {}
+    try { await g.pgPool.query('ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS contacted BOOLEAN NOT NULL DEFAULT FALSE'); } catch {}
     await g.pgPool.query(`
       CREATE TABLE IF NOT EXISTS "PartnerSchool" (
         id TEXT PRIMARY KEY NOT NULL,
