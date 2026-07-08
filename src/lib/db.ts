@@ -3,6 +3,9 @@ import { Pool } from "@neondatabase/serverless";
 const databaseUrl = process.env.DATABASE_URL || process.env.STORAGE_URL;
 const usePostgres = !!databaseUrl && !databaseUrl.startsWith("file:");
 
+// Exposé pour les requêtes qui diffèrent trop entre dialectes (ex: ANY vs IN).
+export const isPostgres = usePostgres;
+
 const g = globalThis as unknown as {
   sqliteDb: unknown;
   pgPool: Pool | undefined;

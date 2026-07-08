@@ -1,6 +1,6 @@
 "use server";
 
-import { dbAll, dbGet, dbRun } from "@/lib/db";
+import { dbAll, dbGet, dbRun, isPostgres } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
 
@@ -151,12 +151,76 @@ export async function updateLead(id: string, data: LeadFormData) {
 }
 
 export async function toggleLeadContacted(id: string, contacted: boolean) {
+  // Coché → "contacté", décoché → "nouveau". Ne touche PAS au subject (Matière),
+  // donc pas d'exigence de matière ni d'écrasement d'un subject hors liste.
+  const status = contacted ? "contacté" : "nouveau";
   await dbRun(
-    'UPDATE "Lead" SET contacted=?, "updatedAt"=? WHERE id=?',
-    'UPDATE "Lead" SET contacted=$1, "updatedAt"=$2 WHERE id=$3',
-    [contacted ? 1 : 0, new Date().toISOString(), id]
+    'UPDATE "Lead" SET contacted=?, status=?, "updatedAt"=? WHERE id=?',
+    'UPDATE "Lead" SET contacted=$1, status=$2, "updatedAt"=$3 WHERE id=$4',
+    [contacted ? 1 : 0, status, new Date().toISOString(), id]
   );
   revalidatePath("/crm");
+  revalidatePath("/");
+}
+
+/**
+ * Marque contactés les leads dont l'email figure dans `emails` (ceux à qui elle
+ * a écrit). Ne crée aucun lead : seuls les leads déjà présents sont cochés, et
+ * leur statut passe de "nouveau" à "contacté". Retourne le nombre de leads touchés.
+ */
+export async function markContactedByEmails(
+  emails: string[]
+): Promise<{ matched: number }> {
+  const normalized = Array.from(
+    new Set(
+      (emails || [])
+        .map((e) => String(e || "").trim().toLowerCase())
+        .filter((e) => e.includes("@") && e.length <= 320)
+    )
+  );
+  if (normalized.length === 0) return { matched: 0 };
+
+  const now = new Date().toISOString();
+  let matched = 0;
+
+  if (isPostgres) {
+    const rows = await dbAll(
+      "",
+      `UPDATE "Lead"
+         SET contacted = TRUE,
+             status = CASE WHEN status = 'nouveau' THEN 'contacté' ELSE status END,
+             "updatedAt" = $2
+       WHERE lower(email) = ANY($1)
+       RETURNING id`,
+      [normalized, now]
+    );
+    matched = rows.length;
+  } else {
+    // SQLite (dev) : pas de tableau paramétrable, on découpe en lots d'IN(...).
+    for (let i = 0; i < normalized.length; i += 400) {
+      const chunk = normalized.slice(i, i + 400);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const found = await dbAll(
+        `SELECT id FROM "Lead" WHERE lower(email) IN (${placeholders})`,
+        "",
+        chunk
+      );
+      matched += found.length;
+      await dbRun(
+        `UPDATE "Lead"
+           SET contacted = 1,
+               status = CASE WHEN status = 'nouveau' THEN 'contacté' ELSE status END,
+               "updatedAt" = ?
+         WHERE lower(email) IN (${placeholders})`,
+        "",
+        [now, ...chunk]
+      );
+    }
+  }
+
+  revalidatePath("/crm");
+  revalidatePath("/");
+  return { matched };
 }
 
 export async function deleteLead(id: string) {
