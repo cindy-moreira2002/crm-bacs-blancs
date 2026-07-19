@@ -5,7 +5,8 @@ export const runtime = 'nodejs';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  // service_role côté serveur : passe outre RLS. Repli sur anon en dev local.
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 // GET /api/copies/fichier?id=... → renvoie le fichier d'origine déposé par le prof
