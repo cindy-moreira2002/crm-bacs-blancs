@@ -1,20 +1,23 @@
 'use client';
 
 import { useState } from 'react';
+import { matieresDisponibles, sessionsPourMatiere, labelSession } from '@/lib/sessions';
 
-type Matiere = 'Français' | 'Philosophie' | 'Mathématiques' | 'Histoire-Géo' | 'SES' | 'Spécialité 1' | 'Spécialité 2';
-
-const MATIERES: Matiere[] = ['Français', 'Philosophie', 'Mathématiques', 'Histoire-Géo', 'SES', 'Spécialité 1', 'Spécialité 2'];
+const MATIERES = matieresDisponibles();
 
 export function FormInscription() {
+  const [prenom, setPrenom] = useState('');
   const [nom, setNom] = useState('');
   const [email, setEmail] = useState('');
   const [emailParent, setEmailParent] = useState('');
   const [telephone, setTelephone] = useState('');
-  const [matiere, setMatiere] = useState<Matiere>('Français');
+  const [matiere, setMatiere] = useState<string>(MATIERES[0] ?? '');
   const [dateEpreuve, setDateEpreuve] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Dates de bacs blancs proposées pour la matière cochée
+  const sessions = sessionsPourMatiere(matiere);
 
   const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   const validatePhone = (p: string) => /^[\d\s\-\+\(\)]{10,}$/.test(p.replace(/\s/g, ''));
@@ -23,6 +26,10 @@ export function FormInscription() {
     e.preventDefault();
     setMessage(null);
 
+    if (!prenom.trim()) {
+      setMessage({ type: 'error', text: 'Prénom de l\'élève requis' });
+      return;
+    }
     if (!nom.trim()) {
       setMessage({ type: 'error', text: 'Nom de l\'élève requis' });
       return;
@@ -39,23 +46,28 @@ export function FormInscription() {
       setMessage({ type: 'error', text: 'Téléphone du parent invalide (min 10 chiffres)' });
       return;
     }
+    if (sessions.length > 0 && !dateEpreuve) {
+      setMessage({ type: 'error', text: 'Choisis une date de bac blanc' });
+      return;
+    }
 
     setLoading(true);
     try {
       const res = await fetch('/api/inscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nom, email, email_parent: emailParent, telephone, matiere, date_epreuve: dateEpreuve || null }),
+        body: JSON.stringify({ nom: `${prenom.trim()} ${nom.trim()}`, email, email_parent: emailParent, telephone, matiere, date_epreuve: dateEpreuve || null }),
       });
 
       const data = await res.json();
       if (res.ok) {
         setMessage({ type: 'success', text: '✅ Inscription confirmée !' });
+        setPrenom('');
         setNom('');
         setEmail('');
         setEmailParent('');
         setTelephone('');
-        setMatiere('Français');
+        setMatiere(MATIERES[0] ?? '');
         setDateEpreuve('');
       } else {
         setMessage({ type: 'error', text: data.error || 'Erreur serveur' });
@@ -74,6 +86,15 @@ export function FormInscription() {
       <h2 className="text-2xl font-bold mb-6 text-gray-800">Inscription Bac Blanc</h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          type="text"
+          placeholder="Prénom de l'élève"
+          value={prenom}
+          onChange={(e) => setPrenom(e.target.value)}
+          className={inputClass}
+          required
+        />
+
         <input
           type="text"
           placeholder="Nom de l'élève"
@@ -110,26 +131,38 @@ export function FormInscription() {
           required
         />
 
-        <select
-          value={matiere}
-          onChange={(e) => setMatiere(e.target.value as Matiere)}
-          className={inputClass}
-        >
-          {MATIERES.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
+        <label className="block text-sm text-gray-600">
+          Matière
+          <select
+            value={matiere}
+            onChange={(e) => { setMatiere(e.target.value); setDateEpreuve(''); }}
+            className={`${inputClass} mt-1`}
+          >
+            {MATIERES.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label className="block text-sm text-gray-600">
-          Date de l&apos;épreuve (bac blanc)
-          <input
-            type="date"
+          Prochaine date de bac blanc
+          <select
             value={dateEpreuve}
             onChange={(e) => setDateEpreuve(e.target.value)}
             className={`${inputClass} mt-1`}
-          />
+            disabled={sessions.length === 0}
+          >
+            <option value="">
+              {sessions.length === 0 ? 'Aucune date ouverte pour cette matière' : '— Choisis une date —'}
+            </option>
+            {sessions.map((s) => (
+              <option key={s.date} value={s.date}>
+                {labelSession(s)}
+              </option>
+            ))}
+          </select>
         </label>
 
         <button

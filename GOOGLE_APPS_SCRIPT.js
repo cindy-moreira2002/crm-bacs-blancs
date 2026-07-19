@@ -9,10 +9,13 @@
 
 // ==== CONFIG ====
 const SUPABASE_URL = 'https://orpbfnmdlvxmkvyrpvtj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ycGJmbm1kbHZ4bWt2eXJwdnRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNzI0MDksImV4cCI6MjA5Njg0ODQwOX0.vJJYkCfezKi_eg2vx40n2a7FVAP6hsiCsY0ImvIudB0';
+// ⚠️ IMPORTANT : mets la clé SERVICE_ROLE (secrète), PAS la clé anon.
+// La table a RLS activé → la clé anon renvoie 0 ligne → aucun mail envoyé.
+// Où la trouver : Supabase → Project Settings → API → "service_role" (secret) → Copy.
+const SUPABASE_KEY = 'COLLE_TA_CLE_SERVICE_ROLE_ICI';
 
-// URL du site (mets l'URL Vercel quand déployé)
-const SITE_URL = 'http://localhost:3000';
+// URL du site en production (Vercel)
+const SITE_URL = 'https://crm-bacs-blancs-ihgf.vercel.app';
 
 // Heure de début du bac blanc (format 24h, Paris) — utilisée pour le rappel H-1
 const HEURE_DEBUT_BB = 9;
