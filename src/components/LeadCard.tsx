@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { deleteLead } from "@/lib/actions";
+import { deleteLead, toggleLeadContacted } from "@/lib/actions";
 import type { Lead } from "@/lib/actions";
 import StatusBadge from "./StatusBadge";
 import LeadForm from "./LeadForm";
@@ -9,11 +9,19 @@ import LeadForm from "./LeadForm";
 export default function LeadCard({ lead }: { lead: Lead }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [contacted, setContacted] = useState(lead.contacted);
+  const [status, setStatus] = useState(lead.status);
   const [isPending, startTransition] = useTransition();
 
   function handleDelete() {
     if (!confirm(`Supprimer ${lead.firstName} ${lead.lastName} ?`)) return;
     startTransition(() => deleteLead(lead.id));
+  }
+
+  function handleToggleContacted(checked: boolean) {
+    setContacted(checked); // optimiste
+    setStatus(checked ? "contacté" : "nouveau");
+    startTransition(() => toggleLeadContacted(lead.id, checked));
   }
 
   const hasContact = lead.email || lead.phone;
@@ -31,8 +39,22 @@ export default function LeadCard({ lead }: { lead: Lead }) {
           <h3 className="font-semibold text-gray-900 text-sm leading-tight">
             {lead.firstName} {lead.lastName}
           </h3>
-          <StatusBadge status={lead.status} />
+          <StatusBadge status={status} />
         </div>
+
+        <label
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-2 mb-3 cursor-pointer select-none w-fit"
+        >
+          <input
+            type="checkbox"
+            checked={contacted}
+            disabled={isPending}
+            onChange={(e) => handleToggleContacted(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-50"
+          />
+          <span className="text-xs font-medium text-gray-600">Contacté</span>
+        </label>
 
         <div className="flex flex-wrap gap-1.5 mb-3">
           <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-xs font-medium">

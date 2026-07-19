@@ -46,3 +46,7 @@ next-env.d.ts
 *.db-wal
 .fuse_hidden*
 .claude/
+
+# Apps Script CRM : artefacts build + données, pas de source
+google-apps-script-crm/build/
+google-apps-script-crm/outputs/

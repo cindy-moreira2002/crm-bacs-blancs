@@ -30,6 +30,16 @@ type EnCorrection = { nom: string; email: string; matiere: string };
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
+// --- Mode démonstration (URL ?demo=1) : bac blanc de septembre, élèves fictifs.
+// N'affecte jamais la prod : activé uniquement par le paramètre d'URL.
+const DEMO_INSCRITS: Inscrit[] = [
+  { id: 'demo-emma',   nom: 'Emma Rousseau',   email: 'emma.rousseau@exemple.fr',   matiere: 'Français',    created_at: '2026-09-14T09:00:00Z' },
+  { id: 'demo-lucas',  nom: 'Lucas Bernard',   email: 'lucas.bernard@exemple.fr',   matiere: 'Français',    created_at: '2026-09-14T09:05:00Z' },
+  { id: 'demo-jade',   nom: 'Jade Moreau',     email: 'jade.moreau@exemple.fr',     matiere: 'Français',    created_at: '2026-09-14T09:12:00Z' },
+  { id: 'demo-nathan', nom: 'Nathan Lefebvre', email: 'nathan.lefebvre@exemple.fr', matiere: 'Philosophie', created_at: '2026-09-21T09:00:00Z' },
+  { id: 'demo-chloe',  nom: 'Chloé Girard',    email: 'chloe.girard@exemple.fr',    matiere: 'Philosophie', created_at: '2026-09-21T09:08:00Z' },
+];
+
 export function EspaceProf() {
   const [copies, setCopies] = useState<Copie[]>([]);
   const [inscrits, setInscrits] = useState<Inscrit[]>([]);
@@ -52,6 +62,12 @@ export function EspaceProf() {
 
   const charger = async () => {
     try {
+      const demo = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === '1';
+      if (demo) {
+        setCopies([]);
+        setInscrits(DEMO_INSCRITS);
+        return;
+      }
       const [rc, ri] = await Promise.all([
         fetch('/api/copies').then((r) => r.json()),
         fetch('/api/inscriptions').then((r) => r.json()),
