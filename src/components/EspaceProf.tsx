@@ -11,6 +11,7 @@ type Copie = {
   eleve_email: string | null;
   fichier_nom: string | null;
   statut: string;
+  note: number | null;
   correction_texte: string | null;
   pdf_pret: boolean;
   a_envoyer: boolean;
@@ -130,6 +131,19 @@ export function EspaceProf() {
       });
       setCopies((cs) => cs.map((c) => (c.id === active.id ? { ...c, correction_texte: html, pdf_pret: false } : c)));
     } finally { setBusy(''); }
+  };
+
+  // Enregistre la note /20 saisie par le prof (vide = efface)
+  const enregistrerNote = async (c: Copie, valeur: string) => {
+    const v = valeur.trim();
+    const note = v === '' ? null : Math.max(0, Math.min(20, parseFloat(v.replace(',', '.'))));
+    if (note !== null && Number.isNaN(note)) return;
+    if (note === c.note) return;
+    setCopies((cs) => cs.map((x) => (x.id === c.id ? { ...x, note } : x)));
+    await fetch('/api/copies', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: c.id, note }),
+    });
   };
 
   const statutEnvoi = (c: Copie) => {
@@ -267,6 +281,7 @@ export function EspaceProf() {
               <tr>
                 <th className="text-left px-5 py-2 font-medium">Élève</th>
                 <th className="text-left px-5 py-2 font-medium">Matière</th>
+                <th className="text-left px-5 py-2 font-medium">Note /20</th>
                 <th className="text-left px-5 py-2 font-medium">Correction</th>
                 <th className="text-left px-5 py-2 font-medium">PDF</th>
                 <th className="text-left px-5 py-2 font-medium">Envoi à l'élève</th>
@@ -278,6 +293,15 @@ export function EspaceProf() {
                 <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
                   <td className="px-5 py-3 font-medium text-gray-800">{c.eleve_nom}</td>
                   <td className="px-5 py-3 text-gray-600">{c.matiere}</td>
+                  <td className="px-5 py-3">
+                    <input
+                      type="number" min={0} max={20} step={0.5}
+                      defaultValue={c.note ?? ''}
+                      placeholder="—"
+                      onBlur={(e) => enregistrerNote(c, e.target.value)}
+                      className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </td>
                   <td className="px-5 py-3">
                     {c.statut === 'corrigée'
                       ? <span className="text-green-700 text-xs">Corrigée</span>

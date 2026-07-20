@@ -8,6 +8,9 @@ type Copie = {
   matiere: string;
   eleve_nom: string;
   statut: string;
+  note: number | null;
+  fichier_nom: string | null;
+  pdf_pret: boolean;
   created_at: string;
 };
 
@@ -48,6 +51,15 @@ function joursRestants(iso: string) {
   return `J-${diff}`;
 }
 function prenom(nom: string) { return nom.split(' ')[0]; }
+// Couleur d'une note /20 : rouge < 8, orange < 10, ambre < 12, vert < 16, vert vif ≥ 16
+function couleurNote(n: number) {
+  if (n < 8)  return '#DC2626';
+  if (n < 10) return '#EA580C';
+  if (n < 12) return '#D97706';
+  if (n < 16) return '#059669';
+  return '#10B981';
+}
+function fmtNote(n: number) { return Number.isInteger(n) ? `${n}` : n.toFixed(1).replace('.', ','); }
 
 export function EspaceEleve() {
   const [email, setEmail]               = useState('');
@@ -89,8 +101,21 @@ export function EspaceEleve() {
     return acc;
   }, {});
 
-  // Graphique : tous les BB (passés + à venir) pour la progression
-  const allBB = [...passes, ...aVenir];
+  // Copie correspondant à une inscription (par matière)
+  const copieDe = (i: Inscription) => (copies ?? []).find(c => c.matiere.toLowerCase() === i.matiere.toLowerCase());
+  // Date de passage d'une copie : date de l'épreuve inscrite, sinon date de dépôt
+  const dateCopie = (c: Copie) => {
+    const insc = (inscriptions ?? []).find(i => i.matiere.toLowerCase() === c.matiere.toLowerCase() && i.date_epreuve);
+    return insc?.date_epreuve ?? c.created_at;
+  };
+  // Notes réelles pour le graphe d'évolution (copies notées, ordre chronologique)
+  const notesData = (copies ?? [])
+    .filter(c => c.note != null)
+    .map(c => ({ c, date: dateCopie(c) }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const moyenne = notesData.length
+    ? notesData.reduce((s, x) => s + (x.c.note as number), 0) / notesData.length
+    : null;
 
   // Sessions plateforme pas encore inscrites
   const sessionsDispos = SESSIONS_PLATEFORME.filter(s =>
@@ -245,19 +270,38 @@ export function EspaceEleve() {
                   Passés
                 </p>
                 {passes.map(i => {
-                  const c = (copies ?? []).find(c => c.matiere.toLowerCase() === i.matiere.toLowerCase());
+                  const c = copieDe(i);
+                  const note = c?.note ?? null;
                   return (
-                    <div key={i.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 0', borderBottom: '1px solid #F9FAFB', opacity: .75 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: couleur(i.matiere), flexShrink: 0 }} />
-                        <div>
-                          <p style={{ fontWeight: 700, fontSize: '.9rem', color: '#111827' }}>{i.matiere}</p>
-                          <p style={{ fontSize: '.75rem', color: '#9CA3AF' }}>{i.date_epreuve ? fmtDate(i.date_epreuve) : 'Date non renseignée'}</p>
+                    <div key={i.id} style={{ padding: '12px 0', borderBottom: '1px solid #F9FAFB' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: couleur(i.matiere), flexShrink: 0 }} />
+                          <div>
+                            <p style={{ fontWeight: 700, fontSize: '.9rem', color: '#111827' }}>{i.matiere}</p>
+                            <p style={{ fontSize: '.75rem', color: '#9CA3AF' }}>{i.date_epreuve ? fmtDate(i.date_epreuve) : 'Date non renseignée'}</p>
+                          </div>
                         </div>
+                        {note != null
+                          ? <span style={{ fontSize: '.9rem', fontWeight: 800, padding: '4px 12px', borderRadius: 100, color: '#fff', background: couleurNote(note), flexShrink: 0 }}>{fmtNote(note)}/20</span>
+                          : <span style={{ fontSize: '.72rem', fontWeight: 700, padding: '4px 10px', borderRadius: 100, background: c ? '#ECFDF5' : '#FFF7ED', color: c ? '#059669' : '#C2410C', flexShrink: 0 }}>{c ? '✓ Corrigé' : 'En attente'}</span>}
                       </div>
-                      <span style={{ fontSize: '.72rem', fontWeight: 700, padding: '4px 10px', borderRadius: 100, background: c ? '#ECFDF5' : '#FFF7ED', color: c ? '#059669' : '#C2410C' }}>
-                        {c ? '✓ Corrigé' : 'En attente'}
-                      </span>
+                      {(c?.fichier_nom || c?.pdf_pret) && (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, marginLeft: 20 }}>
+                          {c?.fichier_nom && (
+                            <a href={`/api/copies/fichier?id=${c.id}`} target="_blank" rel="noreferrer"
+                              style={{ fontSize: '.75rem', fontWeight: 700, color: '#6B7280', background: '#F3F4F6', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
+                              📄 Ma copie
+                            </a>
+                          )}
+                          {c?.pdf_pret && (
+                            <a href={`/api/copies/pdf?id=${c.id}`}
+                              style={{ fontSize: '.75rem', fontWeight: 700, color: '#7C3AED', background: '#F5F3FF', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
+                              📘 Dossier de correction
+                            </a>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -266,61 +310,36 @@ export function EspaceEleve() {
           </div>
         )}
 
-        {/* ── Graphique d'évolution ── */}
-        {allBB.length > 0 && (
+        {/* ── Graphique d'évolution des notes ── */}
+        {notesData.length > 0 && (
           <div style={{ background: '#fff', borderRadius: 20, padding: '24px 26px', border: '1px solid #E5E7EB', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
-            <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
-              📈 Mon évolution
+            <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              📈 Évolution de mes notes
             </h3>
-            {/* Barres par matière */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 150, marginBottom: 12, paddingTop: 8 }}>
-              {allBB.slice(0, 6).map((i, idx) => {
-                const c = (copies ?? []).find(c => c.matiere.toLowerCase() === i.matiere.toLowerCase());
-                const isPast = !i.date_epreuve || new Date(i.date_epreuve) < today;
-                const pct = c ? 100 : isPast ? 60 : 20;
-                const barColor = c ? '#10B981' : isPast ? '#FB923C' : '#C4B5FD';
+            {moyenne != null && (
+              <p style={{ fontSize: '.82rem', color: '#6B7280', marginBottom: 6 }}>
+                Moyenne : <strong style={{ color: couleurNote(moyenne) }}>{fmtNote(Math.round(moyenne * 10) / 10)}/20</strong> sur {notesData.length} épreuve{notesData.length > 1 ? 's' : ''}
+              </p>
+            )}
+            {/* Barres = note/20, dernières 8 épreuves */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 10, marginBottom: 4 }}>
+              {notesData.slice(-8).map(({ c, date }) => {
+                const n = c.note as number;
                 return (
-                  <div key={i.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
-                    <div style={{ width: '100%', maxWidth: 50, borderRadius: '8px 8px 0 0', height: `${pct}%`, background: barColor, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 6, transition: 'height .5s ease' }}>
-                      <span style={{ color: '#fff', fontWeight: 800, fontSize: '.78rem' }}>{idx + 1}</span>
-                    </div>
-                    <p style={{ fontSize: '.65rem', color: '#9CA3AF', fontWeight: 600, textAlign: 'center', lineHeight: 1.3, maxWidth: 56 }}>{i.matiere.replace('Mathématiques','Maths').replace('Histoire-Géo','Hist.')}</p>
+                  <div key={c.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+                    <span style={{ fontSize: '.78rem', fontWeight: 800, color: couleurNote(n) }}>{fmtNote(n)}</span>
+                    <div style={{ width: '100%', maxWidth: 46, borderRadius: '8px 8px 0 0', height: `${Math.max(4, Math.round((n / 20) * 120))}px`, background: couleurNote(n), transition: 'height .5s ease' }} />
+                    <p style={{ fontSize: '.62rem', color: '#9CA3AF', fontWeight: 600, textAlign: 'center', lineHeight: 1.25 }}>
+                      {c.matiere.replace('Mathématiques', 'Maths').replace('Histoire-Géo', 'Hist.')}<br />
+                      {new Date(date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    </p>
                   </div>
                 );
               })}
             </div>
-            {/* Légende */}
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', borderTop: '1px solid #F3F4F6', paddingTop: 14 }}>
-              {[['#10B981','Corrigé'],['#FB923C','Passé / en attente'],['#C4B5FD','À venir']].map(([c,l]) => (
-                <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '.75rem', color: '#6B7280' }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 3, background: c }} />{l}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Mes dossiers de correction ── */}
-        {(copies ?? []).length > 0 && (
-          <div style={{ background: '#fff', borderRadius: 20, padding: '24px 26px', border: '1px solid #E5E7EB', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
-            <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
-              📄 Mes dossiers de correction
-            </h3>
-            {(copies ?? []).map(c => (
-              <a key={c.id} href={`/api/copies/pdf?id=${c.id}`}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 14, border: '1px solid #E5E7EB', borderRadius: 14, marginBottom: 10, textDecoration: 'none', transition: 'all .2s', cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = '#7C3AED', e.currentTarget.style.boxShadow = '0 8px 20px rgba(124,58,237,.1)')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = '#E5E7EB', e.currentTarget.style.boxShadow = 'none')}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: couleur(c.matiere)+'15', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>📝</div>
-                  <div>
-                    <p style={{ fontWeight: 700, fontSize: '.9rem', color: '#111827' }}>Dossier — {c.matiere}</p>
-                    <p style={{ fontSize: '.75rem', color: '#9CA3AF' }}>{new Date(c.created_at).toLocaleDateString('fr-FR')}</p>
-                  </div>
-                </div>
-                <span style={{ color: '#7C3AED', fontWeight: 700, fontSize: '.85rem' }}>Ouvrir →</span>
-              </a>
-            ))}
+            <p style={{ fontSize: '.7rem', color: '#9CA3AF', borderTop: '1px solid #F3F4F6', paddingTop: 12, marginTop: 8 }}>
+              Notes sur 20. Vert = ≥ 10, rouge = &lt; 10.
+            </p>
           </div>
         )}
 

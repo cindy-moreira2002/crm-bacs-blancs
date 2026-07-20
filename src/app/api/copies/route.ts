@@ -48,12 +48,14 @@ export async function POST(req: NextRequest) {
 // PATCH — sauvegarde la correction éditée par le prof
 export async function PATCH(req: NextRequest) {
   try {
-    const { id, correction_texte, a_envoyer } = await req.json();
+    const { id, correction_texte, a_envoyer, note } = await req.json();
     if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 });
 
     const patch: Record<string, unknown> = {};
     if (typeof correction_texte === 'string') patch.correction_texte = correction_texte;
     if (typeof a_envoyer === 'boolean') patch.a_envoyer = a_envoyer;
+    // note : number pour enregistrer, null pour effacer
+    if (typeof note === 'number' || note === null) patch.note = note;
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: 'rien à mettre à jour' }, { status: 400 });
     }
@@ -73,14 +75,21 @@ export async function GET(req: NextRequest) {
     const statut = req.nextUrl.searchParams.get('statut');
     const eleveEmail = req.nextUrl.searchParams.get('eleve_email');
     // On exclut les gros champs base64 du listing
-    let query = supabase
-      .from('copies')
-      .select('id, matiere, eleve_nom, eleve_email, prof_email, notes_prof, copie_texte, remarques, fichier_type, fichier_nom, statut, correction_texte, pdf_pret, a_envoyer, envoye, created_at')
-      .order('created_at', { ascending: false });
-    if (statut) query = query.eq('statut', statut);
-    if (eleveEmail) query = query.eq('eleve_email', eleveEmail).eq('envoye', true);
+    const build = (cols: string) => {
+      let query = supabase.from('copies').select(cols).order('created_at', { ascending: false });
+      if (statut) query = query.eq('statut', statut);
+      if (eleveEmail) query = query.eq('eleve_email', eleveEmail).eq('envoye', true);
+      return query;
+    };
 
-    const { data, error } = await query;
+    const AVEC_NOTE = 'id, matiere, eleve_nom, eleve_email, prof_email, notes_prof, note, copie_texte, remarques, fichier_type, fichier_nom, statut, correction_texte, pdf_pret, a_envoyer, envoye, created_at';
+    const SANS_NOTE = 'id, matiere, eleve_nom, eleve_email, prof_email, notes_prof, copie_texte, remarques, fichier_type, fichier_nom, statut, correction_texte, pdf_pret, a_envoyer, envoye, created_at';
+
+    let { data, error } = await build(AVEC_NOTE);
+    // Repli si la colonne note n'existe pas encore (migration non faite)
+    if (error && /note/.test(error.message || '')) {
+      ({ data, error } = await build(SANS_NOTE));
+    }
     if (error) throw error;
 
     return NextResponse.json({ copies: data });
