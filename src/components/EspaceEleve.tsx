@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SESSIONS_PLATEFORME } from '@/lib/sessions';
 
 type Copie = {
@@ -61,11 +61,34 @@ function couleurNote(n: number) {
 }
 function fmtNote(n: number) { return Number.isInteger(n) ? `${n}` : n.toFixed(1).replace('.', ','); }
 
+// ── Mode aperçu (URL ?demo=1) : élève fictif déjà noté, pour visualiser le rendu.
+// N'affecte jamais la prod : activé uniquement par le paramètre d'URL, aucune donnée réelle touchée.
+const DEMO_INSCRIPTIONS: Inscription[] = [
+  { id: 'demo-fr', nom: 'Léa Martin', matiere: 'Français',       date_epreuve: '2026-03-14', created_at: '2026-02-01T09:00:00Z' },
+  { id: 'demo-ph', nom: 'Léa Martin', matiere: 'Philosophie',    date_epreuve: '2026-04-11', created_at: '2026-03-01T09:00:00Z' },
+  { id: 'demo-ma', nom: 'Léa Martin', matiere: 'Mathématiques',  date_epreuve: '2026-05-16', created_at: '2026-04-01T09:00:00Z' },
+  { id: 'demo-hg', nom: 'Léa Martin', matiere: 'Histoire-Géo',   date_epreuve: '2026-09-27', created_at: '2026-07-01T09:00:00Z' },
+];
+const DEMO_COPIES: Copie[] = [
+  { id: 'demo-fr', matiere: 'Français',      eleve_nom: 'Léa Martin', statut: 'corrigée', note: 14,   fichier_nom: 'copie-francais.pdf', pdf_pret: true, created_at: '2026-03-14T13:00:00Z' },
+  { id: 'demo-ph', matiere: 'Philosophie',   eleve_nom: 'Léa Martin', statut: 'corrigée', note: 11.5, fichier_nom: 'copie-philo.pdf',    pdf_pret: true, created_at: '2026-04-11T13:00:00Z' },
+  { id: 'demo-ma', matiere: 'Mathématiques', eleve_nom: 'Léa Martin', statut: 'corrigée', note: 8,    fichier_nom: 'copie-maths.pdf',    pdf_pret: true, created_at: '2026-05-16T13:00:00Z' },
+];
+
 export function EspaceEleve() {
   const [email, setEmail]               = useState('');
   const [copies, setCopies]             = useState<Copie[] | null>(null);
   const [inscriptions, setInscriptions] = useState<Inscription[] | null>(null);
   const [loading, setLoading]           = useState(false);
+
+  // Aperçu : ?demo=1 → charge l'élève fictif sans passer par Supabase.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('demo') === '1') {
+      setInscriptions(DEMO_INSCRIPTIONS);
+      setCopies(DEMO_COPIES);
+    }
+  }, []);
 
   const chercher = async (e: React.FormEvent) => {
     e.preventDefault();
