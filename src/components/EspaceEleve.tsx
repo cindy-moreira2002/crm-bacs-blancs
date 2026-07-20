@@ -202,7 +202,7 @@ export function EspaceEleve() {
     <div style={{ background: '#F8FAFC', minHeight: '100vh', fontFamily: 'inherit' }}>
 
       {/* ── HERO ── */}
-      <div style={{ background: 'linear-gradient(135deg,#1E1145 0%,#2D1B5E 55%,#1E3A5F 100%)', padding: '40px 24px 56px', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ background: 'linear-gradient(135deg,#1E1145 0%,#2D1B5E 55%,#1E3A5F 100%)', padding: '40px 24px 36px', position: 'relative', overflow: 'hidden' }}>
         {/* glow */}
         <div style={{ position: 'absolute', width: 500, height: 500, right: -150, top: -200, borderRadius: '50%', background: 'radial-gradient(circle,rgba(124,58,237,.45),transparent 60%)', pointerEvents: 'none' }} />
         <div style={{ maxWidth: 900, margin: '0 auto', position: 'relative', zIndex: 2 }}>
@@ -231,7 +231,7 @@ export function EspaceEleve() {
 
       {/* ── PROCHAIN BB (si existe) ── */}
       {prochain && (
-        <div style={{ maxWidth: 900, margin: '-28px auto 0', padding: '0 24px' }}>
+        <div style={{ maxWidth: 900, margin: '20px auto 0', padding: '0 24px' }}>
           <div style={{ background: `linear-gradient(135deg,${couleur(prochain.matiere)},${couleur(prochain.matiere)}CC)`, borderRadius: 20, padding: '24px 28px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, boxShadow: `0 12px 40px ${couleur(prochain.matiere)}50`, flexWrap: 'wrap' }}>
             <div>
               <p style={{ opacity: .8, fontSize: '.82rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Prochain bac blanc</p>
