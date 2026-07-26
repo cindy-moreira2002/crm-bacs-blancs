@@ -39,7 +39,14 @@ const salonUrl = (id: string) => `https://meet.jit.si/matineesdubac-${id}`;
 // Le code d'une copie est le nom de l'élève normalisé : « Léa Martin » →
 // « lea-martin ». La même règle est appliquée côté application d'écriture
 // (lib/slug.ts) : les deux écrans se retrouvent ainsi sur le même canal.
-const ECRITURE_URL = process.env.NEXT_PUBLIC_ECRITURE_URL ?? '';
+// L'adresse de production sert de valeur par défaut : ce n'est pas un secret,
+// et le bouton ne doit pas disparaître si la variable d'environnement manque.
+// NEXT_PUBLIC_ECRITURE_URL reste prioritaire (développement local, changement
+// de domaine) ; on lui retire espaces et barre oblique finale, deux fautes de
+// saisie qui casseraient silencieusement tous les liens.
+const ECRITURE_URL = (
+  process.env.NEXT_PUBLIC_ECRITURE_URL?.trim() || 'https://matinees-appweb-ecriture.vercel.app'
+).replace(/\/+$/, '');
 const codeCopie = (nom: string) =>
   nom.normalize('NFD').replace(/[̀-ͯ]/g, '')
      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
