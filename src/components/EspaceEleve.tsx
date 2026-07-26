@@ -20,6 +20,10 @@ type Inscription = {
   matiere: string;
   date_epreuve: string | null;
   created_at: string;
+  // Signé par le serveur (voir src/lib/codeCopie.ts). Absent si le serveur n'a
+  // pas de secret : on préfère masquer l'accès plutôt que d'exposer une adresse
+  // devinable.
+  code_copie?: string | null;
 };
 
 const COULEURS: Record<string, string> = {
@@ -36,9 +40,10 @@ const couleur = (m: string) => COULEURS[m] ?? '#6B7280';
 const salonUrl = (id: string) => `https://meet.jit.si/matineesdubac-${id}`;
 
 // ── Espace écriture (application « le téléphone devient le stylo ») ──────────
-// Le code d'une copie est le nom de l'élève normalisé : « Léa Martin » →
-// « lea-martin ». La même règle est appliquée côté application d'écriture
-// (lib/slug.ts) : les deux écrans se retrouvent ainsi sur le même canal.
+// Le code d'une copie (« lea-martin-x7f3 ») est signé par le serveur et arrive
+// avec l'inscription : il ne peut pas être recalculé ici, et c'est justement ce
+// qui empêche de deviner l'adresse de la copie d'un autre élève à partir de son
+// nom. Voir src/lib/codeCopie.ts.
 // L'adresse de production sert de valeur par défaut : ce n'est pas un secret,
 // et le bouton ne doit pas disparaître si la variable d'environnement manque.
 // NEXT_PUBLIC_ECRITURE_URL reste prioritaire (développement local, changement
@@ -47,13 +52,10 @@ const salonUrl = (id: string) => `https://meet.jit.si/matineesdubac-${id}`;
 const ECRITURE_URL = (
   process.env.NEXT_PUBLIC_ECRITURE_URL?.trim() || 'https://matinees-appweb-ecriture.vercel.app'
 ).replace(/\/+$/, '');
-const codeCopie = (nom: string) =>
-  nom.normalize('NFD').replace(/[̀-ͯ]/g, '')
-     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 // Page à ouvrir sur l'ORDINATEUR : elle affiche la copie A4 et le QR code que
 // l'élève scanne avec son téléphone.
-const ecritureUrl = (nom: string, matiere: string) =>
-  `${ECRITURE_URL}/copie/${codeCopie(nom)}?m=${encodeURIComponent(matiere)}`;
+const ecritureUrl = (i: Inscription) =>
+  `${ECRITURE_URL}/copie/${i.code_copie}?m=${encodeURIComponent(i.matiere)}`;
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -84,12 +86,12 @@ function fmtNote(n: number) { return Number.isInteger(n) ? `${n}` : n.toFixed(1)
 // ── Mode aperçu (URL ?demo=1) : élève fictif déjà noté, pour visualiser le rendu.
 // N'affecte jamais la prod : activé uniquement par le paramètre d'URL, aucune donnée réelle touchée.
 const DEMO_INSCRIPTIONS: Inscription[] = [
-  { id: 'demo-fr', nom: 'Léa Martin', matiere: 'Français',       date_epreuve: '2026-03-14', created_at: '2026-02-01T09:00:00Z' },
-  { id: 'demo-ph', nom: 'Léa Martin', matiere: 'Philosophie',    date_epreuve: '2026-04-11', created_at: '2026-03-01T09:00:00Z' },
-  { id: 'demo-ma', nom: 'Léa Martin', matiere: 'Mathématiques',  date_epreuve: '2026-05-16', created_at: '2026-04-01T09:00:00Z' },
-  { id: 'demo-hg', nom: 'Léa Martin', matiere: 'Histoire-Géo',   date_epreuve: '2026-09-27', created_at: '2026-07-01T09:00:00Z' },
+  { id: 'demo-fr', nom: 'Léa Martin', matiere: 'Français',       date_epreuve: '2026-03-14', created_at: '2026-02-01T09:00:00Z', code_copie: 'lea-martin-demo01' },
+  { id: 'demo-ph', nom: 'Léa Martin', matiere: 'Philosophie',    date_epreuve: '2026-04-11', created_at: '2026-03-01T09:00:00Z', code_copie: 'lea-martin-demo02' },
+  { id: 'demo-ma', nom: 'Léa Martin', matiere: 'Mathématiques',  date_epreuve: '2026-05-16', created_at: '2026-04-01T09:00:00Z', code_copie: 'lea-martin-demo03' },
+  { id: 'demo-hg', nom: 'Léa Martin', matiere: 'Histoire-Géo',   date_epreuve: '2026-09-27', created_at: '2026-07-01T09:00:00Z', code_copie: 'lea-martin-demo04' },
   // Sans date : reproduit une inscription dont la session n'est pas planifiée.
-  { id: 'demo-sp', nom: 'Léa Martin', matiere: 'Spécialité 1',   date_epreuve: null,         created_at: '2026-07-20T09:00:00Z' },
+  { id: 'demo-sp', nom: 'Léa Martin', matiere: 'Spécialité 1',   date_epreuve: null,         created_at: '2026-07-20T09:00:00Z', code_copie: 'lea-martin-demo05' },
 ];
 const DEMO_COPIES: Copie[] = [
   { id: 'demo-fr', matiere: 'Français',      eleve_nom: 'Léa Martin', statut: 'corrigée', note: 14,   fichier_nom: 'copie-francais.pdf', pdf_pret: true, created_at: '2026-03-14T13:00:00Z' },
@@ -279,15 +281,15 @@ export function EspaceEleve() {
                 </svg>
                 Rejoindre mon salon
               </a>
-              {ECRITURE_URL && prochain.nom && (
-                <a href={ecritureUrl(prochain.nom, prochain.matiere)} target="_blank" rel="noreferrer"
+              {ECRITURE_URL && prochain.code_copie && (
+                <a href={ecritureUrl(prochain)} target="_blank" rel="noreferrer"
                   style={{ background: 'rgba(255,255,255,.18)', border: '1.5px solid rgba(255,255,255,.55)', color: '#fff', padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
                   ✍️ Écrire ma copie
                 </a>
               )}
             </div>
           </div>
-          {ECRITURE_URL && prochain.nom && (
+          {ECRITURE_URL && prochain.code_copie && (
             <p style={{ fontSize: '.78rem', color: '#6B7280', margin: '8px 4px 0' }}>
               « Écrire ma copie » ouvre ta feuille sur cet ordinateur : scanne
               ensuite le QR code affiché avec ton téléphone, il devient ton stylo.
@@ -322,8 +324,8 @@ export function EspaceEleve() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      {ECRITURE_URL && i.nom && (
-                        <a href={ecritureUrl(i.nom, i.matiere)} target="_blank" rel="noreferrer"
+                      {ECRITURE_URL && i.code_copie && (
+                        <a href={ecritureUrl(i)} target="_blank" rel="noreferrer"
                           style={{ fontSize: '.75rem', fontWeight: 700, color: '#1B3FAB', background: '#E8EDFA', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
                           ✍️ Écrire
                         </a>
@@ -354,8 +356,8 @@ export function EspaceEleve() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      {ECRITURE_URL && i.nom && (
-                        <a href={ecritureUrl(i.nom, i.matiere)} target="_blank" rel="noreferrer"
+                      {ECRITURE_URL && i.code_copie && (
+                        <a href={ecritureUrl(i)} target="_blank" rel="noreferrer"
                           style={{ fontSize: '.75rem', fontWeight: 700, color: '#1B3FAB', background: '#E8EDFA', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
                           ✍️ Écrire
                         </a>

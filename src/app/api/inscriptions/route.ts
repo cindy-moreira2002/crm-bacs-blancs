@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { codeCopie } from '@/lib/codeCopie';
+
+export const runtime = 'nodejs';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -92,7 +95,14 @@ export async function GET(req: NextRequest) {
     }
     if (error) throw error;
 
-    return NextResponse.json({ inscriptions: data });
+    // Le code d'accès à la copie est signé ici, côté serveur : le navigateur ne
+    // peut pas le recalculer, il ne peut que recevoir celui de ses inscriptions.
+    const inscriptions = ((data ?? []) as unknown as { nom: string; matiere: string }[]).map(i => ({
+      ...i,
+      code_copie: codeCopie(i.nom ?? '', i.matiere ?? ''),
+    }));
+
+    return NextResponse.json({ inscriptions });
   } catch (err) {
     console.error('❌ Erreur liste inscriptions:', err);
     return NextResponse.json({ error: 'Erreur lecture' }, { status: 500 });
