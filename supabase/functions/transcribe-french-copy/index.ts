@@ -46,12 +46,29 @@ function assertInternalSecret(req: Request): Response | null {
   return null;
 }
 
+/**
+ * Modèle utilisé pour la transcription.
+ *
+ * Recopier une copie manuscrite n'est pas la tâche la plus « intelligente » de
+ * la chaîne — c'est la correction qui l'est. On utilise donc par défaut un
+ * modèle moins cher ici (1 $/5 $ par million de tokens au lieu de 3 $/15 $),
+ * ce qui divise par trois le coût de l'étape qui avale le PDF entier.
+ *
+ * ANTHROPIC_MODEL_TRANSCRIPTION permet de revenir en arrière sans redéployer
+ * la fonction : si la lecture des copies manuscrites se dégrade, il suffit de
+ * mettre claude-sonnet-5 dans ce secret. Toute la chaîne en dépend — une
+ * transcription approximative fausse la note ET le dossier.
+ *
+ * On ne retombe volontairement PAS sur ANTHROPIC_MODEL : ce secret vaut déjà
+ * claude-sonnet-5 pour les deux autres fonctions, et l'utiliser ici en repli
+ * annulerait silencieusement l'économie.
+ */
 function getAnthropicConfig() {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY n’est pas configuré.");
   return {
     apiKey,
-    model: Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-5",
+    model: Deno.env.get("ANTHROPIC_MODEL_TRANSCRIPTION") ?? "claude-haiku-4-5",
   };
 }
 

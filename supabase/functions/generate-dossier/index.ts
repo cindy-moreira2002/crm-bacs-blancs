@@ -292,7 +292,20 @@ Deno.serve(async (req: Request) => {
     const anthropicPayload = await callAnthropic(apiKey, {
       model,
       max_tokens: 22000,
-      system: COMPONENT_GUIDE + "\n\n=== STRUCTURE DE CE DOSSIER (spécifique à la matière) ===\n" + template.system_prompt,
+      // Le guide de composants + la structure du gabarit sont identiques pour
+      // toutes les copies d'une même matière : on les met en cache (1 h). Sur
+      // une matinée de corrections, seule la première copie les paie plein
+      // tarif ; les suivantes les relisent à ~10 % du prix.
+      system: [
+        {
+          type: "text",
+          text:
+            COMPONENT_GUIDE +
+            "\n\n=== STRUCTURE DE CE DOSSIER (spécifique à la matière) ===\n" +
+            template.system_prompt,
+          cache_control: { type: "ephemeral", ttl: "1h" },
+        },
+      ],
       messages: [
         {
           role: "user",
