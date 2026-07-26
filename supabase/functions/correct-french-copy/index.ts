@@ -452,6 +452,13 @@ Deno.serve(async (req: Request) => {
     if (rubricResult.error || !rubricResult.data) {
       throw new Error(`Grille introuvable: ${rubricResult.error?.message ?? ""}`);
     }
+    const correctionSystemPrompt = rubricResult.data.system_prompt as string | null;
+    if (!correctionSystemPrompt || correctionSystemPrompt.trim().length < 20) {
+      throw new Error(
+        `La grille "${rubricResult.data.id}" n'a pas de system_prompt (expertise de correction). ` +
+        `Renseigne rubrics.system_prompt pour cette grille avant de corriger.`,
+      );
+    }
     if (subjectResult.error || !subjectResult.data) {
       throw new Error(`Fiche sujet introuvable: ${subjectResult.error?.message ?? ""}`);
     }
@@ -485,14 +492,7 @@ Deno.serve(async (req: Request) => {
     const anthropicPayload = await callAnthropic(apiKey, {
       model,
       max_tokens: 20000,
-      system:
-        "Tu es un correcteur expert de l’épreuve anticipée de français, spécialisé dans le commentaire littéraire. " +
-        "Tu appliques exclusivement la grille fournie. Tu n’inventes aucun critère et tu ne sanctionnes pas deux fois la même faiblesse. " +
-        "Tu n’imposes aucun plan unique. Tu distingues toujours repérage, analyse et interprétation. " +
-        "Chaque score doit être soutenu par des preuves localisables dans la transcription. " +
-        "La somme des critères doit exactement correspondre à la note finale. " +
-        "Les copies étalons servent au positionnement global, mais leurs notes ne doivent jamais être recopiées mécaniquement. " +
-        "En cas d’incertitude de lecture, de contradiction ou de cas atypique, demande une vérification humaine.",
+      system: correctionSystemPrompt,
       messages: [
         {
           role: "user",

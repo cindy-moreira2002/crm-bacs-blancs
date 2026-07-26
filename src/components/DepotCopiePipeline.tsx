@@ -6,6 +6,7 @@ type Sujet = {
   id: string;
   track: string;
   exercise_type: string;
+  matiere: string | null;
   libelle: string;
   rubric_id: string | null;
 };
@@ -146,7 +147,7 @@ export function DepotCopiePipeline() {
         body: JSON.stringify({
           fichier_nom: fichier.name,
           exercise_type: sujet.exercise_type,
-          matiere: 'francais',
+          matiere: sujet.matiere,
         }),
       }).then((r) => r.json());
       if (prep.error) throw new Error(prep.error);
@@ -170,7 +171,7 @@ export function DepotCopiePipeline() {
           rubric_id: sujet.rubric_id,
           track: sujet.track,
           exercise_type: sujet.exercise_type,
-          matiere: 'francais',
+          matiere: sujet.matiere,
           eleve_nom: eleveNom,
           eleve_email: eleveEmail,
           prof_email: profEmail,
