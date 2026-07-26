@@ -1,8 +1,11 @@
 -- =====================================================================
 --  CREER DES ESPACES PROF DE TEST PAR MATIERE
 --
---  A lancer dans Supabase SQL Editor pour faire apparaitre les blocs
---  "Bac blanc - [matiere]" dans /espace-prof.
+--  OU : Supabase, projet CRM orpbfnmdlvxmkvyrpvtj
+--       PAS le projet pipeline xgdaibekjmtffvkwvcge.
+--
+--  A lancer dans Supabase SQL Editor du CRM pour faire apparaitre les
+--  blocs "Bac blanc - [matiere]" dans /espace-prof.
 --
 --  Important : il n'existe pas encore de table "professeurs" dans
 --  l'application. L'espace prof est construit a partir des eleves
@@ -17,6 +20,10 @@
 
 do $$
 begin
+  if to_regclass('public.inscriptions') is null then
+    raise exception 'STOP: table public.inscriptions absente. Tu es probablement dans le projet pipeline. Ouvre le projet CRM orpbfnmdlvxmkvyrpvtj, puis relance ce bloc.';
+  end if;
+
   if exists (
     select 1
     from information_schema.columns
@@ -138,4 +145,3 @@ where email in (
 )
 group by matiere
 order by matiere;
-
