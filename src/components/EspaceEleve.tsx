@@ -88,6 +88,8 @@ const DEMO_INSCRIPTIONS: Inscription[] = [
   { id: 'demo-ph', nom: 'Léa Martin', matiere: 'Philosophie',    date_epreuve: '2026-04-11', created_at: '2026-03-01T09:00:00Z' },
   { id: 'demo-ma', nom: 'Léa Martin', matiere: 'Mathématiques',  date_epreuve: '2026-05-16', created_at: '2026-04-01T09:00:00Z' },
   { id: 'demo-hg', nom: 'Léa Martin', matiere: 'Histoire-Géo',   date_epreuve: '2026-09-27', created_at: '2026-07-01T09:00:00Z' },
+  // Sans date : reproduit une inscription dont la session n'est pas planifiée.
+  { id: 'demo-sp', nom: 'Léa Martin', matiere: 'Spécialité 1',   date_epreuve: null,         created_at: '2026-07-20T09:00:00Z' },
 ];
 const DEMO_COPIES: Copie[] = [
   { id: 'demo-fr', matiere: 'Français',      eleve_nom: 'Léa Martin', statut: 'corrigée', note: 14,   fichier_nom: 'copie-francais.pdf', pdf_pret: true, created_at: '2026-03-14T13:00:00Z' },
@@ -126,26 +128,34 @@ export function EspaceEleve() {
 
   const today = new Date(); today.setHours(0,0,0,0);
 
+  // Copie correspondant à une inscription (par matière)
+  const copieDe = (i: Inscription) => (copies ?? []).find(c => c.matiere.toLowerCase() === i.matiere.toLowerCase());
+
+  // Une inscription sans date d'épreuve n'a pas encore eu lieu : elle reste
+  // « à venir » (date à confirmer) tant qu'aucune copie n'a été rendue —
+  // avant, elle tombait dans « Passés » et perdait tout accès à l'écriture.
   const aVenir = (inscriptions ?? [])
-    .filter(i => i.date_epreuve && new Date(i.date_epreuve) >= today)
-    .sort((a,b) => new Date(a.date_epreuve!).getTime() - new Date(b.date_epreuve!).getTime());
+    .filter(i => (i.date_epreuve ? new Date(i.date_epreuve) >= today : !copieDe(i)))
+    .sort((a,b) => {
+      if (!a.date_epreuve) return 1;
+      if (!b.date_epreuve) return -1;
+      return new Date(a.date_epreuve).getTime() - new Date(b.date_epreuve).getTime();
+    });
 
   const passes = (inscriptions ?? [])
-    .filter(i => !i.date_epreuve || new Date(i.date_epreuve) < today)
+    .filter(i => (i.date_epreuve ? new Date(i.date_epreuve) < today : !!copieDe(i)))
     .sort((a,b) => new Date(b.date_epreuve ?? b.created_at).getTime() - new Date(a.date_epreuve ?? a.created_at).getTime());
 
   const prochain = aVenir[0] ?? null;
 
-  // Calendrier à venir : groupé par mois
+  // Calendrier à venir : groupé par mois, les sans-date à part
   const parMois = aVenir.reduce<Record<string, Inscription[]>>((acc, i) => {
     if (!i.date_epreuve) return acc;
     const m = i.date_epreuve.slice(0,7);
     (acc[m] ||= []).push(i);
     return acc;
   }, {});
-
-  // Copie correspondant à une inscription (par matière)
-  const copieDe = (i: Inscription) => (copies ?? []).find(c => c.matiere.toLowerCase() === i.matiere.toLowerCase());
+  const sansDate = aVenir.filter(i => !i.date_epreuve);
   // Date de passage d'une copie : date de l'épreuve inscrite, sinon date de dépôt
   const dateCopie = (c: Copie) => {
     const insc = (inscriptions ?? []).find(i => i.matiere.toLowerCase() === c.matiere.toLowerCase() && i.date_epreuve);
@@ -256,10 +266,10 @@ export function EspaceEleve() {
             <div>
               <p style={{ opacity: .8, fontSize: '.82rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Prochain bac blanc</p>
               <h2 style={{ fontWeight: 900, fontSize: '1.6rem', margin: '0 0 4px' }}>{prochain.matiere}</h2>
-              {prochain.date_epreuve && <>
+              {prochain.date_epreuve ? <>
                 <p style={{ opacity: .9, fontSize: '.9rem' }}>{fmtDate(prochain.date_epreuve)}</p>
                 {joursRestants(prochain.date_epreuve) && <p style={{ marginTop: 6, fontWeight: 800, fontSize: '1.1rem' }}>⏳ {joursRestants(prochain.date_epreuve)}</p>}
-              </>}
+              </> : <p style={{ opacity: .9, fontSize: '.9rem' }}>Date à confirmer</p>}
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', flexShrink: 0 }}>
               <a href={salonUrl(prochain.id)} target="_blank" rel="noreferrer"
@@ -328,6 +338,38 @@ export function EspaceEleve() {
               </div>
             ))}
 
+            {/* À venir sans date encore fixée */}
+            {sansDate.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: '.75rem', fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8, paddingBottom: 4, borderBottom: '1px solid #F3F4F6' }}>
+                  Date à confirmer
+                </p>
+                {sansDate.map(i => (
+                  <div key={i.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 0', borderBottom: '1px solid #F9FAFB' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: couleur(i.matiere), flexShrink: 0 }} />
+                      <div>
+                        <p style={{ fontWeight: 700, fontSize: '.9rem', color: '#111827' }}>{i.matiere}</p>
+                        <p style={{ fontSize: '.75rem', color: '#9CA3AF' }}>La date te sera communiquée</p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {ECRITURE_URL && i.nom && (
+                        <a href={ecritureUrl(i.nom, i.matiere)} target="_blank" rel="noreferrer"
+                          style={{ fontSize: '.75rem', fontWeight: 700, color: '#1B3FAB', background: '#E8EDFA', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
+                          ✍️ Écrire
+                        </a>
+                      )}
+                      <a href={salonUrl(i.id)} target="_blank" rel="noreferrer"
+                        style={{ fontSize: '.75rem', fontWeight: 700, color: couleur(i.matiere), background: couleur(i.matiere)+'15', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
+                        Salon →
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Passés */}
             {passes.length > 0 && (
               <div>
@@ -351,16 +393,8 @@ export function EspaceEleve() {
                           ? <span style={{ fontSize: '.9rem', fontWeight: 800, padding: '4px 12px', borderRadius: 100, color: '#fff', background: couleurNote(note), flexShrink: 0 }}>{fmtNote(note)}/20</span>
                           : <span style={{ fontSize: '.72rem', fontWeight: 700, padding: '4px 10px', borderRadius: 100, background: c ? '#ECFDF5' : '#FFF7ED', color: c ? '#059669' : '#C2410C', flexShrink: 0 }}>{c ? '✓ Corrigé' : 'En attente'}</span>}
                       </div>
-                      {(c?.fichier_nom || c?.pdf_pret || (!i.date_epreuve && !c)) && (
+                      {(c?.fichier_nom || c?.pdf_pret) && (
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, marginLeft: 20 }}>
-                          {/* Épreuve sans date et sans copie rendue : elle n'a pas eu
-                              lieu, l'élève doit pouvoir ouvrir sa feuille d'écriture. */}
-                          {!i.date_epreuve && !c && i.nom && (
-                            <a href={ecritureUrl(i.nom, i.matiere)} target="_blank" rel="noreferrer"
-                              style={{ fontSize: '.75rem', fontWeight: 700, color: '#1B3FAB', background: '#E8EDFA', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
-                              ✍️ Écrire ma copie
-                            </a>
-                          )}
                           {c?.fichier_nom && (
                             <a href={`/api/copies/fichier?id=${c.id}`} target="_blank" rel="noreferrer"
                               style={{ fontSize: '.75rem', fontWeight: 700, color: '#6B7280', background: '#F3F4F6', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
@@ -434,7 +468,10 @@ export function EspaceEleve() {
                     <p style={{ fontSize: '.73rem', color: '#92400E' }}>{fmtDate(s.date)} · {s.heure} · {s.places} places</p>
                   </div>
                 </div>
-                <a href="/inscription" style={{ fontSize: '.75rem', fontWeight: 700, color: '#D97706', background: 'rgba(217,119,6,.12)', padding: '5px 12px', borderRadius: 100, textDecoration: 'none', flexShrink: 0 }}>
+                {/* Matière et date pré-remplies : une inscription faite depuis une
+                    session ne doit jamais repartir sans sa date d'épreuve. */}
+                <a href={`/inscription?matiere=${encodeURIComponent(s.matiere)}&date=${s.date}`}
+                  style={{ fontSize: '.75rem', fontWeight: 700, color: '#D97706', background: 'rgba(217,119,6,.12)', padding: '5px 12px', borderRadius: 100, textDecoration: 'none', flexShrink: 0 }}>
                   S'inscrire →
                 </a>
               </div>

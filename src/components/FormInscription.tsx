@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { matieresDisponibles, sessionsPourMatiere, labelSession } from '@/lib/sessions';
 
 const MATIERES = matieresDisponibles();
@@ -13,6 +13,18 @@ export function FormInscription() {
   const [telephone, setTelephone] = useState('');
   const [matiere, setMatiere] = useState<string>(MATIERES[0] ?? '');
   const [dateEpreuve, setDateEpreuve] = useState('');
+
+  // Arrivée depuis une session précise (« S'inscrire → » de l'espace élève) :
+  // matière et date arrivent dans l'URL et pré-remplissent le formulaire.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const m = p.get('matiere');
+    const d = p.get('date');
+    if (m && MATIERES.includes(m)) {
+      setMatiere(m);
+      if (d && sessionsPourMatiere(m).some(s => s.date === d)) setDateEpreuve(d);
+    }
+  }, []);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
