@@ -41,6 +41,24 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Espace prof / coach */}
+        <div className="mt-6 bg-white rounded-2xl shadow-lg border-2 border-amber-200 p-8 flex flex-col sm:flex-row items-center gap-6">
+          <div className="text-5xl">🧑‍🏫</div>
+          <div className="flex-1 text-center sm:text-left">
+            <h2 className="text-2xl font-bold text-gray-900 mb-1">Je suis professeur</h2>
+            <p className="text-gray-600">
+              Coache des élèves le samedi matin, corrige leurs copies avec notre outil et suis tes
+              revenus depuis ton espace.
+            </p>
+          </div>
+          <a
+            href="/devenir-coach"
+            className="inline-block px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold hover:bg-amber-600 transition-colors whitespace-nowrap"
+          >
+            Devenir coach →
+          </a>
+        </div>
+
         {/* Info */}
         <div className="mt-12 bg-purple-50 rounded-xl p-6 text-center">
           <p className="text-gray-700">

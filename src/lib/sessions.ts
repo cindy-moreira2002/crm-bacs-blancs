@@ -17,6 +17,22 @@ export const SESSIONS_PLATEFORME: Session[] = [
   { matiere: 'SES',             date: '2026-10-04', heure: '9h — 12h', places: 8 },
 ];
 
+// Matières qu'un prof peut déclarer enseigner à la candidature.
+// Volontairement plus large que SESSIONS_PLATEFORME : on veut pouvoir recruter
+// un prof de SVT avant d'avoir ouvert le premier bac blanc de SVT.
+export const MATIERES_ENSEIGNEES: string[] = [
+  'Français',
+  'Philosophie',
+  'Mathématiques',
+  'Histoire-Géo',
+  'SES',
+  'HGGSP',
+  'HLP',
+  'SVT',
+  'Physique-Chimie',
+  'Anglais',
+];
+
 // Matières qui ont au moins une session à venir (pour le menu déroulant).
 export function matieresDisponibles(ref: Date = new Date()): string[] {
   const today = new Date(ref); today.setHours(0, 0, 0, 0);
