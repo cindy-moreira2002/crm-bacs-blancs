@@ -351,8 +351,16 @@ export function EspaceEleve() {
                           ? <span style={{ fontSize: '.9rem', fontWeight: 800, padding: '4px 12px', borderRadius: 100, color: '#fff', background: couleurNote(note), flexShrink: 0 }}>{fmtNote(note)}/20</span>
                           : <span style={{ fontSize: '.72rem', fontWeight: 700, padding: '4px 10px', borderRadius: 100, background: c ? '#ECFDF5' : '#FFF7ED', color: c ? '#059669' : '#C2410C', flexShrink: 0 }}>{c ? '✓ Corrigé' : 'En attente'}</span>}
                       </div>
-                      {(c?.fichier_nom || c?.pdf_pret) && (
+                      {(c?.fichier_nom || c?.pdf_pret || (!i.date_epreuve && !c)) && (
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, marginLeft: 20 }}>
+                          {/* Épreuve sans date et sans copie rendue : elle n'a pas eu
+                              lieu, l'élève doit pouvoir ouvrir sa feuille d'écriture. */}
+                          {!i.date_epreuve && !c && i.nom && (
+                            <a href={ecritureUrl(i.nom, i.matiere)} target="_blank" rel="noreferrer"
+                              style={{ fontSize: '.75rem', fontWeight: 700, color: '#1B3FAB', background: '#E8EDFA', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
+                              ✍️ Écrire ma copie
+                            </a>
+                          )}
                           {c?.fichier_nom && (
                             <a href={`/api/copies/fichier?id=${c.id}`} target="_blank" rel="noreferrer"
                               style={{ fontSize: '.75rem', fontWeight: 700, color: '#6B7280', background: '#F3F4F6', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
