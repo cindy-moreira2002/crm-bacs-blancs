@@ -191,6 +191,21 @@ export function EspaceProf() {
     <div>
       <style dangerouslySetInnerHTML={{ __html: DOSSIER_CSS }} />
 
+      {/* Correction automatique — dépôt d'une copie de bac blanc */}
+      <a
+        href="/espace-prof/deposer"
+        className="flex items-center gap-4 mb-6 p-4 rounded-xl bg-purple-600 text-white shadow hover:bg-purple-700 transition"
+      >
+        <span className="text-2xl">📄</span>
+        <span className="flex-1">
+          <span className="block font-semibold">Déposer une copie à corriger</span>
+          <span className="block text-sm text-purple-100">
+            Correction et dossier de l’élève générés automatiquement.
+          </span>
+        </span>
+        <span aria-hidden className="text-xl">→</span>
+      </a>
+
       {/* Filtre matière */}
       <div className="flex items-center gap-3 mb-6">
         <label className="text-sm font-medium text-gray-700">Ma matière :</label>
