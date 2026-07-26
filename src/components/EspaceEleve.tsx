@@ -35,6 +35,19 @@ const couleur = (m: string) => COULEURS[m] ?? '#6B7280';
 
 const salonUrl = (id: string) => `https://meet.jit.si/matineesdubac-${id}`;
 
+// ── Espace écriture (application « le téléphone devient le stylo ») ──────────
+// Le code d'une copie est le nom de l'élève normalisé : « Léa Martin » →
+// « lea-martin ». La même règle est appliquée côté application d'écriture
+// (lib/slug.ts) : les deux écrans se retrouvent ainsi sur le même canal.
+const ECRITURE_URL = process.env.NEXT_PUBLIC_ECRITURE_URL ?? '';
+const codeCopie = (nom: string) =>
+  nom.normalize('NFD').replace(/[̀-ͯ]/g, '')
+     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+// Page à ouvrir sur l'ORDINATEUR : elle affiche la copie A4 et le QR code que
+// l'élève scanne avec son téléphone.
+const ecritureUrl = (nom: string, matiere: string) =>
+  `${ECRITURE_URL}/copie/${codeCopie(nom)}?m=${encodeURIComponent(matiere)}`;
+
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
 }
@@ -241,14 +254,28 @@ export function EspaceEleve() {
                 {joursRestants(prochain.date_epreuve) && <p style={{ marginTop: 6, fontWeight: 800, fontSize: '1.1rem' }}>⏳ {joursRestants(prochain.date_epreuve)}</p>}
               </>}
             </div>
-            <a href={salonUrl(prochain.id)} target="_blank" rel="noreferrer"
-              style={{ background: 'rgba(255,255,255,.95)', color: couleur(prochain.matiere), padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, boxShadow: '0 4px 14px rgba(0,0,0,.15)' }}>
-              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              Rejoindre mon salon
-            </a>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', flexShrink: 0 }}>
+              <a href={salonUrl(prochain.id)} target="_blank" rel="noreferrer"
+                style={{ background: 'rgba(255,255,255,.95)', color: couleur(prochain.matiere), padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(0,0,0,.15)' }}>
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Rejoindre mon salon
+              </a>
+              {ECRITURE_URL && prochain.nom && (
+                <a href={ecritureUrl(prochain.nom, prochain.matiere)} target="_blank" rel="noreferrer"
+                  style={{ background: 'rgba(255,255,255,.18)', border: '1.5px solid rgba(255,255,255,.55)', color: '#fff', padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  ✍️ Écrire ma copie
+                </a>
+              )}
+            </div>
           </div>
+          {ECRITURE_URL && prochain.nom && (
+            <p style={{ fontSize: '.78rem', color: '#6B7280', margin: '8px 4px 0' }}>
+              « Écrire ma copie » ouvre ta feuille sur cet ordinateur : scanne
+              ensuite le QR code affiché avec ton téléphone, il devient ton stylo.
+            </p>
+          )}
         </div>
       )}
 
@@ -277,10 +304,18 @@ export function EspaceEleve() {
                         {i.date_epreuve && <p style={{ fontSize: '.75rem', color: '#9CA3AF' }}>{fmtDate(i.date_epreuve)} {joursRestants(i.date_epreuve) ? `· ${joursRestants(i.date_epreuve)}` : ''}</p>}
                       </div>
                     </div>
-                    <a href={salonUrl(i.id)} target="_blank" rel="noreferrer"
-                      style={{ fontSize: '.75rem', fontWeight: 700, color: couleur(i.matiere), background: couleur(i.matiere)+'15', padding: '5px 12px', borderRadius: 100, textDecoration: 'none', flexShrink: 0 }}>
-                      Salon →
-                    </a>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {ECRITURE_URL && i.nom && (
+                        <a href={ecritureUrl(i.nom, i.matiere)} target="_blank" rel="noreferrer"
+                          style={{ fontSize: '.75rem', fontWeight: 700, color: '#1B3FAB', background: '#E8EDFA', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
+                          ✍️ Écrire
+                        </a>
+                      )}
+                      <a href={salonUrl(i.id)} target="_blank" rel="noreferrer"
+                        style={{ fontSize: '.75rem', fontWeight: 700, color: couleur(i.matiere), background: couleur(i.matiere)+'15', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
+                        Salon →
+                      </a>
+                    </div>
                   </div>
                 ))}
               </div>
