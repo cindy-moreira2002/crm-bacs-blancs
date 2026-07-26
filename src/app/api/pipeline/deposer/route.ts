@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pipelineDb, pipelineManquant, MATIERE_PAR_DEFAUT } from '@/lib/pipeline';
+import { accesDepot, verifierQuotaDepot } from '@/lib/accesDepot';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,20 @@ export const dynamic = 'force-dynamic';
  * Le dossier est genere ensuite, quand la correction est prete.
  */
 export async function POST(req: NextRequest) {
+  // C'est ici que la depense demarre : garde d'acces, puis plafond.
+  const acces = await accesDepot();
+  if (!acces.autorise) {
+    return NextResponse.json(
+      { error: 'Accès réservé aux professeurs. Connecte-toi ou saisis le code d’accès.' },
+      { status: 401 },
+    );
+  }
+
+  const quota = await verifierQuotaDepot();
+  if (!quota.ok) {
+    return NextResponse.json({ error: quota.message }, { status: 429 });
+  }
+
   const manquants = pipelineManquant();
   if (manquants.length) {
     return NextResponse.json({ error: 'Pipeline non configuré', manquants }, { status: 503 });
@@ -49,7 +64,9 @@ export async function POST(req: NextRequest) {
         status: 'uploaded',
         student_name: String(eleve_nom).trim(),
         student_email: eleve_email ? String(eleve_email).trim() : null,
-        teacher_email: prof_email ? String(prof_email).trim() : null,
+        // À défaut d'email saisi, on trace le prof connecté : on saura toujours
+        // qui a déclenché une correction.
+        teacher_email: prof_email ? String(prof_email).trim() : acces.email,
         matiere: matiere || MATIERE_PAR_DEFAUT,
         source: 'crm',
       })

@@ -1,0 +1,6 @@
+# Outil interne des Matinées du Bac : rien ici n'a vocation à être indexé.
+# Ce n'est PAS une sécurité (les robots malveillants ignorent ce fichier) —
+# la sécurité, ce sont les gardes d'accès côté serveur. C'est seulement une
+# précaution pour qu'un lien partagé ne finisse pas dans Google.
+User-agent: *
+Disallow: /

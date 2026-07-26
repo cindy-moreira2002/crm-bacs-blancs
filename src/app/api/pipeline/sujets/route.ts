@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { pipelineDb, pipelineManquant, libelleSujet } from '@/lib/pipeline';
+import { refuserSiPasAutorise } from '@/lib/accesDepot';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,9 @@ type RubricLigne = {
  * (mieux vaut bloquer le dépôt que corriger avec le mauvais barème).
  */
 export async function GET() {
+  const refus = await refuserSiPasAutorise();
+  if (refus) return refus;
+
   const manquants = pipelineManquant();
   if (manquants.length) {
     return NextResponse.json(

@@ -164,3 +164,40 @@ Si tu veux vérifier toi-même : va sur `/espace-prof/deposer`.
 | Il clique « Télécharger le PDF » | impression du navigateur → Enregistrer en PDF |
 
 L'élève reçoit le lien `/dossier/<identifiant>`.
+
+---
+
+## Étape 6 — Fermer le dépôt et borner la dépense
+
+Chaque dépôt déclenche trois appels payants à l'API Anthropic. La page
+`/espace-prof/deposer` et les routes `/api/pipeline/*` sont donc fermées :
+il faut **une session prof**, ou **le code d'accès partagé**.
+
+### Variables à poser dans Vercel (projet `espaces-matineesdubac`)
+
+| Variable | Valeur | À quoi ça sert |
+|---|---|---|
+| `PROF_SESSION_SECRET` | déjà posée pour les espaces prof | Signe les cookies. **Sans elle, le code d'accès reste inactif.** |
+| `DEPOT_ACCESS_CODE` | `openssl rand -base64 24` | Code pour les profs sans compte. Laisser vide = seule la connexion prof ouvre le dépôt (le plus sûr). |
+| `DEPOT_MAX_PAR_HEURE` | `50` | Plafond de copies déposées par heure, tous profs confondus. |
+| `DEPOT_MAX_PAR_JOUR` | `80` | Idem sur 24 h. |
+
+Les deux plafonds bornent la facture même si le code fuite. Ils refusent le
+dépôt **avant** le moindre appel payant. Ils comptent toutes les lignes de la
+table `corrections`, y compris les essais lancés en SQL.
+
+### Secret à poser dans Supabase (Edge Functions)
+
+| Secret | Valeur | À quoi ça sert |
+|---|---|---|
+| `ANTHROPIC_MODEL_TRANSCRIPTION` | vide = `claude-haiku-4-5` | Modèle de transcription. Recopier une copie ne demande pas le modèle le plus cher. Si la lecture des copies manuscrites se dégrade, mettre `claude-sonnet-5` ici — sans redéployer. |
+
+### Le plafond de dépense (à faire à la main)
+
+Sur `console.anthropic.com`, dans les réglages du compte : plafond de dépense
+mensuel + alerte par mail. C'est le **seul plafond dur** — il protège aussi
+d'un bug côté application. Attention : quand il est atteint, le service
+s'arrête. Prendre une marge au-dessus d'une matinée chargée.
+
+Ordre de grandeur : environ **0,22 $ par copie** corrigée (transcription +
+correction + dossier).

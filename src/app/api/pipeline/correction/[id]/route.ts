@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pipelineDb, pipelineManquant, STATUTS_CORRIGE, STATUTS_ECHEC } from '@/lib/pipeline';
+import { refuserSiPasAutorise } from '@/lib/accesDepot';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,9 @@ function extraireNote(result: Record<string, unknown> | null): number | null {
  * GET — ou en est cette copie ? (interrogee en boucle par l'ecran prof)
  */
 export async function GET(_req: NextRequest, { params }: Params) {
+  const refus = await refuserSiPasAutorise();
+  if (refus) return refus;
+
   const manquants = pipelineManquant();
   if (manquants.length) {
     return NextResponse.json({ error: 'Pipeline non configuré', manquants }, { status: 503 });
@@ -75,6 +79,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
  *   { action: 'relancer' }  relance la chaine (transcription + correction)
  */
 export async function POST(req: NextRequest, { params }: Params) {
+  // 'relancer' et 'dossier' rappellent tous deux l'API Anthropic : même garde.
+  const refus = await refuserSiPasAutorise();
+  if (refus) return refus;
+
   const manquants = pipelineManquant();
   if (manquants.length) {
     return NextResponse.json({ error: 'Pipeline non configuré', manquants }, { status: 503 });

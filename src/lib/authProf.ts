@@ -115,6 +115,26 @@ const optionsCookie = {
   path: '/',
 };
 
+/**
+ * Cookies signés réutilisables par d'autres « portes » que la session prof
+ * (voir lib/accesDepot.ts). Même secret, même format, même vérification à
+ * temps constant : une seule implémentation de signature dans le projet.
+ */
+export function encoderCookieSigne(donnees: Record<string, unknown>): string {
+  return encoder(donnees);
+}
+
+export function decoderCookieSigne(valeur: string | undefined): Record<string, unknown> | null {
+  return decoder(valeur);
+}
+
+export const OPTIONS_COOKIE = optionsCookie;
+
+/** Le secret de signature est-il en place ? Sans lui, aucun cookie n'est fiable. */
+export function secretSessionPresent(): boolean {
+  return Boolean(secret);
+}
+
 /** Ouvre la session du prof (appelable seulement depuis une route ou une action). */
 export async function ouvrirSession(professeurId: string) {
   const jar = await cookies();

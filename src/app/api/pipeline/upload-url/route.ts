@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pipelineDb, pipelineManquant, BUCKET_COPIES, MATIERE_PAR_DEFAUT } from '@/lib/pipeline';
+import { refuserSiPasAutorise } from '@/lib/accesDepot';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,10 @@ function assainir(nom: string): string {
  *   - on evite la limite de 4,5 Mo des fonctions serverless Vercel.
  */
 export async function POST(req: NextRequest) {
+  // Sans ce garde, n'importe qui obtient une URL d'écriture dans le Storage.
+  const refus = await refuserSiPasAutorise();
+  if (refus) return refus;
+
   const manquants = pipelineManquant();
   if (manquants.length) {
     return NextResponse.json({ error: 'Pipeline non configuré', manquants }, { status: 503 });

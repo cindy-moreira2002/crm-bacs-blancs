@@ -1,11 +1,23 @@
 import Link from 'next/link';
 import { DepotCopiePipeline } from '@/components/DepotCopiePipeline';
+import { PorteDepot } from '@/components/PorteDepot';
+import { accesDepot, codeDepotConfigure } from '@/lib/accesDepot';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Déposer une copie — Les Matinées du Bac',
+  robots: { index: false, follow: false },
 };
 
-export default function DeposerCopiePage() {
+/**
+ * Chaque dépôt déclenche trois appels payants à l'API Anthropic : la page est
+ * fermée aux visiteurs anonymes. Deux entrées possibles (voir lib/accesDepot) :
+ * session prof, ou code d'accès partagé pour les profs invités.
+ */
+export default async function DeposerCopiePage() {
+  const acces = await accesDepot();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-gray-100 py-12 px-4">
       <div className="container mx-auto">
@@ -17,8 +29,16 @@ export default function DeposerCopiePage() {
           <p className="text-gray-600 mt-1">
             Dépose la copie, récupère le dossier de l’élève. Rien d’autre à faire.
           </p>
+          {acces.autorise && acces.nom && (
+            <p className="text-sm text-gray-500 mt-2">Connecté en tant que {acces.nom}.</p>
+          )}
         </div>
-        <DepotCopiePipeline />
+
+        {acces.autorise ? (
+          <DepotCopiePipeline />
+        ) : (
+          <PorteDepot codeActif={codeDepotConfigure()} />
+        )}
       </div>
     </div>
   );
