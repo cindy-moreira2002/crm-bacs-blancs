@@ -65,6 +65,36 @@ select id, matiere from public.rubrics       where matiere is not null order by 
 
 
 -- =====================================================================
+--  BLOC B2 - CORRIGER LA REGLE D'UNICITE DES GRILLES ACTIVES
+--  Avant le multi-matieres, une seule grille active etait autorisee par
+--  track+exercise_type. Cela bloque SES car "dissertation" existe deja
+--  en francais. La bonne regle est maintenant :
+--  une seule grille active par track+matiere+exercise_type.
+--  Attendu : "Success. No rows returned", puis une ligne d'index.
+-- =====================================================================
+
+begin;
+
+alter table public.rubrics
+  drop constraint if exists one_active_rubric_per_exercise;
+
+drop index if exists public.one_active_rubric_per_exercise;
+drop index if exists public.one_active_rubric_per_matiere_exercise;
+
+create unique index one_active_rubric_per_matiere_exercise
+  on public.rubrics (track, matiere, exercise_type)
+  where status = 'active';
+
+commit;
+
+select indexname, indexdef
+from pg_indexes
+where schemaname = 'public'
+  and tablename = 'rubrics'
+  and indexname = 'one_active_rubric_per_matiere_exercise';
+
+
+-- =====================================================================
 --  BLOC C - LA GRILLE DEVIENT LA SEULE SOURCE DE L'"EXPERTISE" DE
 --  CORRECTION (au lieu d'un texte fige dans le code de la fonction).
 --

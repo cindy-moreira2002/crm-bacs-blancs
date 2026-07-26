@@ -14,6 +14,16 @@
 
 begin;
 
+alter table public.rubrics
+  drop constraint if exists one_active_rubric_per_exercise;
+
+drop index if exists public.one_active_rubric_per_exercise;
+drop index if exists public.one_active_rubric_per_matiere_exercise;
+
+create unique index one_active_rubric_per_matiere_exercise
+  on public.rubrics (track, matiere, exercise_type)
+  where status = 'active';
+
 update public.rubrics
 set status = 'active'
 where matiere = 'ses'
@@ -52,4 +62,3 @@ from public.benchmark_cards bc
 join public.subject_cards sc on sc.id = bc.subject_id
 where sc.matiere = 'ses'
   and bc.validation_status in ('validated', 'candidate');
-
