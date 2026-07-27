@@ -50,3 +50,6 @@ next-env.d.ts
 # Apps Script CRM : artefacts build + données, pas de source
 google-apps-script-crm/build/
 google-apps-script-crm/outputs/
+
+# Fichiers temporaires de la CLI Supabase
+supabase/.temp/
