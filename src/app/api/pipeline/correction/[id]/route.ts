@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { pipelineDb, pipelineManquant, STATUTS_CORRIGE, STATUTS_ECHEC } from '@/lib/pipeline';
+import { baremeGrille, pipelineDb, pipelineManquant, STATUTS_CORRIGE, STATUTS_ECHEC } from '@/lib/pipeline';
 import { refuserSiPasAutorise } from '@/lib/accesDepot';
 
 export const dynamic = 'force-dynamic';
@@ -36,12 +36,25 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const { data: correction, error } = await db
       .from('corrections')
-      .select('id, status, processing_error, result_json, student_name, subject_id, exercise_type, created_at, updated_at')
+      .select('id, status, processing_error, result_json, student_name, subject_id, exercise_type, rubric_id, created_at, updated_at')
       .eq('id', id)
       .single();
 
     if (error || !correction) {
       return NextResponse.json({ error: 'Copie introuvable.' }, { status: 404 });
+    }
+
+    // Barème de l'épreuve : toutes ne sont pas sur 20 (une question
+    // problématisée d'histoire-géo vaut 10 points). Sans lui, l'écran
+    // afficherait « 7 / 20 » pour une copie notée 7 sur 10.
+    let bareme = 20;
+    if (correction.rubric_id) {
+      const { data: grille } = await db
+        .from('rubrics')
+        .select('rubric_json')
+        .eq('id', correction.rubric_id)
+        .single();
+      if (grille) bareme = baremeGrille(grille.rubric_json);
     }
 
     // Dossier deja genere ?
@@ -61,6 +74,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       echec: STATUTS_ECHEC.includes(correction.status),
       corrigee: STATUTS_CORRIGE.includes(correction.status),
       note: extraireNote(correction.result_json as Record<string, unknown> | null),
+      bareme,
       eleve: correction.student_name,
       sujet_id: correction.subject_id,
       exercise_type: correction.exercise_type,

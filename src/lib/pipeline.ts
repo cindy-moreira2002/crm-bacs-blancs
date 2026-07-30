@@ -86,6 +86,24 @@ export const ETAPES = [
 export const STATUTS_ECHEC = ['transcription_failed', 'correction_failed'];
 export const STATUTS_CORRIGE = ['corrected', 'corrected_review'];
 
+/**
+ * Barème d'une grille, en points.
+ *
+ * Toutes les épreuves ne sont PAS sur 20 : une question problématisée
+ * d'histoire-géo vaut 10 points, les parties d'épreuve composée de SES valent
+ * 4, 6 et 10. Le moteur renvoie une note à l'échelle de la grille, donc on ne
+ * peut jamais afficher « / 20 » en dur devant une note du pipeline.
+ *
+ * On lit maximum_score, et à défaut la somme des critères — c'est elle qui
+ * fait foi côté moteur, qui recalcule toujours la note comme cette somme.
+ */
+export function baremeGrille(rubricJson: unknown): number {
+  const j = (rubricJson ?? {}) as { maximum_score?: unknown; criteria?: { maximum_score?: unknown }[] };
+  if (typeof j.maximum_score === 'number' && j.maximum_score > 0) return j.maximum_score;
+  const somme = (j.criteria ?? []).reduce((s, c) => s + (typeof c.maximum_score === 'number' ? c.maximum_score : 0), 0);
+  return somme > 0 ? somme : 20;
+}
+
 /** Libellé lisible d'un sujet à partir de sa fiche. */
 export function libelleSujet(card: Record<string, unknown> | null, id: string): string {
   if (!card) return id;

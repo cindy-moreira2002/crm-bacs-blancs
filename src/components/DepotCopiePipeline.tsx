@@ -18,6 +18,9 @@ type Statut = {
   echec: boolean;
   corrigee: boolean;
   note: number | null;
+  /** Barème de l'épreuve : 20 le plus souvent, 10 en histoire-géo, 4 ou 6 sur
+   *  certaines parties d'épreuve composée de SES. */
+  bareme: number | null;
   eleve: string | null;
   dossier_id: string | null;
 };
@@ -249,7 +252,7 @@ export function DepotCopiePipeline() {
           {typeof statut?.note === 'number' && (
             <div className="mt-6 inline-flex items-baseline gap-2 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3">
               <span className="text-3xl font-bold text-amber-700">{statut.note}</span>
-              <span className="text-amber-700 font-medium">/ 20</span>
+              <span className="text-amber-700 font-medium">/ {statut.bareme ?? 20}</span>
             </div>
           )}
 
