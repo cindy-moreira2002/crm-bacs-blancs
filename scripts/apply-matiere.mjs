@@ -97,6 +97,13 @@ function verifier(data) {
     if (!s.card_json?.exercise || !s.card_json?.work) {
       avertissements.push(`${s.id} : card_json.exercise ou card_json.work manquant, le menu de depot affichera l'identifiant brut.`);
     }
+    // Le correcteur ne recoit que la transcription et la fiche sujet : si
+    // l'epreuve repose sur des documents absents de la fiche, il note une
+    // analyse sans savoir ce que l'eleve analysait.
+    const exigence = String(s.card_json?.document_requirements ?? '');
+    if (exigence && !/^aucun/i.test(exigence.trim()) && !s.card_json?.documents && !s.card_json?.texte_support) {
+      avertissements.push(`${s.id} : l'epreuve annonce des documents mais card_json ne porte ni documents ni texte_support.`);
+    }
   }
 
   const parSujet = new Map();

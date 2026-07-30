@@ -660,7 +660,29 @@ export const subject_cards = [
       prompt:
         "Analysez le ou les documents proposés afin de montrer comment les sociétés européennes sont mobilisées pendant la Première Guerre mondiale, et indiquez les limites de ce ou ces documents.",
       document_requirements:
-        "le ou les documents sont joints au sujet distribué à l'élève ; la fiche de correction ne les reproduit pas. Le correcteur ne reproche jamais à l'élève un élément absent du document.",
+        "deux documents, décrits ci-dessous : le correcteur sait exactement ce que l'élève avait sous les yeux et ne lui reproche jamais un élément qui n'y figure pas.",
+      // Documents SYNTHÉTIQUES, écrits pour l'entraînement : aucune archive
+      // n'est reproduite et aucune phrase n'est attribuée à une personne
+      // réelle. Sans eux, le correcteur note une analyse de document sans
+      // savoir ce que l'élève analysait.
+      documents: [
+        {
+          ref: 'Document 1',
+          nature:
+            "Affiche officielle de souscription à un emprunt national, France, 1917. Document SYNTHÉTIQUE rédigé pour l'entraînement, dans le style des affiches de propagande de l'époque : ce n'est ni une archive ni une reproduction.",
+          contenu:
+            "L'affiche est commandée par le ministère des Finances et destinée au grand public de l'arrière. Elle représente une famille — une femme à l'atelier, deux enfants, un homme en uniforme au second plan — sous le mot d'ordre « Pour eux, souscrivez ». Le texte affirme que chaque franc prêté à l'État arme le soldat, que l'usine est un front comme un autre, et que la victoire dépend autant de l'atelier que de la tranchée. Un encadré rappelle que la souscription est ouverte dans tous les bureaux de poste. L'affiche ne mentionne ni les pertes humaines, ni la durée du conflit, ni les difficultés de ravitaillement.",
+        },
+        {
+          ref: 'Document 2',
+          nature:
+            "Extrait d'une lettre d'un ouvrier d'usine d'armement à son frère mobilisé, mars 1917. Document SYNTHÉTIQUE écrit pour l'entraînement : aucune correspondance réelle n'est reproduite et aucun auteur réel n'est cité.",
+          contenu:
+            "L'auteur décrit des journées de onze heures dans une usine où travaillent désormais beaucoup de femmes et d'ouvriers venus des colonies. Il dit la fierté de « faire sa part », mais aussi la fatigue, la cherté du pain et l'inquiétude devant les files d'attente. Il rapporte que des camarades parlent de cesser le travail si les salaires ne suivent pas les prix, et il demande à son frère si, au front, « on croit encore que cela finira cette année ». La lettre est manuscrite, adressée à un particulier, et porte la mention d'un contrôle postal.",
+        },
+      ],
+      croisement_attendu:
+        "Le document 1 est un discours officiel qui construit le consentement ; le document 2 montre par en dessous ce que la mobilisation coûte. Les confronter, c'est distinguer ce que l'État veut faire croire et ce que la société éprouve — et fonder la critique sur la nature même des deux sources (affiche publique commanditée / lettre privée soumise au contrôle postal).",
       expected_concepts: ['guerre totale', "mobilisation de l'arrière", 'économie de guerre', 'propagande', 'consentement et contrainte', 'violences de guerre', 'nature et portée de la source'],
       expected_mechanisms: [
         "La guerre totale mobilise l'ensemble des ressources : hommes au front, femmes et ouvriers à l'usine, emprunts et rationnement à l'arrière.",
@@ -669,10 +691,11 @@ export const subject_cards = [
         "Situer la source (auteur, date, destinataire, intention) conditionne ce qu'elle permet d'établir.",
       ],
       traps: [
-        'paraphraser le document au lieu de l’expliquer',
+        'paraphraser les documents au lieu de les expliquer',
         'oublier de contextualiser (date, auteur, destinataire)',
         'énoncer une critique de pure forme (« ce document est subjectif ») sans conséquence',
-        "plaquer du cours sans jamais revenir au document",
+        'plaquer du cours sans jamais revenir aux documents',
+        "traiter les deux documents l'un après l'autre sans jamais les confronter",
       ],
       special_criteria: [
         "au moins une citation courte et exacte par idée développée",
@@ -703,7 +726,7 @@ export const subject_cards = [
       prompt:
         "Réalisez un croquis, accompagné de sa légende organisée, rendant compte des intégrations, des disparités et de l'ouverture au monde de l'Union européenne.",
       document_requirements:
-        "PRODUCTION GRAPHIQUE : le pipeline ne reçoit que le texte transcrit (titre, légende, nomenclature). Le tracé n'est pas observable. La correction automatique est une aide, jamais une note définitive : relecture professeur obligatoire.",
+        "aucun document fourni à l'élève ; c'est lui qui PRODUIT le croquis. Le pipeline ne reçoit que le texte transcrit (titre, légende, nomenclature) : le tracé n'est pas observable. La correction automatique est une aide, jamais une note définitive — relecture professeur obligatoire.",
       expected_concepts: ['mégalopole européenne', 'centre et périphéries', 'axes de transport majeurs', 'interfaces maritimes', 'élargissements successifs', 'disparités de richesse', 'politique de cohésion', 'ouverture aux échanges mondiaux'],
       expected_mechanisms: [
         "Le cœur économique (dorsale de Londres à l'Italie du Nord) concentre richesse, population et fonctions de commandement.",
