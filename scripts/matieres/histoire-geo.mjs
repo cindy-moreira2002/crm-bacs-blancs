@@ -749,6 +749,138 @@ export const subject_cards = [
       teacher_validation_required: true,
     },
   },
+
+  // -------------------------------------------------------------------
+  //  VOIE TECHNOLOGIQUE
+  //
+  //  ATTENTION : le dossier source ne fournit AUCUN sujet pour la voie
+  //  technologique — seulement sa grille (HG-TECH-Q). Les deux fiches
+  //  ci-dessous ont donc ete ecrites ici, sur les themes du programme
+  //  d'histoire-geographie de terminale technologique. Un professeur de la
+  //  voie technologique doit confirmer que les themes, les questions et le
+  //  niveau d'exigence correspondent bien a ce qu'il attend : c'est la
+  //  partie la moins etayee de toute la matiere.
+  // -------------------------------------------------------------------
+  {
+    id: 'HG2027_TECHQ_01',
+    track: 'technologique',
+    exercise_type: 'hg_tech_questions',
+    work_id: 'HGT_TECH_TOTALITARISMES',
+    status: 'draft',
+    card_json: {
+      session,
+      source_package_id: null,
+      source_status: 'synthetic_training_template_not_official_exam',
+      warning:
+        "Gabarit synthetique d'entrainement. Le dossier source ne contenait aucun sujet pour la voie technologique : themes et questions ecrits par Les Matinees du Bac, a confirmer par un professeur de la voie technologique.",
+      exercise: 'Questions de connaissances',
+      work: 'Totalitarismes et Seconde Guerre mondiale',
+      field: 'Histoire · Terminale technologique · Thème 1',
+      level: 'terminale',
+      voie: 'technologique',
+      theme_id: 'HGT-TECH-H1',
+      theme_title: 'Totalitarismes et Seconde Guerre mondiale (1929-1945)',
+      prompt:
+        "Répondez aux cinq questions suivantes. Chaque réponse doit être rédigée, complète et précise ; la longueur n'est pas un critère.\n" +
+        "1. Datez le krach boursier de Wall Street et expliquez en quoi il déclenche une crise mondiale.\n" +
+        "2. Citez deux caractéristiques communes aux régimes totalitaires des années 1930.\n" +
+        "3. Qu'appelle-t-on la « guerre d'anéantissement » ? Donnez un exemple précis.\n" +
+        "4. Datez le régime de Vichy et indiquez deux de ses choix politiques majeurs.\n" +
+        "5. Expliquez ce que désigne le génocide des Juifs et des Tsiganes, et situez-le dans le temps.",
+      document_requirements: 'aucun document ; réponses rédigées à partir des connaissances',
+      expected_concepts: [
+        'krach de 1929',
+        'crise économique mondiale',
+        'régime totalitaire',
+        'parti unique',
+        'culte du chef',
+        'terreur de masse',
+        'guerre d’anéantissement',
+        'régime de Vichy',
+        'collaboration',
+        'génocide',
+      ],
+      expected_mechanisms: [
+        "Le krach d'octobre 1929 se propage par le crédit et le commerce : la crise financière américaine devient une dépression mondiale.",
+        "Les régimes totalitaires partagent un parti unique, un chef incontesté, une idéologie officielle, l'encadrement de la société et la terreur.",
+        "La Seconde Guerre mondiale est une guerre d'anéantissement : elle vise les populations civiles autant que les armées.",
+        "Le régime de Vichy (1940-1944) met fin à la République, engage la collaboration d'État et participe à la persécution des Juifs.",
+      ],
+      traps: [
+        'répondre par des mots isolés au lieu de phrases',
+        'confondre les régimes totalitaires entre eux',
+        'donner une date approximative quand la question demande une date précise',
+        'oublier l’exemple quand la question en demande un',
+      ],
+      special_criteria: [
+        'chaque question doit recevoir une réponse : une question sautée coûte des points sur la précision',
+        'les dates et les noms exacts sont attendus',
+        'une réponse juste et brève vaut le maximum',
+      ],
+      sources: ['SRC_BO_PROGRAMME_TERMINALE_TECHNO_HG'],
+      teacher_validation_required: true,
+    },
+  },
+  {
+    id: 'HG2027_TECHQ_02',
+    track: 'technologique',
+    exercise_type: 'hg_tech_questions',
+    work_id: 'HGT_TECH_MERS_OCEANS',
+    status: 'draft',
+    card_json: {
+      session,
+      source_package_id: null,
+      source_status: 'synthetic_training_template_not_official_exam',
+      warning:
+        "Gabarit synthetique d'entrainement. Le dossier source ne contenait aucun sujet pour la voie technologique : themes et questions ecrits par Les Matinees du Bac, a confirmer par un professeur de la voie technologique.",
+      exercise: 'Questions de connaissances',
+      work: 'Mers et océans, vecteurs de la mondialisation',
+      field: 'Géographie · Terminale technologique · Thème 1',
+      level: 'terminale',
+      voie: 'technologique',
+      theme_id: 'HGT-TECH-G1',
+      theme_title: 'Mers et océans : vecteurs essentiels de la mondialisation',
+      prompt:
+        "Répondez aux cinq questions suivantes. Chaque réponse doit être rédigée, complète et précise ; la longueur n'est pas un critère.\n" +
+        "1. Qu'est-ce qu'un conteneur, et pourquoi a-t-il transformé le commerce maritime ?\n" +
+        "2. Citez deux passages stratégiques du commerce maritime mondial et localisez-les.\n" +
+        "3. Qu'appelle-t-on une ZEE ? Que permet-elle à l'État qui la détient ?\n" +
+        "4. Donnez deux ressources exploitées en mer et un risque que cette exploitation fait peser.\n" +
+        "5. Citez un exemple de tension entre États au sujet d'un espace maritime, et expliquez son enjeu.",
+      document_requirements: 'aucun document ; réponses rédigées à partir des connaissances',
+      expected_concepts: [
+        'conteneurisation',
+        'route maritime',
+        'passage stratégique',
+        'hub portuaire',
+        'ZEE',
+        'ressources halieutiques',
+        'hydrocarbures offshore',
+        'surpêche',
+        'pollution marine',
+        'tensions territoriales',
+      ],
+      expected_mechanisms: [
+        "Le conteneur standardise le transport, fait chuter son coût et rend possible la fragmentation mondiale de la production.",
+        "Les passages stratégiques (Malacca, Suez, Ormuz, Panama, Gibraltar) concentrent les flux et sont donc des points de vulnérabilité.",
+        "La ZEE, issue de la convention de Montego Bay, donne à l'État côtier l'exploitation exclusive des ressources jusqu'à 200 milles marins.",
+        "L'exploitation des ressources marines nourrit à la fois des économies et des conflits d'usage, et pèse sur les milieux.",
+      ],
+      traps: [
+        'répondre par des mots isolés au lieu de phrases',
+        'citer un passage stratégique sans le localiser',
+        'confondre ZEE et eaux territoriales',
+        'donner une tension sans en expliquer l’enjeu',
+      ],
+      special_criteria: [
+        'les localisations doivent être précisées quand la question les demande',
+        'les notions employées doivent être définies, pas seulement citées',
+        'une réponse juste et brève vaut le maximum',
+      ],
+      sources: ['SRC_BO_PROGRAMME_TERMINALE_TECHNO_HG'],
+      teacher_validation_required: true,
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------

@@ -22,7 +22,6 @@
 
 -- =====================================================================
 --  BLOC A - LES 3 GRILLES DE LA VOIE GENERALE
---  La grille technologique reste en draft : aucun sujet ne s'y rattache.
 -- =====================================================================
 
 begin;
@@ -35,7 +34,7 @@ commit;
 
 
 -- =====================================================================
---  BLOC B - LES 5 SUJETS
+--  BLOC B - LES 5 SUJETS DE LA VOIE GENERALE
 --  Retirer de la liste ceux que les professeurs n'ont pas valides.
 -- =====================================================================
 
@@ -49,7 +48,7 @@ commit;
 
 
 -- =====================================================================
---  BLOC C - LES 3 GABARITS DE DOSSIER ELEVE
+--  BLOC C - LES 3 GABARITS DE DOSSIER ELEVE, VOIE GENERALE
 --  Sans ce bloc, la correction aboutit mais l'eleve ne recoit rien.
 -- =====================================================================
 
@@ -63,10 +62,33 @@ commit;
 
 
 -- =====================================================================
+--  BLOC C bis - LA VOIE TECHNOLOGIQUE (grille + 2 sujets + gabarit)
+--
+--  A JOUER SEULEMENT si un professeur de la voie technologique a valide
+--  les themes et les questions : le dossier source ne contenait aucun
+--  sujet technologique, les deux fiches ont ete ecrites par Les Matinees
+--  du Bac. C'est la partie la moins etayee de la matiere.
+-- =====================================================================
+
+begin;
+
+update public.rubrics set status = 'active'
+where matiere = 'histoire-geo' and exercise_type = 'hg_tech_questions';
+
+update public.subject_cards set status = 'active'
+where matiere = 'histoire-geo' and id in ('HG2027_TECHQ_01', 'HG2027_TECHQ_02');
+
+update public.dossier_templates set status = 'active'
+where matiere = 'histoire-geo' and exercise_type = 'hg_tech_questions';
+
+commit;
+
+
+-- =====================================================================
 --  BLOC D - VERIFICATION
---  Attendu : 3 grilles actives, 5 sujets actifs, 3 gabarits actifs,
---  et chaque sujet actif doit avoir une grille active de meme
---  track + matiere + exercise_type, sinon le depot restera bloque.
+--  Attendu : chaque sujet actif doit avoir une grille active ET un gabarit
+--  actif de meme track + matiere + exercise_type. Un sujet actif sans grille
+--  active reste bloque au depot ; sans gabarit actif, l'eleve ne recoit rien.
 -- =====================================================================
 
 select s.id as sujet, s.status as statut_sujet, r.id as grille, r.status as statut_grille,
