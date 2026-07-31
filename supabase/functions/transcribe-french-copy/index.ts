@@ -72,6 +72,48 @@ function getAnthropicConfig() {
   };
 }
 
+/**
+ * Profil de transcription d'une matière — une LIGNE dans transcription_profiles,
+ * pas du code. Il porte deux choses :
+ *   - le modèle à employer (les matières scientifiques valent un modèle plus
+ *     capable : une puissance de dix mal lue fausse la note ET le dossier) ;
+ *   - des consignes de lecture propres à la matière (notation scientifique,
+ *     équations chimiques, vecteurs, unités…).
+ *
+ * Absence de profil, de table ou d'erreur = comportement d'avant, à
+ * l'identique. Une matière sans profil n'est jamais bloquée.
+ */
+type ProfilTranscription = {
+  matiere: string;
+  model: string | null;
+  system_prompt: string | null;
+  user_prompt: string | null;
+};
+
+async function chargerProfil(
+  supabase: ReturnType<typeof createClient>,
+  matiere: unknown,
+): Promise<ProfilTranscription | null> {
+  if (typeof matiere !== "string" || !matiere.trim()) return null;
+  try {
+    const { data, error } = await supabase
+      .from("transcription_profiles")
+      .select("matiere, model, system_prompt, user_prompt")
+      .eq("matiere", matiere.trim())
+      .eq("status", "active")
+      .order("version", { ascending: false })
+      .limit(1);
+    if (error) {
+      console.warn(`Profil de transcription illisible (${matiere}): ${error.message}`);
+      return null;
+    }
+    return (data?.[0] as ProfilTranscription | undefined) ?? null;
+  } catch (err) {
+    console.warn(`Profil de transcription ignoré (${matiere}): ${String(err)}`);
+    return null;
+  }
+}
+
 async function blobToBase64(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let binary = "";
@@ -263,7 +305,12 @@ Deno.serve(async (req: Request) => {
     }
 
     const pdfBase64 = await blobToBase64(fileBlob);
-    const { apiKey, model } = getAnthropicConfig();
+    const { apiKey, model: modeleParDefaut } = getAnthropicConfig();
+
+    // Le profil de la matière peut imposer un modèle plus capable et des
+    // consignes de lecture spécifiques (notation scientifique, chimie…).
+    const profil = await chargerProfil(supabase, correction.matiere);
+    const model = profil?.model?.trim() || modeleParDefaut;
 
     const anthropicPayload = await callAnthropic(apiKey, {
       model,
@@ -272,7 +319,8 @@ Deno.serve(async (req: Request) => {
         "Tu es un transcripteur de copies manuscrites du baccalauréat. " +
         "Transcris strictement sans corriger l’orthographe, la syntaxe, les répétitions ni les erreurs de l’élève. " +
         "Respecte l’ordre des pages et des paragraphes. N’invente jamais un mot illisible. " +
-        "Indique chaque incertitude dans uncertain_passages et emploie [illisible] dans le texte si aucune lecture fiable n’est possible.",
+        "Indique chaque incertitude dans uncertain_passages et emploie [illisible] dans le texte si aucune lecture fiable n’est possible." +
+        (profil?.system_prompt?.trim() ? `\n\n${profil.system_prompt.trim()}` : ""),
       messages: [
         {
           role: "user",
@@ -289,7 +337,8 @@ Deno.serve(async (req: Request) => {
               type: "text",
               text:
                 "Transcris cette copie page par page. Le numéro de page correspond à l’ordre du PDF. " +
-                "Évalue honnêtement la lisibilité et impose une vérification humaine dès qu’un passage important est incertain.",
+                "Évalue honnêtement la lisibilité et impose une vérification humaine dès qu’un passage important est incertain." +
+                (profil?.user_prompt?.trim() ? `\n\n${profil.user_prompt.trim()}` : ""),
             },
           ],
         },

@@ -71,7 +71,20 @@ const TAXONOMIE = [
   { code: 'PC-GRAPH-01', criterion: 'REA',   severity: 'moderate', category: 'graphique',         description: "Exploitation graphique defaillante : axes non legendes, unites absentes, lecture ou pente non justifiee." },
 ];
 
-const taxoPour = (codes) => TAXONOMIE.filter((e) => codes.includes(e.code));
+/**
+ * Selectionne des codes d'erreur pour une grille donnee.
+ *
+ * Le champ `criterion` de la taxonomie vaut pour la grille du probleme
+ * quantitatif, qui sert de reference. Les autres grilles n'ont pas les memes
+ * criteres : une unite absente se paie sur REA dans un probleme, sur QUANT
+ * dans une analyse documentaire, sur PROC dans un protocole. Le second
+ * argument redirige le code vers le critere de CETTE grille — sans quoi le
+ * correcteur recoit un code qui designe un critere inexistant.
+ */
+const taxoPour = (codes, versCritere = {}) =>
+  TAXONOMIE.filter((e) => codes.includes(e.code)).map((e) =>
+    versCritere[e.code] ? { ...e, criterion: versCritere[e.code] } : e,
+  );
 
 // ---------------------------------------------------------------------
 //  Regles communes a toutes les grilles
@@ -97,6 +110,13 @@ const SOCLE_PROMPT =
   "LIMITE DETERMINANTE DE CETTE MATIERE : tu ne recois que le TEXTE transcrit de la copie. " +
   "Aucun schema, aucun graphique trace par l'eleve, aucun montage, aucun ecran de calculatrice, aucune construction geometrique ne t'est accessible. " +
   "Tu ne juges donc JAMAIS une production graphique que la transcription ne decrit pas : tu ne la devines pas, tu ne la supposes pas reussie ni ratee, tu signales qu'elle releve de la relecture du professeur et tu passes human_review_required a true si elle pese sur la note. " +
+  "NOTATION DE LA TRANSCRIPTION : la copie t'arrive dans une convention texte fixee, que tu lis sans jamais la reprocher a l'eleve. " +
+  "10^-2 est une puissance de dix, x^2 un carre ; C_B, v_0, u_(n+1) sont des indices ; ( a ) / ( b ) est une fraction ; sqrt( ... ) une racine ; " +
+  "vec(F) est un vecteur ; -> est une reaction totale et <=> un equilibre ; (aq), (s), (l), (g) sont les etats physiques. " +
+  "Les formules chimiques restent sur la ligne (H2SO4, Cu2+, HO-). Ces ecritures sont le fait du transcripteur, PAS de l'eleve : elles ne sont ni une faute de forme ni un manque de rigueur. " +
+  "[SCHEMA non transcrit], [GRAPHIQUE non transcrit] et [MONTAGE non transcrit] signalent une production graphique que tu n'as pas vue : tu ne la juges pas, tu passes human_review_required a true si elle pese sur la note. " +
+  "[illisible], [rature] et [marge] sont des marques du transcripteur, jamais des erreurs de l'eleve. " +
+  "Si la transcription signale un doute sur un chiffre, un exposant, un indice ou une unite, tu retiens la lecture la PLUS FAVORABLE a l'eleve et tu passes human_review_required a true. " +
   "CODES D'ERREUR : tu emploies uniquement les codes de common_error_taxonomy de la grille de physique-chimie fournie (PC-xxx-nn). " +
   "Ignore toute autre liste de codes qui pourrait apparaitre dans le dossier de correction : elle provient d'une autre matiere. " +
   "ETALONS : les copies etalons servent a situer le niveau global. Le champ benchmark_comparison.lower_or_equal_id doit designer l'etalon dont la note est INFERIEURE OU EGALE a celle que tu attribues, et upper_or_equal_id celui dont la note est SUPERIEURE OU EGALE. " +
@@ -212,11 +232,14 @@ export const rubrics = [
         "Un resultat juste obtenu sans aucune justification ne rapporte pas les points d'ANA.",
         "Tu ne juges aucun schema ou graphique trace par l'eleve : ils ne sont pas transcrits.",
       ],
+      // Grille de reference : les criteres de la taxonomie s'appliquent tels
+      // quels, sauf les 3 codes de connaissances (pas de critere KNOW ici —
+      // une notion confondue se paie sur le raisonnement).
       common_error_taxonomy: taxoPour([
         'PC-UNIT-01', 'PC-SIG-01', 'PC-MODEL-01', 'PC-SIGN-01', 'PC-FORCE-01', 'PC-CHEM-01',
         'PC-ADV-01', 'PC-PH-01', 'PC-TITR-01', 'PC-KIN-01', 'PC-ENER-01', 'PC-WAVE-01',
         'PC-CONCL-01', 'PC-GRAPH-01', 'PC-TRANS-01',
-      ]),
+      ], { 'PC-PH-01': 'ANA', 'PC-KIN-01': 'ANA', 'PC-WAVE-01': 'ANA' }),
     },
   },
 
@@ -321,10 +344,15 @@ export const rubrics = [
         "Tu ne reproches pas a l'eleve un element absent des documents tels qu'ils sont decrits dans la fiche sujet.",
         "Une lecture graphique que la transcription ne rapporte pas ne peut etre ni creditee ni sanctionnee : elle se signale.",
       ],
+      // Pas de critere REA ni VAL ici : tout ce qui est chiffre se paie sur
+      // QUANT, tout ce qui releve du modele sur KNOW.
       common_error_taxonomy: taxoPour([
         'PC-DOC-01', 'PC-UNIT-01', 'PC-SIG-01', 'PC-MODEL-01', 'PC-PH-01', 'PC-KIN-01',
         'PC-RC-01', 'PC-ENER-01', 'PC-WAVE-01', 'PC-GRAPH-01', 'PC-CONCL-01', 'PC-TRANS-01',
-      ]),
+      ], {
+        'PC-UNIT-01': 'QUANT', 'PC-SIG-01': 'QUANT', 'PC-GRAPH-01': 'QUANT',
+        'PC-MODEL-01': 'KNOW', 'PC-ENER-01': 'KNOW',
+      }),
     },
   },
 
@@ -427,10 +455,16 @@ export const rubrics = [
         "Plusieurs protocoles differents peuvent etre corrects : tu evalues celui qui est propose, jamais l'ecart a celui que tu aurais ecrit.",
         "Un schema de montage annonce mais non transcrit ne se sanctionne pas : il se signale et declenche une relecture.",
       ],
+      // Grille sans REA/ANA/COM : ce qui n'est pas chiffre se paie sur les
+      // etapes (PROC), ce qui releve du principe sur OBJ, ce qu'on fera des
+      // mesures sur EXP.
       common_error_taxonomy: taxoPour([
         'PC-PROTO-01', 'PC-SAFE-01', 'PC-INCERT-01', 'PC-UNIT-01', 'PC-CHEM-01',
         'PC-TITR-01', 'PC-PH-01', 'PC-CONCL-01', 'PC-TRANS-01',
-      ]),
+      ], {
+        'PC-UNIT-01': 'PROC', 'PC-CHEM-01': 'OBJ', 'PC-PH-01': 'OBJ',
+        'PC-TITR-01': 'EXP', 'PC-CONCL-01': 'EXP',
+      }),
     },
   },
 
@@ -534,10 +568,12 @@ export const rubrics = [
         "Tu n'evalues jamais le geste experimental, le montage ou le soin : ils ne sont pas observables dans un texte transcrit.",
         "human_review_required vaut toujours true pour cet exercice : la note d'ECE appartient au professeur present en salle.",
       ],
+      // PC-SAFE-01 est volontairement absent : la securite se juge sur le
+      // geste, en salle, et le geste n'est pas transcrit.
       common_error_taxonomy: taxoPour([
         'PC-INCERT-01', 'PC-UNIT-01', 'PC-SIG-01', 'PC-GRAPH-01', 'PC-TITR-01',
-        'PC-KIN-01', 'PC-SAFE-01', 'PC-CONCL-01', 'PC-TRANS-01',
-      ]),
+        'PC-KIN-01', 'PC-CONCL-01', 'PC-TRANS-01',
+      ], { 'PC-INCERT-01': 'VAL', 'PC-KIN-01': 'ANA' }),
     },
   },
 ];
@@ -575,6 +611,29 @@ export const subject_cards = [
         "Une boisson au citron porte l'indication « acidité totale exprimée en acide citrique : 5,0 g/L ». On dilue 10 fois la boisson, puis on titre V_A = 20,0 mL de la solution diluée par une solution d'hydroxyde de sodium de concentration C_B = 1,0 × 10⁻² mol/L. L'équivalence est repérée pour un volume versé V_E = 12,8 mL. Déterminer la concentration en acide citrique de la boisson et dire si l'indication portée sur l'étiquette est justifiée.",
       document_requirements:
         "données fournies avec le sujet : masse molaire de l'acide citrique M = 192 g/mol, équation support du titrage, courbe pH = f(V) donnant l'équivalence. La courbe n'est PAS transcrite : le correcteur ne juge que ce que l'élève en écrit.",
+      documents: [
+        {
+          id: 'DOC_1',
+          titre: 'Données du sujet',
+          nature: 'tableau de données',
+          contenu:
+            "Masse molaire de l'acide citrique C6H8O7 : M = 192 g/mol. Concentration de la solution titrante d'hydroxyde de sodium : C_B = 1,0 x 10^-2 mol/L. Volume de solution diluée titré : V_A = 20,0 mL. Facteur de dilution appliqué à la boisson : 10. Indication de l'étiquette : acidité totale exprimée en acide citrique, 5,0 g/L.",
+        },
+        {
+          id: 'DOC_2',
+          titre: 'Équation support du titrage',
+          nature: 'équation chimique',
+          contenu:
+            "Le titrage porte sur les trois acidités de l'acide citrique : C6H8O7 (aq) + 3 HO- (aq) -> C6H5O7^3- (aq) + 3 H2O (l). Le facteur stoechiométrique 3 est donc donné à l'élève : ne pas l'employer est une faute de lecture du document, pas une lacune de connaissance.",
+        },
+        {
+          id: 'DOC_3',
+          titre: 'Courbe pH = f(V)',
+          nature: 'graphique',
+          contenu:
+            "Courbe de suivi pH-métrique présentant un saut de pH unique. Le volume à l'équivalence, V_E = 12,8 mL, est déjà lu et donné dans l'énoncé : l'élève n'a pas à l'extraire du graphique. Le tracé lui-même n'est pas accessible au correcteur automatique.",
+        },
+      ],
       expected_concepts: [
         'titrage acido-basique', 'équivalence', 'facteur de dilution', 'concentration molaire',
         'concentration massique', 'masse molaire', 'quantité de matière', 'stœchiométrie',
@@ -623,6 +682,22 @@ export const subject_cards = [
         "Un joueur frappe un ballon depuis le sol avec une vitesse initiale de valeur v₀ = 12 m/s faisant un angle α = 35° avec l'horizontale. Le but se trouve à une distance d = 13 m et sa barre transversale est à la hauteur h = 2,4 m. En négligeant les frottements de l'air, déterminer si le ballon passe sous la barre transversale. Discuter la validité de l'hypothèse faite sur les frottements.",
       document_requirements:
         "données fournies avec le sujet : g = 9,81 m/s², masse du ballon m = 0,43 kg. Un schéma de la situation figure sur le sujet ; il n'est PAS transcrit dans la copie corrigée automatiquement.",
+      documents: [
+        {
+          id: 'DOC_1',
+          titre: 'Données du sujet',
+          nature: 'tableau de données',
+          contenu:
+            "Intensité de la pesanteur : g = 9,81 m/s^2. Masse du ballon : m = 0,43 kg. Vitesse initiale : v_0 = 12 m/s. Angle de tir avec l'horizontale : alpha = 35 degrés. Distance au but : d = 13 m. Hauteur de la barre transversale : h = 2,4 m. Le ballon part du sol.",
+        },
+        {
+          id: 'DOC_2',
+          titre: 'Schéma de la situation',
+          nature: 'schéma',
+          contenu:
+            "Schéma de profil : le ballon au sol à l'origine, le vecteur vitesse initiale incliné de alpha vers la droite, le but à la distance d, la barre transversale à la hauteur h. Les axes ne sont PAS imposés : l'élève choisit son repère, et tout choix cohérent est recevable. Le tracé n'est pas accessible au correcteur automatique.",
+        },
+      ],
       expected_concepts: [
         'référentiel', 'système', 'bilan des forces', 'deuxième loi de Newton',
         'accélération', 'équations horaires', 'trajectoire', 'projection sur les axes', 'chute libre',
@@ -671,6 +746,15 @@ export const subject_cards = [
         "Un chauffe-eau contient V = 150 L d'eau initialement à θ₁ = 15 °C. Sa résistance chauffante est alimentée sous U = 230 V et parcourue par un courant d'intensité I = 9,0 A. On souhaite porter l'eau à θ₂ = 60 °C. Déterminer la durée théorique de chauffe, puis la durée réelle sachant que les pertes thermiques représentent 12 % de l'énergie fournie. Commenter le résultat.",
       document_requirements:
         "données fournies avec le sujet : capacité thermique massique de l'eau c = 4,18 × 10³ J·kg⁻¹·K⁻¹, masse volumique de l'eau ρ = 1,0 kg/L.",
+      documents: [
+        {
+          id: 'DOC_1',
+          titre: 'Données du sujet',
+          nature: 'tableau de données',
+          contenu:
+            "Capacité thermique massique de l'eau : c = 4,18 x 10^3 J.kg^-1.K^-1. Masse volumique de l'eau : rho = 1,0 kg/L. Volume du chauffe-eau : V = 150 L. Température initiale : 15 degrés Celsius. Température visée : 60 degrés Celsius. Tension d'alimentation : U = 230 V. Intensité : I = 9,0 A. Part des pertes thermiques : 12 % de l'énergie fournie.",
+        },
+      ],
       expected_concepts: [
         'système et frontière', 'premier principe', 'transfert thermique', 'capacité thermique massique',
         'effet Joule', 'puissance électrique', 'énergie électrique', 'rendement', 'pertes thermiques',
@@ -718,7 +802,30 @@ export const subject_cards = [
       prompt:
         "Un capteur d'humidité utilise un condensateur dont la capacité varie avec le taux d'humidité de l'air. Le condensateur est chargé à travers une résistance de valeur connue, et le circuit mesure la durée de charge. À partir des documents, expliquer comment la mesure d'une durée permet de déterminer un taux d'humidité, et estimer la capacité du condensateur dans les conditions de l'enregistrement fourni.",
       document_requirements:
-        "documents joints au sujet distribué : schéma du circuit, courbe u_C = f(t) de la charge, tableau capacité ↔ taux d'humidité, valeur R = 47 kΩ. Les documents ne sont PAS reproduits dans la fiche : le correcteur ne reproche jamais à l'élève un élément absent des documents, et ne juge aucune lecture graphique que la transcription ne rapporte pas.",
+        "documents joints au sujet distribué : schéma du circuit, courbe u_C = f(t) de la charge, tableau capacité ↔ taux d'humidité, valeur R = 47 kΩ. Le correcteur ne reproche jamais à l'élève un élément absent des documents, et ne juge aucune lecture graphique que la transcription ne rapporte pas.",
+      documents: [
+        {
+          id: 'DOC_1',
+          titre: 'Le capteur et son circuit',
+          nature: 'schéma + texte',
+          contenu:
+            "Un générateur de tension continue E = 5,0 V, un interrupteur, une résistance R = 47 kOhm et le condensateur-capteur en série. La tension u_C est mesurée aux bornes du condensateur. Texte d'accompagnement : la capacité du condensateur augmente avec le taux d'humidité de l'air, le circuit mesure la durée de charge pour en déduire l'humidité.",
+        },
+        {
+          id: 'DOC_2',
+          titre: 'Enregistrement de la charge, u_C = f(t)',
+          nature: 'graphique',
+          contenu:
+            "Courbe croissante partant de 0 V et tendant vers un palier à 5,0 V. Axe des abscisses gradué en millisecondes de 0 à 20 ms, axe des ordonnées en volts de 0 à 5. La lecture attendue est celle de la constante de temps : soit par la tangente à l'origine, soit à 63 % de la valeur finale, ce qui donne environ 2,2 ms. Le tracé n'est pas accessible au correcteur automatique : une valeur voisine (2,0 à 2,4 ms) est recevable.",
+        },
+        {
+          id: 'DOC_3',
+          titre: "Étalonnage capacité ↔ taux d'humidité",
+          nature: 'tableau',
+          contenu:
+            "Capacité 33 nF pour 20 % d'humidité | 40 nF pour 35 % | 47 nF pour 50 % | 56 nF pour 65 % | 68 nF pour 80 %. C'est ce tableau qui permet de conclure sur l'humidité : s'arrêter à la capacité, c'est ne pas répondre à la question.",
+        },
+      ],
       expected_concepts: [
         'condensateur', 'capacité', 'circuit RC', 'constante de temps', 'charge du condensateur',
         'régime transitoire', 'régime permanent', 'lecture graphique', 'tangente à l\'origine', 'étalonnage',
@@ -766,7 +873,30 @@ export const subject_cards = [
       prompt:
         "Une cellule photoélectrique n'émet aucun électron lorsqu'on l'éclaire avec une lumière rouge très intense, mais en émet dès qu'on l'éclaire avec une lumière bleue même faible. À partir des documents, expliquer ce comportement et déterminer si un rayonnement de longueur d'onde 620 nm peut extraire un électron du métal étudié.",
       document_requirements:
-        "documents joints au sujet distribué : tableau des travaux d'extraction de plusieurs métaux, spectre visible avec longueurs d'onde, valeurs de h et de c, définition du photon. Les documents ne sont PAS reproduits dans la fiche.",
+        "documents joints au sujet distribué : tableau des travaux d'extraction de plusieurs métaux, spectre visible avec longueurs d'onde, valeurs de h et de c, définition du photon.",
+      documents: [
+        {
+          id: 'DOC_1',
+          titre: "Le photon (texte)",
+          nature: 'texte',
+          contenu:
+            "La lumière transporte l'énergie par paquets indivisibles appelés photons. L'énergie d'un photon vaut E = h x nu, où nu est la fréquence du rayonnement. L'intensité lumineuse fixe le NOMBRE de photons émis par seconde, jamais l'énergie de chacun d'eux.",
+        },
+        {
+          id: 'DOC_2',
+          titre: "Travaux d'extraction de quelques métaux",
+          nature: 'tableau',
+          contenu:
+            "Césium 1,9 eV | Sodium 2,3 eV | Zinc 4,3 eV | Cuivre 4,7 eV. Le métal étudié dans le sujet est le SODIUM, travail d'extraction W = 2,3 eV.",
+        },
+        {
+          id: 'DOC_3',
+          titre: 'Constantes et spectre visible',
+          nature: 'tableau de données',
+          contenu:
+            "Constante de Planck h = 6,63 x 10^-34 J.s. Célérité de la lumière c = 3,00 x 10^8 m/s. 1 eV = 1,60 x 10^-19 J. Spectre visible : violet 400 nm, bleu 470 nm, vert 530 nm, jaune 580 nm, rouge 620 à 700 nm. Le rayonnement à examiner, 620 nm, est donc rouge.",
+        },
+      ],
       expected_concepts: [
         'photon', 'quantum d\'énergie', 'travail d\'extraction', 'effet photoélectrique',
         'longueur d\'onde', 'fréquence', 'célérité', 'relation E = h·ν', 'électronvolt', 'fréquence seuil',
@@ -815,6 +945,29 @@ export const subject_cards = [
         "Un atelier doit contrôler la concentration en ions cuivre(II) d'un bain de traitement de surface, estimée entre 1 × 10⁻² et 5 × 10⁻² mol/L. On dispose d'une solution mère de sulfate de cuivre à 0,10 mol/L, de la verrerie usuelle du laboratoire et d'un spectrophotomètre. Rédiger le protocole complet permettant de déterminer cette concentration, en précisant les précautions de sécurité et les sources d'incertitude.",
       document_requirements:
         "données fournies avec le sujet : spectre d'absorption de la solution de sulfate de cuivre (maximum vers 800 nm), pictogrammes de sécurité du sulfate de cuivre (SGH07, SGH09). Aucun schéma n'est attendu du correcteur : seule la description écrite est évaluée.",
+      documents: [
+        {
+          id: 'DOC_1',
+          titre: "Spectre d'absorption de la solution de sulfate de cuivre",
+          nature: 'graphique',
+          contenu:
+            "Absorbance en fonction de la longueur d'onde, de 400 à 900 nm. Absorbance faible dans le bleu et le vert, croissante à partir de 600 nm, maximum marqué vers 800 nm. C'est cette longueur d'onde que l'élève doit retenir pour le réglage : choisir la couleur perçue de la solution est une erreur classique.",
+        },
+        {
+          id: 'DOC_2',
+          titre: 'Sécurité du sulfate de cuivre',
+          nature: 'pictogrammes + texte',
+          contenu:
+            "Pictogrammes SGH07 (nocif, irritant) et SGH09 (dangereux pour le milieu aquatique). Précautions attendues : gants, lunettes, blouse ; récupération des solutions dans un bidon de déchets, jamais de rejet à l'évier.",
+        },
+        {
+          id: 'DOC_3',
+          titre: 'Matériel disponible',
+          nature: 'liste',
+          contenu:
+            "Solution mère de sulfate de cuivre à 0,10 mol/L. Pipettes jaugées de 5, 10, 20 et 25 mL. Fioles jaugées de 50 et 100 mL. Béchers, éprouvettes graduées, pissette d'eau distillée. Spectrophotomètre et cuves. Concentration du bain attendue entre 1 x 10^-2 et 5 x 10^-2 mol/L.",
+        },
+      ],
       expected_concepts: [
         'loi de Beer-Lambert', 'absorbance', 'longueur d\'onde de travail', 'gamme d\'étalonnage',
         'dilution', 'facteur de dilution', 'verrerie jaugée', 'droite d\'étalonnage', 'blanc',
@@ -869,6 +1022,29 @@ export const subject_cards = [
         "On étudie l'hydrolyse du 2-chloro-2-méthylpropane dans un mélange eau/acétone. La réaction produit des ions, ce qui rend le milieu conducteur. À l'aide d'un conductimètre, suivre l'évolution de la conductivité au cours du temps, puis déterminer le temps de demi-réaction. Conclure sur l'influence de la température en comparant votre résultat à celui obtenu par un autre binôme à température plus élevée.",
       document_requirements:
         "matériel disponible en salle : conductimètre, cellule, chronomètre, bain thermostaté, verrerie jaugée, solutions préparées. La correction automatique ne voit NI le montage, NI le geste, NI le graphique tracé : uniquement le compte rendu écrit. Relecture professeur obligatoire.",
+      documents: [
+        {
+          id: 'DOC_1',
+          titre: 'Réaction étudiée',
+          nature: 'texte + équation',
+          contenu:
+            "Hydrolyse du 2-chloro-2-méthylpropane dans un mélange eau/acétone : C4H9Cl + H2O -> C4H9OH + H+ (aq) + Cl- (aq). La réaction libère des ions, donc la conductivité du milieu augmente au cours du temps : sigma(t) est une image de l'avancement.",
+        },
+        {
+          id: 'DOC_2',
+          titre: 'Matériel disponible en salle',
+          nature: 'liste',
+          contenu:
+            "Conductimètre et cellule de mesure, chronomètre, bain thermostaté réglable, verrerie jaugée, solution de 2-chloro-2-méthylpropane et mélange eau/acétone préparés. Deux binômes travaillent à deux températures différentes pour comparer.",
+        },
+        {
+          id: 'DOC_3',
+          titre: 'Rappel de méthode',
+          nature: 'texte',
+          contenu:
+            "Le temps de demi-réaction t_1/2 est la durée au bout de laquelle l'avancement atteint la moitié de sa valeur finale. Sur un suivi conductimétrique partant d'une conductivité nulle, cela correspond à sigma(t_1/2) = sigma_finale / 2 — ce qui suppose que le PALIER de conductivité ait été atteint avant de conclure.",
+        },
+      ],
       expected_concepts: [
         'conductimétrie', 'conductivité', 'suivi temporel', 'temps de demi-réaction',
         'avancement', 'vitesse de réaction', 'facteur cinétique', 'température',
@@ -1057,6 +1233,7 @@ RÈGLES PHYSIQUE-CHIMIE NON NÉGOCIABLES :
 - Toute citation de l'élève vient de la transcription. Si la transcription manque, tu décris sans citer.
 - SCHÉMAS, GRAPHIQUES ET MONTAGES : la correction automatique ne les a pas vus. Tu ne les commentes jamais comme s'ils avaient été jugés. Quand ils comptent, tu énonces ce qu'ils auraient dû porter (titre, axes légendés avec unités, échelle, sens des flèches, légende du montage) et tu précises que le professeur les vérifie sur la copie.
 - Les unités s'écrivent partout, y compris dans tes propres exemples corrigés. Un résultat sans unité, dans ce dossier, serait un contre-exemple.
+- NOTATION : la transcription emploie une convention texte (10^-2, C_B, ( a ) / ( b ), sqrt( ), vec(F), ->, <=>). Quand tu cites l'élève, tu RÉTABLIS l'écriture normale — 10⁻², C_B en indice, la fraction sur deux étages si tu le peux — sans jamais changer les valeurs. Tu ne reproches jamais à l'élève une écriture qui vient du transcripteur, et les marques [illisible], [rature], [marge], [SCHÉMA non transcrit] n'apparaissent pas telles quelles dans le dossier : tu dis en français ce qu'elles signifient.
 - Une erreur commise tôt ne se paie qu'une fois : quand tu expliques une perte de points, tu dis explicitement à l'élève que la suite menée correctement avec la valeur fausse reste valorisée.
 - Tu tutoies l'élève. Ton exigeant et bienveillant, jamais de flatterie, jamais de reproche sans la correction à appliquer.
 - Ne produis rien d'autre que le corps HTML.
