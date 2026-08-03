@@ -465,9 +465,24 @@ Deno.serve(async (req: Request) => {
     if (benchmarkResult.error) {
       throw new Error(`Étalons introuvables: ${benchmarkResult.error.message}`);
     }
-    if (errorsResult.error) {
+    // Quelle taxonomie d'erreurs remettre au correcteur ?
+    //
+    // La table error_taxonomy n'a pas de colonne matiere et ne contient que le
+    // francais. Depuis SES, chaque matiere porte SA taxonomie dans
+    // rubric_json.common_error_taxonomy. Or SES partage le nom d'epreuve
+    // "dissertation" avec le francais : interroger la table par exercise_type
+    // seul remettait au correcteur de SES les codes d'erreur du francais,
+    // presentes comme les siens. La grille prime donc toujours, et on ne
+    // retombe sur la table que pour les matieres qui n'ont pas de taxonomie
+    // dans leur grille (le francais).
+    const taxonomieDeLaGrille =
+      (rubricResult.data.rubric_json?.common_error_taxonomy ?? []) as unknown[];
+    if (!taxonomieDeLaGrille.length && errorsResult.error) {
       throw new Error(`Taxonomie introuvable: ${errorsResult.error.message}`);
     }
+    const errorTaxonomy = taxonomieDeLaGrille.length
+      ? taxonomieDeLaGrille
+      : (errorsResult.data ?? []);
 
     const benchmarks = selectBenchmarks((benchmarkResult.data ?? []) as BenchmarkRow[]);
     if (benchmarks.length < 3) {
@@ -483,7 +498,7 @@ Deno.serve(async (req: Request) => {
       rubric: rubricResult.data.rubric_json,
       subject: subjectResult.data.card_json,
       benchmarks,
-      error_taxonomy: errorsResult.data ?? [],
+      error_taxonomy: errorTaxonomy,
     };
 
     const transcription = transcriptionRow.transcription_json as Record<string, unknown>;
