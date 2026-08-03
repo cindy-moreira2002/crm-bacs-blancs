@@ -152,7 +152,7 @@ select matiere, model, status, version, length(system_prompt) as taille_prompt
 from public.transcription_profiles order by matiere;
 `);
 
-  const chemin = path.join(RACINE, 'supabase', 'sql', '18_profils_transcription.sql');
+  const chemin = path.join(RACINE, 'supabase', 'sql', '19_profils_transcription.sql');
   fs.writeFileSync(chemin, L.join('\n'));
   console.log('SQL ecrit :', path.relative(RACINE, chemin));
 }
@@ -180,5 +180,5 @@ if (process.argv.includes('--apply')) {
   });
   console.log(res.ok
     ? `transcription_profiles : ${res.status} (${PROFILS.length} lignes)`
-    : `echec ${res.status} — la table existe-t-elle ? Joue d'abord supabase/sql/18_profils_transcription.sql.\n${(await res.text()).slice(0, 300)}`);
+    : `echec ${res.status} — la table existe-t-elle ? Joue d'abord supabase/sql/19_profils_transcription.sql.\n${(await res.text()).slice(0, 300)}`);
 }
