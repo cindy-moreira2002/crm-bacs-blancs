@@ -73,23 +73,15 @@ session, pas de grille : normal pour l'instant.)
 
 ---
 
-## 4. SQL à jouer dans Supabase — **rien n'est joué, et je ne peux pas le faire**
+## 4. SQL — les deux tables manquantes sont posées ✅ (3 août)
 
-Ni la CLI Supabase ni `psql` ne sont installés sur ce Mac, et la clé de service
-ne permet pas de créer une table (PostgREST ne fait pas de DDL). **Ces deux
-fichiers doivent être collés dans le SQL Editor par Cindy.** Deux tables sont
-absentes de la base alors que le code qui les lit est déployé :
-
-| Fichier | Table | Conséquence tant que ce n'est pas joué |
+| Fichier | Table | État |
 |---|---|---|
-| `supabase/sql/15_relecture_prof.sql` | `relecture_feedback` | La page `/relecture/[matiere]` s'affiche, mais **l'envoi du formulaire échoue** : aucun prof ne peut rendre son avis. C'est le verrou de tout le reste. |
-| `supabase/sql/19_profils_transcription.sql` | `transcription_profiles` | Les copies scientifiques (physique-chimie, maths) sont transcrites avec le modèle économique et des consignes génériques : un exposant ou une unité mal lu fausse la note sans que rien ne le signale. |
+| `supabase/sql/15_relecture_prof.sql` | `relecture_feedback` | ✅ jouée — le formulaire de relecture prof enregistre |
+| `supabase/sql/19_profils_transcription.sql` | `transcription_profiles` | ✅ jouée — `maths` et `physique-chimie` en `claude-sonnet-5`, `active`, accents propres |
 
-Après le 19, une commande à lancer (je peux la faire dès que la table existe) :
-
-```bash
-node scripts/profils-transcription.mjs --apply
-```
+Le SQL 19 pose la table **et** les deux profils : `profils-transcription.mjs --apply`
+n'est utile que pour modifier un profil plus tard.
 
 Fichiers d'activation, à jouer **seulement après** validation par des profs —
 ou à remplacer par `node scripts/activer-matiere.mjs <matiere> --apply --profs-ont-valide` :
@@ -101,22 +93,24 @@ ou à remplacer par `node scripts/activer-matiere.mjs <matiere> --apply --profs-
 
 ---
 
-## 5. Code : poussé, mais les Edge Functions restent à déployer
+## 5. Code : poussé et déployé ✅ (3 août)
 
-Tout est sur `main` (5 commits poussés le 3 août). Mais **les Edge Functions ne
-se déploient pas toutes seules** — pas de CI, pas de GitHub Action, et la CLI
-Supabase n'est pas installée ici. Deux fonctions ont du code non déployé :
-
-```bash
-supabase functions deploy transcribe-french-copy
-supabase functions deploy correct-french-copy
-```
+Tout est sur `main`, et les deux Edge Functions concernées ont été redéployées :
 
 - `transcribe-french-copy` : lecture de `transcription_profiles` (commit `5ccf110`).
 - `correct-french-copy` : correctif de la taxonomie d'erreurs (commit `8dea06e`).
 
-Tant qu'elles ne sont pas redéployées, ces deux corrections n'existent pas en
-production.
+Vérifié après déploiement : les deux répondent `Accès refusé.` à un appel sans
+secret — accent correct, donc **aucun mojibake**, et la porte est bien fermée.
+
+Rappel pour la prochaine fois (pas de CI, le déploiement est manuel) :
+
+```bash
+cd ~/crm-bacs-blancs && npx --yes supabase@latest functions deploy <nom> --project-ref xgdaibekjmtffvkwvcge --no-verify-jwt
+```
+
+Le `--no-verify-jwt` est obligatoire. Ne **jamais** coller le code des fonctions
+dans l'éditeur du dashboard : il abîme les accents.
 
 ---
 
@@ -152,12 +146,12 @@ technique : il faut 3 vraies copies notées par matière.
 
 ## 8. Ce qu'il reste à faire, dans l'ordre
 
-**Cette semaine — 4 gestes, tous chez Cindy**
-1. Coller `supabase/sql/15_relecture_prof.sql` dans le SQL Editor.
-2. Coller `supabase/sql/19_profils_transcription.sql`, puis me demander de lancer
-   `node scripts/profils-transcription.mjs --apply`.
-3. Redéployer les deux Edge Functions (commandes en partie 5).
-4. Poser le plafond de dépense Anthropic.
+**Cette semaine**
+1. ~~Jouer `15_relecture_prof.sql`~~ ✅ fait le 3 août.
+2. ~~Jouer `19_profils_transcription.sql`~~ ✅ fait le 3 août.
+3. ~~Redéployer les deux Edge Functions~~ ✅ fait le 3 août.
+4. **Poser le plafond de dépense Anthropic** — seul point restant, console
+   Anthropic. Tant qu'il n'est pas posé, aucun run E2E n'est lancé.
 
 **Dans les 10 jours — ce qui conditionne tout le reste**
 5. Envoyer les liens de relecture aux profs. Ils sont déjà générés dans
