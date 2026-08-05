@@ -9,7 +9,7 @@ export default function InscriptionsPage() {
           <p className="text-lg text-gray-600">Inscription gratuite coaching toutes matières</p>
         </div>
         <div className="flex justify-center">
-          <FormInscription />
+          <FormInscription examen="bac" />
         </div>
       </div>
     </div>
