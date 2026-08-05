@@ -13,17 +13,12 @@ import { pipelineDb, libelleSujet } from './pipeline';
 import { jetonRelecture } from './relecture';
 import { LABELS_MATIERES, labelExercice } from './pipelineEtat';
 import type { CorrectionLigne, RetourProf } from './pipelineEtat';
+import { echelleExpliquee, trierDiagnostics, verifierStructureMatiere } from './pipelineVerifs';
+import type { Diagnostic } from './pipelineVerifs';
 
 // --- Formes -----------------------------------------------------------
 
-export type NiveauDiag = 'bloquant' | 'attention' | 'ok';
-
-export type Diagnostic = {
-  niveau: NiveauDiag;
-  texte: string;
-  /** Où corriger, si ce n'est pas dans la page elle-même. */
-  piste?: string;
-};
+export type { Diagnostic, NiveauDiag } from './pipelineVerifs';
 
 export type CritereDetail = {
   code: string;
@@ -98,6 +93,8 @@ export type OrphelinDetail = {
   validation_status: string | null;
   origine: 'synthetique' | 'reel';
   support: string | null;
+  /** L'épreuve existe aussi dans une autre matière : attribution incertaine. */
+  ambigu: boolean;
 };
 
 export type DetailMatiere = {
@@ -226,9 +223,23 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
   const retours = (retoursRes.error ? [] : (retoursRes.data ?? [])) as RetourProf[];
 
   // Étalons : ceux des sujets de la matière + les orphelins dont le type
-  // d'épreuve appartient à la matière (ex. les vraies copies de français).
+  // d'épreuve n'existe QUE dans cette matière (« dissertation » existe en
+  // français ET en SES : ces orphelins-là restent au niveau global, la page
+  // santé les signale — on ne devine pas leur matière).
   const idsSujets = sujetsBruts.map((s) => s.id);
   const typesMatiere = [...new Set([...rubriques, ...sujetsBruts].map((r) => r.exercise_type))];
+  const { data: typesGlobaux, error: erreurTypes } = await db
+    .from('rubrics')
+    .select('exercise_type, matiere');
+  if (erreurTypes) throw new Error(erreurTypes.message);
+  const matieresDuType = new Map<string, Set<string>>();
+  for (const t of (typesGlobaux ?? []) as { exercise_type: string; matiere: string | null }[]) {
+    if (!t.matiere) continue;
+    const s = matieresDuType.get(t.exercise_type) ?? new Set<string>();
+    s.add(t.matiere);
+    matieresDuType.set(t.exercise_type, s);
+  }
+  const estTypePartage = (t: string) => (matieresDuType.get(t) ?? new Set([matiere])).size > 1;
   const [benchSujetsRes, benchOrphelinsRes] = await Promise.all([
     idsSujets.length
       ? db
@@ -262,11 +273,7 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
       const sommeCriteres = criteres.reduce((n, c) => n + (c.maximum_score ?? 0), 0);
       const bareme = rj.maximum_score ?? (sommeCriteres > 0 ? sommeCriteres : null);
       const prompt = r.system_prompt ?? '';
-      // Barème ≠ 20 : le system_prompt doit dire comment on ramène sur 20.
-      const echelle_ok =
-        bareme == null || bareme === 20
-          ? true
-          : new RegExp(`(sur|/|\\bde\\b)\\s*${bareme}\\b|normalis|ramen`, 'i').test(prompt);
+      const echelle_ok = echelleExpliquee(bareme, prompt);
       return {
         id: r.id,
         track: r.track,
@@ -347,75 +354,51 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
       validation_status: b.validation_status,
       origine: String(c.origin ?? '').includes('synthetic') ? 'synthetique' : 'reel',
       support: texte(c.support),
+      ambigu: estTypePartage(b.exercise_type),
     };
   });
 
-  // --- Diagnostics ----------------------------------------------------
-  const diagnostics: Diagnostic[] = [];
-  const diag = (niveau: NiveauDiag, txt: string, piste?: string) =>
-    diagnostics.push({ niveau, texte: txt, piste });
-
-  const grilleActivePour = (s: SujetDetail) =>
-    grilles.find((g) => g.track === s.track && g.exercise_type === s.exercise_type && g.status === 'active');
-  const gabaritElevePour = (s: { track: string; exercise_type: string }) =>
-    gabarits.find((g) => g.audience === 'eleve' && g.track === s.track && g.exercise_type === s.exercise_type);
-
-  for (const s of sujets) {
-    if (s.status === 'active' && !grilleActivePour(s)) {
-      diag('bloquant', `Sujet « ${s.id} » visible au dépôt SANS barème actif : la correction échouera.`, 'Activer la grille de cette épreuve ou repasser le sujet en brouillon.');
-    }
-    const gab = gabaritElevePour(s);
-    if (s.status === 'active' && (!gab || gab.status !== 'active')) {
-      diag('bloquant', `Sujet « ${s.id} » visible au dépôt mais dossier élève ${gab ? 'en brouillon' : 'absent'} : generate-dossier refusera.`, 'Activer le gabarit élève de cette épreuve.');
-    }
-    if (s.etalons.length === 0) {
-      diag('attention', `Sujet « ${s.id} » sans aucune copie étalon : la note sortira sans référence.`);
-    }
-  }
-  for (const g of grilles) {
-    if (g.system_prompt_chars === 0) {
-      diag('bloquant', `Barème « ${g.id} » sans system_prompt : le correcteur n'a aucune consigne.`);
-    }
-    if (!g.echelle_ok) {
-      diag('attention', `Barème « ${g.id} » noté sur ${g.bareme_total} mais le system_prompt n'explique pas la conversion sur 20.`, 'Ajouter l’échelle dans le system_prompt (gotcha connu).');
-    }
-    if (g.criteres.length === 0) {
-      diag('bloquant', `Barème « ${g.id} » sans aucun critère.`);
-    }
-    if (matiere !== 'francais' && g.taxonomie.length === 0) {
-      diag('attention', `Barème « ${g.id} » sans taxonomie d'erreurs : les codes d'erreur du dossier seront pauvres.`);
-    }
-  }
-  for (const ex of typesMatiere) {
-    const gab = gabarits.find((g) => g.audience === 'eleve' && g.exercise_type === ex);
-    if (!gab) diag('bloquant', `Épreuve « ${labelExercice(ex)} » sans gabarit de dossier élève.`);
-  }
-  const tousEtalons = sujets.flatMap((s) => s.etalons);
-  const reels = tousEtalons.filter((e) => e.origine === 'reel').length;
-  const valides = tousEtalons.filter((e) => e.validation_status === 'validated').length;
-  if (tousEtalons.length > 0 && reels === 0) {
-    diag('attention', `Les ${tousEtalons.length} étalons sont tous synthétiques : l'échelle de notes n'a jamais été calée sur de vraies copies (calibration sévère connue).`, '3 vraies copies notées par un prof suffisent pour recaler.');
-  }
-  if (tousEtalons.length > 0 && valides === 0) {
-    diag('attention', `Aucun étalon validé par un prof (« validated ») sur ${tousEtalons.length}.`);
-  }
-  if (orphelins.length > 0) {
-    const reelsOrph = orphelins.filter((o) => o.origine === 'reel').length;
-    diag('attention', `${orphelins.length} étalons orphelins rattachés à cette matière par leur épreuve${reelsOrph ? ` — dont ${reelsOrph} VRAIES copies` : ''} : ils ne servent à rien tant qu'ils ne pointent pas vers un sujet.`, 'Réaffecter leur subject_id.');
-  }
-  const echecs = corrections.filter((cor) => cor.status.includes('failed'));
-  if (echecs.length) {
-    diag('attention', `${echecs.length} correction(s) en échec sur les ${corrections.length} dernières de la matière.`);
-  }
-  const texteAVerifier = sujets.filter((s) => (s.source_status ?? '').includes('synthetic') && s.exercise_type.includes('explication'));
-  for (const s of texteAVerifier) {
-    diag('attention', `Texte du sujet « ${s.id} » à vérifier mot à mot sur une édition de référence avant activation.`);
-  }
+  // --- Diagnostics (règles partagées : lib/pipelineVerifs.ts) ---------
+  const diagnostics: Diagnostic[] = verifierStructureMatiere({
+    matiere,
+    grilles: grilles.map((g) => ({
+      id: g.id,
+      track: g.track,
+      exercise_type: g.exercise_type,
+      status: g.status,
+      bareme_total: g.bareme_total,
+      nb_criteres: g.criteres.length,
+      nb_taxonomie: g.taxonomie.length,
+      system_prompt_chars: g.system_prompt_chars,
+      echelle_ok: g.echelle_ok,
+    })),
+    sujets: sujets.map((s) => ({
+      id: s.id,
+      track: s.track,
+      exercise_type: s.exercise_type,
+      status: s.status,
+      nb_etalons: s.etalons.length,
+      source_status: s.source_status,
+    })),
+    gabarits: gabarits.map((g) => ({
+      track: g.track,
+      exercise_type: g.exercise_type,
+      audience: g.audience,
+      status: g.status,
+    })),
+    etalons: sujets.flatMap((s) => s.etalons.map((e) => ({ origine: e.origine, validation_status: e.validation_status }))),
+    // Seuls les orphelins d'épreuve exclusive comptent dans le diagnostic —
+    // les ambigus (épreuve partagée) sont signalés par la page santé, pour ne
+    // pas être comptés dans deux matières.
+    orphelins: orphelins.filter((o) => !o.ambigu).length,
+    orphelins_reels: orphelins.filter((o) => !o.ambigu && o.origine === 'reel').length,
+    corrections_total: corrections.length,
+    corrections_echecs: corrections.filter((cor) => cor.status.includes('failed')).length,
+  });
   if (diagnostics.length === 0) {
-    diag('ok', 'Rien à signaler : grilles, sujets, gabarits et étalons sont cohérents.');
+    diagnostics.push({ niveau: 'ok', texte: 'Rien à signaler : grilles, sujets, gabarits et étalons sont cohérents.' });
   }
-  const poids: Record<NiveauDiag, number> = { bloquant: 0, attention: 1, ok: 2 };
-  diagnostics.sort((a, b) => poids[a.niveau] - poids[b.niveau]);
+  const diagnosticsTries = trierDiagnostics(diagnostics);
 
   return {
     matiere,
@@ -427,7 +410,7 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
     orphelins,
     corrections,
     retours,
-    diagnostics,
+    diagnostics: diagnosticsTries,
     liens: {
       relecture: `/relecture/${matiere}?t=${jetonRelecture(matiere)}`,
       depot: '/espace-prof/deposer',

@@ -10,6 +10,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CorrectionLigne, MatiereEtat, RetourProf, SnapshotPipeline } from '@/lib/pipelineEtat';
 import { DetailMatiereVue } from './DetailMatiere';
+import { ExplicationPipeline } from './ExplicationPipeline';
+import { SanteSystemeVue } from './SanteSysteme';
 
 const RAFRAICHISSEMENT_MS = 30_000;
 
@@ -104,7 +106,10 @@ function CarteMatiere({
     { ok: t.gabarits_actifs === t.gabarits && t.gabarits > 0, texte: `Dossiers élève prêts (${t.gabarits_actifs}/${t.gabarits})` },
     {
       ok: etalonsReels > 0,
-      texte: etalonsReels > 0 ? `${etalonsReels} étalons réels (+ ${t.etalons_synthetiques} synthétiques)` : `Étalons 100 % synthétiques (${t.etalons}) — note approximative`,
+      texte:
+        etalonsReels > 0
+          ? `${etalonsReels} copies étalons réelles (+ ${t.etalons_synthetiques} synthétiques)`
+          : `Copies étalons 100 % synthétiques (${t.etalons}) — inventées pour caler l’échelle, note approximative`,
     },
     { ok: t.etalons_valides > 0, texte: t.etalons_valides > 0 ? `${t.etalons_valides} étalons validés par un prof` : 'Aucun étalon validé par un prof' },
     { ok: t.corrections_reussies > 0, texte: t.corrections_reussies > 0 ? `${t.corrections_reussies} copie(s) corrigée(s) récemment` : 'Aucune copie corrigée pour l’instant' },
@@ -472,6 +477,10 @@ export function TableauDeBordCorrection() {
 
         {!matiereOuverte && (
         <>
+        <SanteSystemeVue onOuvrirMatiere={setMatiereOuverte} />
+
+        <ExplicationPipeline />
+
         {/* Synthèse */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
@@ -487,19 +496,12 @@ export function TableauDeBordCorrection() {
           ))}
         </section>
 
-        {/* Alertes */}
-        {etat.alertes.length > 0 && (
-          <section className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-            <h2 className="text-sm font-bold text-amber-900 mb-2">À surveiller</h2>
-            <ul className="space-y-1">
-              {etat.alertes.map((a) => (
-                <li key={a} className="text-xs text-amber-800 flex gap-1.5">
-                  <span>⚠️</span>
-                  <span>{a}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
+        {/* Les alertes détaillées vivent dans « Santé du système » ; on ne
+            garde ici que celle que la santé ne voit pas (base CRM muette). */}
+        {!etat.sessions_disponibles && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+            ⚠️ Base CRM injoignable d’ici : les dates de sessions ne sont pas affichées.
+          </p>
         )}
 
         {/* Matières */}

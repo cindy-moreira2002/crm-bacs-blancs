@@ -412,7 +412,17 @@ export function DetailMatiereVue({
                 {detail.orphelins.map((o) => (
                   <tr key={o.id} className="border-b border-gray-50">
                     <td className="py-1.5 pr-3 font-mono text-gray-500">{o.id}</td>
-                    <td className="py-1.5 pr-3 text-gray-600">{o.exercise_type}</td>
+                    <td className="py-1.5 pr-3 text-gray-600">
+                      {o.exercise_type}
+                      {o.ambigu && (
+                        <span
+                          className="block text-[10px] text-amber-600"
+                          title="Cette épreuve existe aussi dans une autre matière : l’étalon est montré ici mais sa matière réelle est incertaine tant que son sujet n’est pas réaffecté."
+                        >
+                          épreuve partagée — attribution incertaine
+                        </span>
+                      )}
+                    </td>
                     <td className="py-1.5 pr-3 text-gray-600 max-w-[280px] truncate" title={o.support ?? undefined}>
                       {o.support ?? '—'}
                     </td>
