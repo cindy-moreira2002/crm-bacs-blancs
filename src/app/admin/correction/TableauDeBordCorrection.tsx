@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CorrectionLigne, MatiereEtat, RetourProf, SnapshotPipeline } from '@/lib/pipelineEtat';
+import { DetailMatiereVue } from './DetailMatiere';
 
 const RAFRAICHISSEMENT_MS = 30_000;
 
@@ -86,10 +87,12 @@ function CarteMatiere({
   m,
   onStatut,
   occupe,
+  onToutVoir,
 }: {
   m: MatiereEtat;
   onStatut: (corps: Record<string, string>) => void;
   occupe: boolean;
+  onToutVoir: () => void;
 }) {
   const [ouverte, setOuverte] = useState(false);
   const t = m.totaux;
@@ -161,6 +164,14 @@ function CarteMatiere({
           <span className="text-xs text-gray-500 whitespace-nowrap">{prets}/{points.length} prêts</span>
           <button type="button" onClick={() => setOuverte(!ouverte)} className="text-xs text-purple-700 hover:underline whitespace-nowrap">
             {ouverte ? 'replier' : 'détail'}
+          </button>
+          <button
+            type="button"
+            onClick={onToutVoir}
+            className="text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-full px-2.5 py-1 whitespace-nowrap"
+            title={`Tout ce que Supabase contient pour ${m.label} : barèmes, critères, sujets, étalons, diagnostics`}
+          >
+            🔎 tout voir
           </button>
         </div>
       </div>
@@ -349,6 +360,7 @@ export function TableauDeBordCorrection() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
   const [depuis, setDepuis] = useState(0); // secondes depuis le dernier chargement
+  const [matiereOuverte, setMatiereOuverte] = useState<string | null>(null);
   const chrono = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const charger = useCallback(async () => {
@@ -449,6 +461,17 @@ export function TableauDeBordCorrection() {
           <p className="text-xs text-red-600">Dernier rafraîchissement en erreur : {erreur} (données affichées : précédentes)</p>
         )}
 
+        {matiereOuverte && (
+          <DetailMatiereVue
+            slug={matiereOuverte}
+            onRetour={() => setMatiereOuverte(null)}
+            onStatut={envoyerStatut}
+            occupe={occupe}
+          />
+        )}
+
+        {!matiereOuverte && (
+        <>
         {/* Synthèse */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
@@ -489,7 +512,13 @@ export function TableauDeBordCorrection() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {etat.matieres.map((m) => (
-              <CarteMatiere key={m.matiere} m={m} onStatut={envoyerStatut} occupe={occupe} />
+              <CarteMatiere
+                key={m.matiere}
+                m={m}
+                onStatut={envoyerStatut}
+                occupe={occupe}
+                onToutVoir={() => setMatiereOuverte(m.matiere)}
+              />
             ))}
           </div>
         </section>
@@ -536,6 +565,8 @@ export function TableauDeBordCorrection() {
           <h2 className="text-lg font-bold text-gray-900 mb-3">Retours des profs relecteurs</h2>
           <BlocRetours retours={etat.retours} />
         </section>
+        </>
+        )}
 
         <footer className="text-center text-xs text-gray-400 pb-8">
           Données lues en direct dans la base du pipeline · rafraîchies toutes les 30 s.
