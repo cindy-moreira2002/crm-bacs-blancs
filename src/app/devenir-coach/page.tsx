@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { CandidatureProf } from '@/components/CandidatureProf';
+import { ConnexionProf } from '@/components/ConnexionProf';
 import { profConnecte } from '@/lib/authProf';
 
 export const dynamic = 'force-dynamic';
@@ -51,7 +51,7 @@ export default async function DevenirCoachPage() {
           ))}
         </div>
 
-        <CandidatureProf />
+        <ConnexionProf />
       </div>
     </div>
   );
