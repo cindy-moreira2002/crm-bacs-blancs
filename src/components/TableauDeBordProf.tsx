@@ -196,10 +196,19 @@ export function TableauDeBordProf({
               {(prof.matieres ?? []).join(' · ') || 'Aucune matière renseignée'}
             </p>
           </div>
-          <button onClick={seDeconnecter}
-            className="text-xs text-purple-200 hover:text-white underline flex-shrink-0">
-            Se déconnecter
-          </button>
+          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+            <button onClick={seDeconnecter}
+              className="text-xs text-purple-200 hover:text-white underline">
+              Se déconnecter
+            </button>
+            {/* Tour de contrôle du pipeline — réservée à l'administratrice. */}
+            {prof.role === 'admin' && (
+              <a href="/admin/correction"
+                className="text-xs px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-semibold">
+                🎛️ Pilotage correction
+              </a>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

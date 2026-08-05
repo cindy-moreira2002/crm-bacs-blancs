@@ -4,6 +4,17 @@ Relevé du **3 août 2026**, fait en interrogeant directement la base du pipelin
 (Supabase `xgdaibekjmtffvkwvcge`) et le dépôt `~/crm-bacs-blancs`.
 Mis à jour le même jour après le chantier décrit en partie 9.
 
+> **⚠️ 5 août 2026 — ce document est en partie périmé, et il a un successeur.**
+>
+> 1. **Les 9 matières ont été passées en `active`** (décision Cindy, phase de
+>    test) : les 85 sujets apparaissent au dépôt. Les étalons des 8 matières
+>    hors français restent synthétiques — les notes sont donc approximatives.
+> 2. **La page `/admin/correction`** (réservée au compte admin) remplace ce
+>    fichier comme source de vérité : inventaire par matière lu en direct dans
+>    la base, interrupteurs activer/brouillon (matière, épreuve, sujet),
+>    corrections en direct, coûts estimés, retours des profs relecteurs.
+>    Voir `src/lib/pipelineEtat.ts` et `src/app/admin/correction/`.
+
 ---
 
 ## 1. Ce qui fonctionne vraiment aujourd'hui
