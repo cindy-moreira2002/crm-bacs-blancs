@@ -1,28 +1,46 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { matieresDisponibles, sessionsPourMatiere, labelSession } from '@/lib/sessions';
+import { matieresDisponibles, sessionsPourMatiere, labelSession, libelleMatiere, type Examen } from '@/lib/sessions';
 
-const MATIERES = matieresDisponibles();
+const MATIERES_BAC = matieresDisponibles('bac');
+const MATIERES_BREVET = matieresDisponibles('brevet');
+const matieresDe = (e: Examen) => (e === 'brevet' ? MATIERES_BREVET : MATIERES_BAC);
 
 export function FormInscription() {
+  const [examen, setExamen] = useState<Examen>('bac');
   const [prenom, setPrenom] = useState('');
   const [nom, setNom] = useState('');
   const [email, setEmail] = useState('');
   const [emailParent, setEmailParent] = useState('');
   const [telephone, setTelephone] = useState('');
-  const [matiere, setMatiere] = useState<string>(MATIERES[0] ?? '');
+  const [matiere, setMatiere] = useState<string>(MATIERES_BAC[0] ?? '');
   const [dateEpreuve, setDateEpreuve] = useState('');
 
-  // Arrivée depuis une session précise (« S'inscrire → » de l'espace élève) :
-  // matière et date arrivent dans l'URL et pré-remplissent le formulaire.
+  const MATIERES = matieresDe(examen);
+  const epreuve = examen === 'brevet' ? 'brevet blanc' : 'bac blanc';
+
+  // Bascule bac ↔ brevet : on repart sur la première matière de l'univers choisi.
+  const changerExamen = (e: Examen) => {
+    setExamen(e);
+    setMatiere(matieresDe(e)[0] ?? '');
+    setDateEpreuve('');
+  };
+
+  // Arrivée depuis une session précise (« S'inscrire → » du site ou de l'espace élève) :
+  // examen, matière et date arrivent dans l'URL et pré-remplissent le formulaire.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
+    const ex: Examen = p.get('examen') === 'brevet' ? 'brevet' : 'bac';
+    const dispo = matieresDe(ex);
+    setExamen(ex);
     const m = p.get('matiere');
     const d = p.get('date');
-    if (m && MATIERES.includes(m)) {
+    if (m && dispo.includes(m)) {
       setMatiere(m);
       if (d && sessionsPourMatiere(m).some(s => s.date === d)) setDateEpreuve(d);
+    } else {
+      setMatiere(dispo[0] ?? '');
     }
   }, []);
   const [loading, setLoading] = useState(false);
@@ -59,7 +77,7 @@ export function FormInscription() {
       return;
     }
     if (sessions.length > 0 && !dateEpreuve) {
-      setMessage({ type: 'error', text: 'Choisis une date de bac blanc' });
+      setMessage({ type: 'error', text: `Choisis une date de ${epreuve}` });
       return;
     }
 
@@ -95,7 +113,26 @@ export function FormInscription() {
 
   return (
     <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-lg border border-gray-200">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Inscription Bac Blanc</h2>
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">
+        {examen === 'brevet' ? 'Inscription Brevet Blanc' : 'Inscription Bac Blanc'}
+      </h2>
+
+      {/* Bascule Bac ↔ Brevet — même logique que l'interrupteur du site vitrine */}
+      <div className="flex gap-1 p-1 mb-6 bg-gray-100 rounded-full">
+        {(['bac', 'brevet'] as Examen[]).map((e) => (
+          <button
+            key={e}
+            type="button"
+            onClick={() => changerExamen(e)}
+            disabled={matieresDe(e).length === 0}
+            className={`flex-1 py-2 rounded-full text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed ${
+              examen === e ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            {e === 'bac' ? '🎓 Le Bac' : '📘 Le Brevet'}
+          </button>
+        ))}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
@@ -152,14 +189,14 @@ export function FormInscription() {
           >
             {MATIERES.map((m) => (
               <option key={m} value={m}>
-                {m}
+                {libelleMatiere(m)}
               </option>
             ))}
           </select>
         </label>
 
         <label className="block text-sm text-gray-600">
-          Prochaine date de bac blanc
+          Prochaine date de {epreuve}
           <select
             value={dateEpreuve}
             onChange={(e) => setDateEpreuve(e.target.value)}

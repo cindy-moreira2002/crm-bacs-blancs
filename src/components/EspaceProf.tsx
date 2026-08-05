@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DOSSIER_CSS } from '@/lib/dossierStyle';
 import { FormCopie } from '@/components/FormCopie';
+import { examenDeMatiere, libelleMatiere } from '@/lib/sessions';
 
 type Copie = {
   id: string;
@@ -234,7 +235,9 @@ export function EspaceProf() {
         <div key={matiere} className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Bac blanc — {matiere}</h2>
+              <h2 className="text-lg font-bold text-gray-900">
+                {examenDeMatiere(matiere) === 'brevet' ? 'Brevet blanc' : 'Bac blanc'} — {libelleMatiere(matiere)}
+              </h2>
               <p className="text-xs text-gray-500">{eleves.length} élève(s) inscrit(s)</p>
             </div>
           </div>

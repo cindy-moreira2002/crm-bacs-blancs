@@ -2,11 +2,16 @@
 // Source unique partagée par le formulaire d'inscription et l'espace élève.
 // Ajoute / retire des lignes ici : tout se met à jour partout.
 
+// Deux univers : le bac (lycée) et le brevet (3e). Les Matinées du Brevet
+// réutilisent toute la mécanique du bac : seules les matières et les dates changent.
+export type Examen = 'bac' | 'brevet';
+
 export type Session = {
   matiere: string;
   date: string;   // ISO 'YYYY-MM-DD'
   heure: string;
   places: number;
+  examen?: Examen; // absent = bac (historique)
 };
 
 export const SESSIONS_PLATEFORME: Session[] = [
@@ -15,6 +20,16 @@ export const SESSIONS_PLATEFORME: Session[] = [
   { matiere: 'Philosophie',     date: '2026-09-20', heure: '9h — 13h', places: 10 },
   { matiere: 'Histoire-Géo',    date: '2026-09-27', heure: '9h — 13h', places: 5 },
   { matiere: 'SES',             date: '2026-10-04', heure: '9h — 12h', places: 8 },
+
+  // ── Les Matinées du Brevet (classe de 3e) ──
+  // La matière porte le suffixe « (brevet) » : aucune migration Supabase,
+  // et les inscriptions restent distinctes de celles du bac partout (CRM, espace prof, copies).
+  { matiere: 'Français (brevet)',      date: '2026-11-07', heure: '9h — 12h', places: 9,  examen: 'brevet' },
+  { matiere: 'Mathématiques (brevet)', date: '2026-11-14', heure: '9h — 11h', places: 6,  examen: 'brevet' },
+  { matiere: 'Français (brevet)',      date: '2026-11-28', heure: '9h — 12h', places: 12, examen: 'brevet' },
+  { matiere: 'Mathématiques (brevet)', date: '2026-12-12', heure: '9h — 11h', places: 4,  examen: 'brevet' },
+  { matiere: 'Français (brevet)',      date: '2027-01-16', heure: '9h — 12h', places: 15, examen: 'brevet' },
+  { matiere: 'Mathématiques (brevet)', date: '2027-01-30', heure: '9h — 11h', places: 15, examen: 'brevet' },
 ];
 
 // Matières qu'un prof peut déclarer enseigner à la candidature.
@@ -31,14 +46,29 @@ export const MATIERES_ENSEIGNEES: string[] = [
   'SVT',
   'Physique-Chimie',
   'Anglais',
+  'Français (brevet)',
+  'Mathématiques (brevet)',
 ];
 
+// Examen auquel se rattache une matière (déduit du libellé : pas de colonne en base).
+export function examenDeMatiere(matiere: string): Examen {
+  return /\(brevet\)/i.test(matiere) ? 'brevet' : 'bac';
+}
+
+// Libellé d'affichage : « Français (brevet) » → « Français » quand on est déjà dans l'univers brevet.
+export function libelleMatiere(matiere: string): string {
+  return matiere.replace(/\s*\(brevet\)\s*$/i, '');
+}
+
 // Matières qui ont au moins une session à venir (pour le menu déroulant).
-export function matieresDisponibles(ref: Date = new Date()): string[] {
+// `examen` restreint à un univers ; sans argument, on renvoie tout.
+export function matieresDisponibles(examen?: Examen, ref: Date = new Date()): string[] {
   const today = new Date(ref); today.setHours(0, 0, 0, 0);
   const set = new Set<string>();
   for (const s of SESSIONS_PLATEFORME) {
-    if (new Date(s.date) >= today) set.add(s.matiere);
+    if (new Date(s.date) < today) continue;
+    if (examen && examenDeMatiere(s.matiere) !== examen) continue;
+    set.add(s.matiere);
   }
   return [...set];
 }
