@@ -1,0 +1,733 @@
+'use client';
+
+/**
+ * Tableau de bord des e-mails (côté client).
+ *
+ * Une seule source : GET /api/admin/emails/etat, rechargé après chaque
+ * action et toutes les 60 secondes. Les boutons passent par
+ * POST /api/admin/emails/action.
+ */
+import { useCallback, useEffect, useState } from 'react';
+import type { MessageAdmin, SnapshotEmails } from '@/lib/emails/admin';
+import { LIBELLE_TYPE, TYPES_EMAIL } from '@/lib/emails/config';
+import { LIBELLE_REGLAGE, type Reglages } from '@/lib/emails/reglages-libelles';
+import { instantCourt } from '@/lib/emails/temps';
+
+const RAFRAICHISSEMENT_MS = 60_000;
+
+const TONS: Record<string, string> = {
+  pending: 'bg-gray-100 text-gray-700',
+  scheduled: 'bg-blue-100 text-blue-800',
+  processing: 'bg-blue-100 text-blue-800',
+  sent: 'bg-emerald-100 text-emerald-800',
+  delivered: 'bg-emerald-100 text-emerald-800',
+  failed: 'bg-red-100 text-red-700',
+  cancelled: 'bg-gray-100 text-gray-500',
+  bloque: 'bg-amber-100 text-amber-800',
+};
+
+function Pastille({ statut, libelle }: { statut: string; libelle: string }) {
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+        TONS[statut] ?? 'bg-gray-100 text-gray-600'
+      }`}
+    >
+      {libelle}
+    </span>
+  );
+}
+
+type Apercu = {
+  ok: boolean;
+  sujet?: string;
+  html?: string;
+  texte?: string;
+  raison?: string;
+  destinataire: string;
+  type: string;
+  categorie: string;
+  statut: string;
+  variables: Record<string, string>;
+};
+
+export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
+  const [etat, setEtat] = useState<SnapshotEmails | null>(null);
+  const [chargement, setChargement] = useState(true);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [occupe, setOccupe] = useState<string | null>(null);
+  const [apercu, setApercu] = useState<Apercu | null>(null);
+  const [journal, setJournal] = useState<string | null>(null);
+  const [onglet, setOnglet] = useState<'messages' | 'paiements' | 'reglages'>('messages');
+
+  const [filtres, setFiltres] = useState({
+    statut: 'tous',
+    categorie: 'toutes',
+    type: 'tous',
+    matiere: 'toutes',
+    session: 'toutes',
+    role: 'tous',
+    depuis: '',
+    jusqua: '',
+    recherche: '',
+  });
+
+  const charger = useCallback(async () => {
+    try {
+      const p = new URLSearchParams();
+      for (const [k, v] of Object.entries(filtres)) if (v) p.set(k, v);
+      const res = await fetch(`/api/admin/emails/etat?${p.toString()}`, { cache: 'no-store' });
+      const data = (await res.json()) as SnapshotEmails & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Erreur de chargement');
+      setEtat(data);
+      setErreur(null);
+    } catch (err) {
+      setErreur(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setChargement(false);
+    }
+  }, [filtres]);
+
+  useEffect(() => {
+    // setTimeout(…, 0) : `charger` pose de l'état, et Next 16 refuse un
+    // setState synchrone dans le corps d'un effet.
+    const immediat = setTimeout(charger, 0);
+    const t = setInterval(charger, RAFRAICHISSEMENT_MS);
+    return () => {
+      clearTimeout(immediat);
+      clearInterval(t);
+    };
+  }, [charger]);
+
+  async function agir(corps: Record<string, unknown>, cle: string) {
+    setOccupe(cle);
+    setJournal(null);
+    try {
+      const res = await fetch('/api/admin/emails/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corps),
+      });
+      const data = (await res.json()) as Record<string, unknown> & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Erreur');
+      return data;
+    } catch (err) {
+      setJournal(err instanceof Error ? err.message : 'Erreur inconnue');
+      return null;
+    } finally {
+      setOccupe(null);
+    }
+  }
+
+  async function previsualiser(m: MessageAdmin) {
+    const data = await agir({ action: 'previsualiser', id: m.id }, `apercu-${m.id}`);
+    if (data) setApercu(data as unknown as Apercu);
+  }
+
+  async function envoyerTest(m: MessageAdmin) {
+    if (!confirm(`Envoyer une copie de test de « ${m.type_libelle} » à ${monEmail} ?`)) return;
+    const data = await agir({ action: 'test', id: m.id }, `test-${m.id}`);
+    if (data) setJournal(String(data.message ?? 'Test envoyé.'));
+  }
+
+  async function annulerMessage(m: MessageAdmin) {
+    if (!confirm(`Annuler « ${m.type_libelle} » pour ${m.destinataire} ?`)) return;
+    const data = await agir({ action: 'annuler', id: m.id }, `annuler-${m.id}`);
+    if (data) {
+      setJournal(String(data.message ?? 'Annulé.'));
+      charger();
+    }
+  }
+
+  async function renvoyer(m: MessageAdmin) {
+    const ok = confirm(
+      `RENVOI MANUEL\n\n` +
+        `Destinataire : ${m.destinataire}\n` +
+        `Modèle : ${m.type_libelle}\n` +
+        `Élève : ${m.eleve ?? '—'}\n` +
+        `Matière : ${m.matiere ?? '—'}\n` +
+        `Session : ${m.session_date ?? '—'}\n\n` +
+        `Le message part maintenant, à cette adresse. Confirmer ?`,
+    );
+    if (!ok) return;
+    const data = await agir({ action: 'renvoyer', id: m.id, confirme: true }, `renvoyer-${m.id}`);
+    if (data) {
+      setJournal(String(data.message ?? 'Renvoyé.'));
+      charger();
+    }
+  }
+
+  async function lancerMoteur(simulation: boolean) {
+    if (
+      !simulation &&
+      !confirm('Lancer le moteur maintenant ? Les messages dus vont réellement partir.')
+    ) {
+      return;
+    }
+    const data = await agir({ action: 'executer', simulation }, 'moteur');
+    if (data) {
+      const e = data.envoi as { envoyes: number; bloques: number; annules: number; echecs: number; reportes: number; dryRun: boolean };
+      const p = data.planification as { creees: number; changementsSession: number };
+      setJournal(
+        `${e.dryRun ? 'Répétition générale' : 'Envoi réel'} — ${p.creees} message(s) mis en file, ` +
+          `${e.envoyes} envoyé(s), ${e.bloques} bloqué(s), ${e.annules} annulé(s), ` +
+          `${e.echecs} échec(s), ${e.reportes} reporté(s), ` +
+          `${p.changementsSession} changement(s) de session détecté(s).`,
+      );
+      charger();
+    }
+  }
+
+  async function majReglage(cle: string, valeur: string) {
+    const data = await agir({ action: 'reglage', cle, valeur }, `reglage-${cle}`);
+    if (data) {
+      setJournal('Réglage enregistré.');
+      charger();
+    }
+  }
+
+  async function majPaiement(inscriptionId: string, statut: string, eleve: string) {
+    if (!confirm(`Marquer le paiement de ${eleve} comme « ${statut} » ?`)) return;
+    const data = await agir(
+      { action: 'inscription', inscription_id: inscriptionId, paiement_statut: statut },
+      `paiement-${inscriptionId}`,
+    );
+    if (data) {
+      setJournal(`Paiement mis à jour — ${data.misEnFile ?? 0} message(s) mis en file.`);
+      charger();
+    }
+  }
+
+  if (chargement && !etat) {
+    return <div className="min-h-screen bg-gray-50 p-8 text-gray-500">Chargement…</div>;
+  }
+
+  if (erreur && !etat) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-lg mx-auto bg-white rounded-2xl border border-red-200 p-6">
+          <h1 className="font-bold text-gray-900 mb-2">Impossible de charger les e-mails</h1>
+          <p className="text-sm text-red-700">{erreur}</p>
+          <p className="text-sm text-gray-500 mt-3">
+            Si le message parle d’une table absente, il reste à passer le script
+            <code className="mx-1 bg-gray-100 px-1 rounded">supabase/sql/28_emails_brevo.sql</code>
+            dans Supabase.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!etat) return null;
+
+  const q = etat.quota;
+  const pourcentage = Math.min(100, Math.round((q.envoyesAujourdhui / Math.max(1, q.limite)) * 100));
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-7xl mx-auto space-y-5">
+        {/* En-tête */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">E-mails</h1>
+            <p className="text-sm text-gray-600">
+              Expéditeur : <strong>{etat.configuration.expediteurNom}</strong> &lt;
+              {etat.configuration.expediteur}&gt; · réponses vers {etat.configuration.reponseA}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => lancerMoteur(true)}
+              disabled={occupe === 'moteur'}
+              className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            >
+              Répétition générale
+            </button>
+            <button
+              onClick={() => lancerMoteur(false)}
+              disabled={occupe === 'moteur'}
+              className="rounded-xl bg-purple-700 px-3 py-2 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-50"
+            >
+              Lancer le moteur
+            </button>
+          </div>
+        </div>
+
+        {/* Alertes */}
+        {etat.alertes.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-1">
+            {etat.alertes.map((a, i) => (
+              <p key={i} className="text-sm text-amber-900">
+                ⚠️ {a}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {journal && (
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            {journal}
+          </div>
+        )}
+
+        {/* Quota + compteurs */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-xs uppercase tracking-wide text-gray-500">Aujourd’hui</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {q.envoyesAujourdhui} <span className="text-base font-normal text-gray-500">/ {q.limite}</span>
+            </p>
+            <div className="mt-2 h-2 rounded-full bg-gray-100">
+              <div
+                className={`h-2 rounded-full ${pourcentage > 85 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                style={{ width: `${pourcentage}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              {q.programmesAujourdhui} en attente · marge de sécurité {q.marge}
+            </p>
+          </div>
+          {(['sent', 'scheduled', 'failed'] as const).map((s) => (
+            <div key={s} className="rounded-2xl border border-gray-200 bg-white p-4">
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                {s === 'sent' ? 'Envoyés (total)' : s === 'scheduled' ? 'Programmés' : 'En échec'}
+              </p>
+              <p className="text-2xl font-bold text-gray-900">{etat.compteurs[s] ?? 0}</p>
+              {s === 'failed' && (etat.compteurs.bloque ?? 0) > 0 && (
+                <p className="mt-2 text-xs text-amber-700">{etat.compteurs.bloque} bloqué(s)</p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Onglets */}
+        <div className="flex gap-2 border-b border-gray-200">
+          {(
+            [
+              ['messages', 'Messages'],
+              ['paiements', `Paiements à confirmer (${etat.paiementsEnAttente.length})`],
+              ['reglages', 'Réglages'],
+            ] as const
+          ).map(([cle, libelle]) => (
+            <button
+              key={cle}
+              onClick={() => setOnglet(cle)}
+              className={`px-3 py-2 text-sm font-medium ${
+                onglet === cle
+                  ? 'border-b-2 border-purple-700 text-purple-800'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {libelle}
+            </button>
+          ))}
+        </div>
+
+        {onglet === 'messages' && (
+          <>
+            {/* Filtres */}
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              <Choix
+                libelle="Statut"
+                valeur={filtres.statut}
+                onChange={(v) => setFiltres({ ...filtres, statut: v })}
+                options={[
+                  ['tous', 'Tous'],
+                  ['scheduled', 'Programmés'],
+                  ['pending', 'En attente'],
+                  ['sent', 'Envoyés'],
+                  ['delivered', 'Délivrés'],
+                  ['failed', 'En échec'],
+                  ['bloque', 'Bloqués'],
+                  ['cancelled', 'Annulés'],
+                ]}
+              />
+              <Choix
+                libelle="Catégorie"
+                valeur={filtres.categorie}
+                onChange={(v) => setFiltres({ ...filtres, categorie: v })}
+                options={[
+                  ['toutes', 'Toutes'],
+                  ['transactional', 'Indispensables'],
+                  ['marketing', 'Commerciaux'],
+                ]}
+              />
+              <Choix
+                libelle="Type"
+                valeur={filtres.type}
+                onChange={(v) => setFiltres({ ...filtres, type: v })}
+                options={[['tous', 'Tous'], ...TYPES_EMAIL.map((t) => [t, LIBELLE_TYPE[t]] as [string, string])]}
+              />
+              <Choix
+                libelle="Destinataire"
+                valeur={filtres.role}
+                onChange={(v) => setFiltres({ ...filtres, role: v })}
+                options={[
+                  ['tous', 'Tous'],
+                  ['eleve', 'Élèves'],
+                  ['parent', 'Parents'],
+                  ['prof', 'Professeurs'],
+                  ['prospect', 'Intéressés'],
+                ]}
+              />
+              <Choix
+                libelle="Matière"
+                valeur={filtres.matiere}
+                onChange={(v) => setFiltres({ ...filtres, matiere: v })}
+                options={[['toutes', 'Toutes'], ...etat.matieres.map((m) => [m, m] as [string, string])]}
+              />
+              <Choix
+                libelle="Session"
+                valeur={filtres.session}
+                onChange={(v) => setFiltres({ ...filtres, session: v })}
+                options={[['toutes', 'Toutes'], ...etat.sessions.map((s) => [s.id, s.libelle] as [string, string])]}
+              />
+              <label className="text-sm">
+                <span className="block text-xs font-medium text-gray-600 mb-1">Depuis</span>
+                <input
+                  type="date"
+                  value={filtres.depuis}
+                  onChange={(e) => setFiltres({ ...filtres, depuis: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="block text-xs font-medium text-gray-600 mb-1">Adresse contient</span>
+                <input
+                  type="search"
+                  value={filtres.recherche}
+                  onChange={(e) => setFiltres({ ...filtres, recherche: e.target.value })}
+                  placeholder="nom@exemple.fr"
+                  className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+            </div>
+
+            {/* Tableau */}
+            <div className="rounded-2xl border border-gray-200 bg-white overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2">Statut</th>
+                    <th className="px-3 py-2">Message</th>
+                    <th className="px-3 py-2">Destinataire</th>
+                    <th className="px-3 py-2">Élève / matière</th>
+                    <th className="px-3 py-2">Prévu</th>
+                    <th className="px-3 py-2">Envoyé</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {etat.messages.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
+                        Aucun message pour ces filtres.
+                      </td>
+                    </tr>
+                  )}
+                  {etat.messages.map((m) => (
+                    <tr key={m.id} className="align-top hover:bg-gray-50">
+                      <td className="px-3 py-2">
+                        <Pastille statut={m.statut} libelle={m.statut_libelle} />
+                        {m.blocage && <p className="mt-1 text-xs text-amber-700">{m.blocage}</p>}
+                        {m.erreur && <p className="mt-1 text-xs text-red-600">{m.erreur}</p>}
+                      </td>
+                      <td className="px-3 py-2">
+                        <p className="font-medium text-gray-900">{m.type_libelle}</p>
+                        <p className="text-xs text-gray-500">
+                          {m.categorie === 'marketing' ? 'commercial' : 'indispensable'}
+                          {m.tentatives > 0 && ` · ${m.tentatives} tentative(s)`}
+                          {m.ouvert && ' · ouvert'}
+                          {m.clique && ' · cliqué'}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <p className="text-gray-900">{m.destinataire}</p>
+                        <p className="text-xs text-gray-500">{m.role}</p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <p className="text-gray-900">{m.eleve ?? '—'}</p>
+                        <p className="text-xs text-gray-500">
+                          {m.matiere ?? '—'}
+                          {m.session_date ? ` · ${m.session_date}` : ''}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-700">
+                        {instantCourt(m.planifie_le)}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-gray-700">
+                        {instantCourt(m.envoye_le)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          <Bouton onClick={() => previsualiser(m)} occupe={occupe === `apercu-${m.id}`}>
+                            Voir
+                          </Bouton>
+                          <Bouton onClick={() => envoyerTest(m)} occupe={occupe === `test-${m.id}`}>
+                            Test
+                          </Bouton>
+                          {['pending', 'scheduled', 'bloque', 'failed'].includes(m.statut) && (
+                            <Bouton onClick={() => annulerMessage(m)} occupe={occupe === `annuler-${m.id}`}>
+                              Annuler
+                            </Bouton>
+                          )}
+                          {['failed', 'bloque', 'cancelled'].includes(m.statut) && (
+                            <Bouton
+                              onClick={() => renvoyer(m)}
+                              occupe={occupe === `renvoyer-${m.id}`}
+                              principal
+                            >
+                              Renvoyer
+                            </Bouton>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {onglet === 'paiements' && (
+          <div className="rounded-2xl border border-gray-200 bg-white overflow-x-auto">
+            <p className="px-4 pt-4 text-sm text-gray-600">
+              Les bacs blancs se règlent par virement : le statut est posé ici, par toi. Marquer
+              « payé » envoie la confirmation à l’élève (et au parent) et arrête les relances.
+            </p>
+            <table className="w-full text-sm mt-3">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-3 py-2">Élève</th>
+                  <th className="px-3 py-2">Matière</th>
+                  <th className="px-3 py-2">Épreuve</th>
+                  <th className="px-3 py-2">Inscrit depuis</th>
+                  <th className="px-3 py-2">Relances</th>
+                  <th className="px-3 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {etat.paiementsEnAttente.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
+                      Aucun paiement en attente.
+                    </td>
+                  </tr>
+                )}
+                {etat.paiementsEnAttente.map((p) => (
+                  <tr key={p.inscription_id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2">
+                      <p className="font-medium text-gray-900">{p.eleve}</p>
+                      <p className="text-xs text-gray-500">{p.email}</p>
+                    </td>
+                    <td className="px-3 py-2">{p.matiere ?? '—'}</td>
+                    <td className="px-3 py-2">{p.date_epreuve ?? '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{instantCourt(p.depuis)}</td>
+                    <td className="px-3 py-2">{p.relances}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        <Bouton
+                          principal
+                          occupe={occupe === `paiement-${p.inscription_id}`}
+                          onClick={() => majPaiement(p.inscription_id, 'paye', p.eleve)}
+                        >
+                          Payé
+                        </Bouton>
+                        <Bouton
+                          occupe={occupe === `paiement-${p.inscription_id}`}
+                          onClick={() => majPaiement(p.inscription_id, 'offert', p.eleve)}
+                        >
+                          Offert
+                        </Bouton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {onglet === 'reglages' && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <p className="text-sm text-gray-600 mb-4">
+              Tous les délais du système sont ici. Une modification prend effet au prochain passage
+              du moteur (dans les 5 minutes).
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(Object.keys(etat.reglages) as (keyof Reglages)[]).map((cle) => (
+                <LigneReglage
+                  key={cle}
+                  cle={cle}
+                  valeur={String(etat.reglages[cle])}
+                  occupe={occupe === `reglage-${cle}`}
+                  onEnregistrer={(v) => majReglage(cle, v)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Aperçu */}
+        {apercu && (
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
+            onClick={() => setApercu(null)}
+          >
+            <div
+              className="mt-8 w-full max-w-3xl rounded-2xl bg-white p-5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">
+                    {LIBELLE_TYPE[apercu.type as keyof typeof LIBELLE_TYPE] ?? apercu.type}
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Vers <strong>{apercu.destinataire}</strong> · {apercu.categorie} · {apercu.statut}
+                  </p>
+                </div>
+                <button onClick={() => setApercu(null)} className="text-gray-400 hover:text-gray-700">
+                  ✕
+                </button>
+              </div>
+
+              {!apercu.ok ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  Ce message ne peut pas partir : {apercu.raison}
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-800 mb-2">
+                    <span className="text-gray-500">Objet :</span> <strong>{apercu.sujet}</strong>
+                  </p>
+                  <iframe
+                    title="Aperçu de l’e-mail"
+                    srcDoc={apercu.html}
+                    sandbox=""
+                    className="w-full h-[520px] rounded-xl border border-gray-200 bg-gray-50"
+                  />
+                </>
+              )}
+
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm text-gray-600">
+                  Variables utilisées ({Object.keys(apercu.variables ?? {}).length})
+                </summary>
+                <div className="mt-2 max-h-56 overflow-y-auto rounded-lg bg-gray-50 p-3 text-xs font-mono">
+                  {Object.entries(apercu.variables ?? {}).map(([k, v]) => (
+                    <div key={k} className="flex gap-2">
+                      <span className="text-gray-500">{k}</span>
+                      <span className="text-gray-900 break-all">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Petites briques --------------------------------------------------
+
+function Bouton({
+  children,
+  onClick,
+  occupe,
+  principal,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  occupe?: boolean;
+  principal?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={occupe}
+      className={`rounded-lg px-2 py-1 text-xs font-medium disabled:opacity-50 ${
+        principal
+          ? 'bg-purple-700 text-white hover:bg-purple-800'
+          : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      {occupe ? '…' : children}
+    </button>
+  );
+}
+
+function Choix({
+  libelle,
+  valeur,
+  options,
+  onChange,
+}: {
+  libelle: string;
+  valeur: string;
+  options: [string, string][];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="text-sm">
+      <span className="block text-xs font-medium text-gray-600 mb-1">{libelle}</span>
+      <select
+        value={valeur}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm bg-white"
+      >
+        {options.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function LigneReglage({
+  cle,
+  valeur,
+  occupe,
+  onEnregistrer,
+}: {
+  cle: keyof Reglages;
+  valeur: string;
+  occupe: boolean;
+  onEnregistrer: (v: string) => void;
+}) {
+  const [v, setV] = useState(valeur);
+  // Recalage pendant le rendu (et non dans un effet) quand la valeur en base
+  // change : c'est le motif recommandé par React, et le seul que Next 16 accepte.
+  const [valeurConnue, setValeurConnue] = useState(valeur);
+  if (valeurConnue !== valeur) {
+    setValeurConnue(valeur);
+    setV(valeur);
+  }
+  const modifie = v !== valeur;
+
+  return (
+    <div className="rounded-xl border border-gray-200 p-3">
+      <label className="block text-xs font-medium text-gray-600 mb-1">{LIBELLE_REGLAGE[cle]}</label>
+      <div className="flex gap-2">
+        <input
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+        />
+        <button
+          onClick={() => onEnregistrer(v)}
+          disabled={!modifie || occupe}
+          className="rounded-lg bg-purple-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+        >
+          {occupe ? '…' : 'OK'}
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-gray-400 font-mono">{cle}</p>
+    </div>
+  );
+}

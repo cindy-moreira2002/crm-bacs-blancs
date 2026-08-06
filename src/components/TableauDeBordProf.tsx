@@ -201,12 +201,18 @@ export function TableauDeBordProf({
               className="text-xs text-purple-200 hover:text-white underline">
               Se déconnecter
             </button>
-            {/* Tour de contrôle du pipeline — réservée à l'administratrice. */}
+            {/* Tours de contrôle — réservées à l'administratrice. */}
             {prof.role === 'admin' && (
-              <a href="/admin/correction"
-                className="text-xs px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-semibold">
-                🎛️ Pilotage correction
-              </a>
+              <>
+                <a href="/admin/correction"
+                  className="text-xs px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-semibold">
+                  🎛️ Pilotage correction
+                </a>
+                <a href="/admin/emails"
+                  className="text-xs px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-semibold">
+                  📬 E-mails
+                </a>
+              </>
             )}
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { codeCopie } from '@/lib/codeCopie';
+import { apresInscription } from '@/lib/emails/declencheurs';
 
 export const runtime = 'nodejs';
 
@@ -47,8 +48,26 @@ export async function POST(req: NextRequest) {
 
     console.log('✅ Inscrit Supabase:', { nom, email, matiere });
 
-    // 2. Envoyer email de confirmation via Gmail (Apps Script web app)
-    if (GMAIL_WEBAPP) {
+    // 2. E-mails automatiques.
+    //
+    // Dès que BREVO_API_KEY est posée, la confirmation (et toute la suite :
+    // informations pratiques, lien de visio, rappels) passe par la file
+    // d'attente Supabase + Brevo. On MET EN FILE, on n'envoie pas ici : la
+    // réponse au navigateur ne dépend jamais de la disponibilité de Brevo, et
+    // un double envoi du formulaire ne peut pas produire deux e-mails.
+    //
+    // Tant que la clé n'est pas posée, l'ancien envoi Gmail (Apps Script)
+    // continue de fonctionner exactement comme avant.
+    const nouvelleInscription = (data as { id?: string }[] | null)?.[0];
+    if (process.env.BREVO_API_KEY && nouvelleInscription?.id) {
+      try {
+        const misEnFile = await apresInscription(nouvelleInscription.id, email, nom);
+        console.log(`📬 ${misEnFile} e-mail(s) mis en file pour ${email}`);
+      } catch (mailErr) {
+        // Non bloquant : le planificateur repassera dans les 5 minutes.
+        console.error('⚠️ Mise en file échouée (non bloquant) :', mailErr);
+      }
+    } else if (GMAIL_WEBAPP) {
       try {
         const mailRes = await fetch(GMAIL_WEBAPP, {
           method: 'POST',
