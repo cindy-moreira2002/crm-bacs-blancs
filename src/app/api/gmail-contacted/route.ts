@@ -1,4 +1,4 @@
-import { markContactedByEmails } from "@/lib/actions";
+import { markContactedByEmails } from "@/lib/leadsSync";
 
 // Appelé par Apps Script (scan des emails envoyés) pour cocher "Contacté"
 // les leads déjà présents dans le CRM. Protégé par un jeton partagé.

@@ -1,8 +1,21 @@
 "use server";
 
-import { dbAll, dbGet, dbRun, isPostgres } from "@/lib/db";
+import { dbAll, dbGet, dbRun } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
+import { exigerAdminAction } from "@/lib/gardeAcces";
+
+/**
+ * ⚠️ Fichier "use server" : CHAQUE fonction exportée ici est une action
+ * serveur, donc un point d'entrée POST public identifié par un hash présent
+ * dans le bundle client. Protéger la page qui l'appelle ne la protège pas.
+ * D'où l'appel à `exigerAdminAction()` en tête de chacune — y compris les
+ * lectures, qui sont précisément ce qu'on veut empêcher de siphonner.
+ *
+ * Toute nouvelle fonction exportée dans ce fichier doit commencer par ce garde.
+ * La synchronisation appelée par Apps Script vit dans `lib/leadsSync.ts` : elle
+ * s'authentifie par jeton et n'a rien à faire parmi les actions.
+ */
 
 export type Lead = {
   id: string;
@@ -42,6 +55,7 @@ export async function getLeads(
   source?: string,
   contacted?: string
 ): Promise<Lead[]> {
+  await exigerAdminAction();
   const params: string[] = [];
 
   let sqliteSql = 'SELECT * FROM "Lead" WHERE 1=1';
@@ -82,6 +96,7 @@ export async function getLeads(
 }
 
 export async function getLead(id: string): Promise<Lead | undefined> {
+  await exigerAdminAction();
   const row = (await dbGet(
     'SELECT * FROM "Lead" WHERE id = ?',
     'SELECT * FROM "Lead" WHERE id = $1',
@@ -91,6 +106,7 @@ export async function getLead(id: string): Promise<Lead | undefined> {
 }
 
 export async function createLead(data: LeadFormData) {
+  await exigerAdminAction();
   const id = crypto.randomUUID().replace(/-/g, "").slice(0, 25);
   const now = new Date().toISOString();
   const params = [
@@ -124,6 +140,7 @@ export async function createLead(data: LeadFormData) {
 }
 
 export async function updateLead(id: string, data: LeadFormData) {
+  await exigerAdminAction();
   const now = new Date().toISOString();
   const params = [
     data.firstName,
@@ -151,6 +168,7 @@ export async function updateLead(id: string, data: LeadFormData) {
 }
 
 export async function toggleLeadContacted(id: string, contacted: boolean) {
+  await exigerAdminAction();
   // Coché → "contacté", décoché → "nouveau". Ne touche PAS au subject (Matière),
   // donc pas d'exigence de matière ni d'écrasement d'un subject hors liste.
   const status = contacted ? "contacté" : "nouveau";
@@ -163,67 +181,8 @@ export async function toggleLeadContacted(id: string, contacted: boolean) {
   revalidatePath("/");
 }
 
-/**
- * Marque contactés les leads dont l'email figure dans `emails` (ceux à qui elle
- * a écrit). Ne crée aucun lead : seuls les leads déjà présents sont cochés, et
- * leur statut passe de "nouveau" à "contacté". Retourne le nombre de leads touchés.
- */
-export async function markContactedByEmails(
-  emails: string[]
-): Promise<{ matched: number }> {
-  const normalized = Array.from(
-    new Set(
-      (emails || [])
-        .map((e) => String(e || "").trim().toLowerCase())
-        .filter((e) => e.includes("@") && e.length <= 320)
-    )
-  );
-  if (normalized.length === 0) return { matched: 0 };
-
-  const now = new Date().toISOString();
-  let matched = 0;
-
-  if (isPostgres) {
-    const rows = await dbAll(
-      "",
-      `UPDATE "Lead"
-         SET contacted = TRUE,
-             status = CASE WHEN status = 'nouveau' THEN 'contacté' ELSE status END,
-             "updatedAt" = $2
-       WHERE lower(email) = ANY($1)
-       RETURNING id`,
-      [normalized, now]
-    );
-    matched = rows.length;
-  } else {
-    // SQLite (dev) : pas de tableau paramétrable, on découpe en lots d'IN(...).
-    for (let i = 0; i < normalized.length; i += 400) {
-      const chunk = normalized.slice(i, i + 400);
-      const placeholders = chunk.map(() => "?").join(", ");
-      const found = await dbAll(
-        `SELECT id FROM "Lead" WHERE lower(email) IN (${placeholders})`,
-        "",
-        chunk
-      );
-      matched += found.length;
-      await dbRun(
-        `UPDATE "Lead"
-           SET contacted = 1,
-               status = CASE WHEN status = 'nouveau' THEN 'contacté' ELSE status END,
-               "updatedAt" = ?
-         WHERE lower(email) IN (${placeholders})`,
-        "",
-        [now, ...chunk]
-      );
-    }
-  }
-
-  revalidatePath("/crm");
-  revalidatePath("/");
-  return { matched };
-}
-
 export async function deleteLead(id: string) {
+  await exigerAdminAction();
   await dbRun(
     'DELETE FROM "Lead" WHERE id = ?',
     'DELETE FROM "Lead" WHERE id = $1',
@@ -233,6 +192,7 @@ export async function deleteLead(id: string) {
 }
 
 export async function getStats() {
+  await exigerAdminAction();
   const sqliteSql = `SELECT
     COUNT(*) as total,
     SUM(CASE WHEN status='nouveau' THEN 1 ELSE 0 END) as nouveau,
@@ -308,6 +268,7 @@ const DEFAULT_PARTNER_SCHOOLS: Omit<PartnerSchoolFormData, "statut">[] = [
 ];
 
 export async function seedPartnerSchoolsIfEmpty() {
+  await exigerAdminAction();
   const row = (await dbGet(
     'SELECT COUNT(*) as c FROM "PartnerSchool"',
     'SELECT COUNT(*)::int as c FROM "PartnerSchool"'
@@ -341,6 +302,7 @@ export async function seedPartnerSchoolsIfEmpty() {
 }
 
 export async function getPartnerSchools(): Promise<PartnerSchool[]> {
+  await exigerAdminAction();
   return (await dbAll(
     'SELECT * FROM "PartnerSchool" ORDER BY etablissement ASC',
     'SELECT * FROM "PartnerSchool" ORDER BY etablissement ASC',
@@ -349,6 +311,7 @@ export async function getPartnerSchools(): Promise<PartnerSchool[]> {
 }
 
 export async function createPartnerSchool(data: PartnerSchoolFormData) {
+  await exigerAdminAction();
   const id = crypto.randomUUID().replace(/-/g, "").slice(0, 25);
   const now = new Date().toISOString();
   const cols =
@@ -378,6 +341,7 @@ export async function createPartnerSchool(data: PartnerSchoolFormData) {
 }
 
 export async function updatePartnerSchoolStatut(id: string, statut: string) {
+  await exigerAdminAction();
   await dbRun(
     'UPDATE "PartnerSchool" SET statut=?, "updatedAt"=? WHERE id=?',
     'UPDATE "PartnerSchool" SET statut=$1, "updatedAt"=$2 WHERE id=$3',
@@ -387,6 +351,7 @@ export async function updatePartnerSchoolStatut(id: string, statut: string) {
 }
 
 export async function deletePartnerSchool(id: string) {
+  await exigerAdminAction();
   await dbRun(
     'DELETE FROM "PartnerSchool" WHERE id = ?',
     'DELETE FROM "PartnerSchool" WHERE id = $1',

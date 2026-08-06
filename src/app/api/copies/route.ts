@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { gardeApiProf } from '@/lib/gardeAcces';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,6 +48,9 @@ export async function POST(req: NextRequest) {
 
 // PATCH — sauvegarde la correction éditée par le prof
 export async function PATCH(req: NextRequest) {
+  const refus = await gardeApiProf();
+  if (refus) return refus;
+
   try {
     const { id, correction_texte, a_envoyer, note } = await req.json();
     if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 });
@@ -69,11 +73,25 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// GET — liste des copies (filtrable par statut : ?statut=à_corriger)
+/**
+ * GET — liste des copies (filtrable par statut : ?statut=à_corriger)
+ *
+ * Deux usages, deux niveaux d'accès :
+ *  - `?eleve_email=…` : l'espace élève ne demande QUE ses propres copies
+ *    envoyées, la requête est déjà bornée plus bas — reste ouvert ;
+ *  - sans ce filtre, c'est le listing complet (texte des copies, corrections,
+ *    notes, e-mails élèves et profs) : professeur connecté obligatoire. Sans ce
+ *    garde, l'URL nue rendait toute la base lisible publiquement.
+ */
 export async function GET(req: NextRequest) {
+  const eleveEmail = req.nextUrl.searchParams.get('eleve_email');
+  if (!eleveEmail) {
+    const refus = await gardeApiProf();
+    if (refus) return refus;
+  }
+
   try {
     const statut = req.nextUrl.searchParams.get('statut');
-    const eleveEmail = req.nextUrl.searchParams.get('eleve_email');
     // On exclut les gros champs base64 du listing
     const build = (cols: string) => {
       let query = supabase.from('copies').select(cols).order('created_at', { ascending: false });

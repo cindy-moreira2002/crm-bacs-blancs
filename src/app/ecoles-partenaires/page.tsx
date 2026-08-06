@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { getPartnerSchools, seedPartnerSchoolsIfEmpty } from "@/lib/actions";
+import { gardeAdminPage } from "@/lib/gardeAcces";
+import { EcranGarde } from "@/components/EcranGarde";
 import CrmNav from "@/components/CrmNav";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +20,15 @@ const STATUT_COLORS: Record<string, string> = {
   partenaire: "bg-emerald-100 text-emerald-700",
 };
 
+/**
+ * Contacts lycées / associations de parents — outil de démarchage interne,
+ * réservé à l'administratrice au même titre que /crm.
+ */
 export default async function EcolesPartenairesPage() {
+  const garde = await gardeAdminPage();
+  if (garde.etat === "anonyme") redirect("/devenir-coach");
+  if (garde.etat !== "ok") return <EcranGarde garde={garde} />;
+
   await seedPartnerSchoolsIfEmpty();
   const contacts = await getPartnerSchools();
 

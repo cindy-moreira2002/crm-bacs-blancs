@@ -1,6 +1,15 @@
 import { getLeads, createLead, updateLead } from "@/lib/actions";
+import { gardeApiAdmin } from "@/lib/gardeAcces";
 
+/**
+ * Leads de prospection — données personnelles. Réservé à l'administratrice
+ * sur les trois méthodes. Les actions appelées ici revérifient de leur côté :
+ * le garde de route évite juste une erreur brute à la place d'un 401 propre.
+ */
 export async function GET(request: Request) {
+  const refus = await gardeApiAdmin();
+  if (refus) return refus;
+
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || undefined;
   const status = url.searchParams.get("status") || undefined;
@@ -11,6 +20,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const refus = await gardeApiAdmin();
+  if (refus) return refus;
+
   const data = await request.json();
 
   if (!data.firstName || !data.lastName || !data.subject) {
@@ -38,6 +50,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const refus = await gardeApiAdmin();
+  if (refus) return refus;
+
   const data = await request.json();
 
   if (!data.id) {

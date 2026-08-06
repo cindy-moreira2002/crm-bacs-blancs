@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { codeCopie } from '@/lib/codeCopie';
 import { apresInscription } from '@/lib/emails/declencheurs';
+import { gardeApiProf } from '@/lib/gardeAcces';
 
 export const runtime = 'nodejs';
 
@@ -96,10 +97,23 @@ export async function POST(req: NextRequest) {
 }
 
 // GET — liste des élèves inscrits aux bacs blancs (filtrable par matière)
+/**
+ * GET — inscriptions.
+ *
+ * `?email=…` : l'espace élève ne demande que les siennes, la requête est bornée
+ * plus bas — reste ouvert. Sans ce filtre c'est l'annuaire complet (noms,
+ * e-mails, et surtout le `code_copie` signé qui ouvre l'application
+ * d'écriture) : professeur connecté obligatoire.
+ */
 export async function GET(req: NextRequest) {
+  const email = req.nextUrl.searchParams.get('email');
+  if (!email) {
+    const refus = await gardeApiProf();
+    if (refus) return refus;
+  }
+
   try {
     const matiere = req.nextUrl.searchParams.get('matiere');
-    const email = req.nextUrl.searchParams.get('email');
     const build = (cols: string) => {
       let q = supabase.from('inscriptions').select(cols).order('created_at', { ascending: false });
       if (matiere) q = q.eq('matiere', matiere);

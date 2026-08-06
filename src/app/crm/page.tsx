@@ -1,8 +1,13 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { getLeads, getStats } from "@/lib/actions";
+import { gardeAdminPage } from "@/lib/gardeAcces";
+import { EcranGarde } from "@/components/EcranGarde";
 import StatsCards from "@/components/StatsCards";
 import LeadTable from "@/components/LeadTable";
 import Toolbar from "@/components/Toolbar";
+
+export const dynamic = "force-dynamic";
 
 type Props = {
   searchParams: Promise<{
@@ -13,7 +18,16 @@ type Props = {
   }>;
 };
 
+/**
+ * CRM de prospection — données personnelles de démarchage (noms, e-mails,
+ * téléphones, notes). Réservé à l'administratrice : le filtre de domaine du
+ * proxy cache la page sur matineesdubac.fr, il n'authentifie personne.
+ */
 export default async function CrmPage({ searchParams }: Props) {
+  const garde = await gardeAdminPage();
+  if (garde.etat === "anonyme") redirect("/devenir-coach");
+  if (garde.etat !== "ok") return <EcranGarde garde={garde} />;
+
   const params = await searchParams;
   const [leads, stats] = await Promise.all([
     getLeads(
