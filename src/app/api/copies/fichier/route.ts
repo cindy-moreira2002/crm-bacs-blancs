@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { autoriserCopie } from '@/lib/accesCopie';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +15,8 @@ const supabase = createClient(
 export async function GET(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id');
-    if (!id) return NextResponse.json({ error: 'id manquant' }, { status: 400 });
+    const acces = await autoriserCopie(id);
+    if (!acces.autorise) return acces.reponse;
 
     const { data, error } = await supabase
       .from('copies')

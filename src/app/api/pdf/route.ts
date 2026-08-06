@@ -7,8 +7,11 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dossierDocument } from '@/lib/dossierStyle';
 import { createClient } from '@supabase/supabase-js';
+import { gardeApiProf } from '@/lib/gardeAcces';
+import { autoriserCopie } from '@/lib/accesCopie';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const execFileP = promisify(execFile);
 
@@ -22,11 +25,30 @@ const CHROME =
   process.env.CHROME_PATH ||
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
+/**
+ * POST — fabrique le PDF du dossier et, si un `id` est fourni, l'enregistre
+ * sur la copie.
+ *
+ * Réservé aux professeurs : la route faisait tourner un Chrome sans tête sur
+ * du HTML fourni par l'appelant, et écrivait `pdf_base64` sur l'identifiant de
+ * copie demandé — donc, sans garde, sur la copie de n'importe qui.
+ */
 export async function POST(req: NextRequest) {
+  const refus = await gardeApiProf();
+  if (refus) return refus;
+
   try {
     const { body, filename, id } = await req.json();
     if (!body || typeof body !== 'string') {
       return NextResponse.json({ error: 'HTML manquant' }, { status: 400 });
+    }
+
+    if (id) {
+      const acces = await autoriserCopie(String(id));
+      if (!acces.autorise) return acces.reponse;
+      if (acces.role === 'eleve') {
+        return NextResponse.json({ error: 'Copie introuvable' }, { status: 404 });
+      }
     }
 
     const fileId = randomUUID();

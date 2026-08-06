@@ -83,6 +83,28 @@ export function gardeApiProf(): Promise<NextResponse | null> {
 }
 
 /**
+ * Comme `gardeApiProf`, mais rend aussi le professeur — indispensable dès que
+ * la route doit restreindre les LIGNES et pas seulement l'accès : « ce prof-ci
+ * ne voit que ses copies » se décide avec son identité, pas avec un booléen.
+ *
+ * L'union discriminée fait le travail côté types : après `if (g.refus) return
+ * g.refus;`, `g.prof` est garanti non nul.
+ */
+export type GardeApiDetail =
+  | { refus: NextResponse; prof: null }
+  | { refus: null; prof: Professeur };
+
+export async function gardeApiProfDetail(): Promise<GardeApiDetail> {
+  const g = await garde('prof');
+  if (g.etat === 'ok') return { refus: null, prof: g.prof };
+  const refus =
+    g.etat === 'config'
+      ? NextResponse.json({ error: 'Service non configuré' }, { status: 503 })
+      : NextResponse.json({ error: 'Accès refusé' }, { status: 401 });
+  return { refus, prof: null };
+}
+
+/**
  * Version action serveur : lève si l'accès est refusé.
  *
  * Indispensable en plus du garde de page : une action serveur est un point

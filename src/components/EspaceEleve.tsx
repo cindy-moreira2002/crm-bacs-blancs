@@ -266,6 +266,12 @@ export function EspaceEleve() {
   const [copies, setCopies]             = useState<Copie[] | null>(null);
   const [inscriptions, setInscriptions] = useState<Inscription[] | null>(null);
   const [loading, setLoading]           = useState(false);
+  // Connexion en deux temps : l'adresse identifie, le code envoyé par e-mail
+  // prouve. `defi` est la signature rendue par le serveur — il ne stocke rien.
+  const [etape, setEtape]               = useState<'email' | 'code' | 'entree'>('email');
+  const [code, setCode]                 = useState('');
+  const [defi, setDefi]                 = useState('');
+  const [erreur, setErreur]             = useState('');
   // Filtre matière : null = espace commun toutes matières.
   const [matiereActive, setMatiereActive] = useState<string | null>(null);
   const [faqOuverte, setFaqOuverte]     = useState<number | null>(null);
@@ -298,18 +304,90 @@ export function EspaceEleve() {
     }
   }, []);
 
-  const chercher = async (e: React.FormEvent) => {
+  /**
+   * Charge les données de l'élève CONNECTÉ. Aucune adresse n'est passée en
+   * paramètre : le serveur lit le cookie de session. Envoyer l'adresse dans
+   * l'URL revenait à laisser chacun demander les copies de son choix.
+   */
+  const chargerMesDonnees = async () => {
+    const [rc, ri] = await Promise.all([
+      fetch('/api/copies').then(r => r.json()),
+      fetch('/api/inscriptions').then(r => r.json()),
+    ]);
+    setCopies(rc.copies || []);
+    setInscriptions(ri.inscriptions || []);
+  };
+
+  // Session encore ouverte (cookie de 30 jours) → on entre sans redemander de code.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('demo')) return;
+    let annule = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/inscriptions');
+        if (!r.ok || annule) return;
+        const ri = await r.json();
+        const rc = await fetch('/api/copies').then(x => x.json()).catch(() => ({}));
+        if (annule) return;
+        setCopies(rc.copies || []);
+        setInscriptions(ri.inscriptions || []);
+        setEtape('entree');
+      } catch { /* pas de session : on reste sur l'écran de connexion */ }
+    })();
+    return () => { annule = true; };
+  }, []);
+
+  /** Étape 1 — demande du code envoyé par e-mail. */
+  const demanderCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErreur('');
     setLoading(true);
     try {
-      const [rc, ri] = await Promise.all([
-        fetch(`/api/copies?eleve_email=${encodeURIComponent(email)}`).then(r => r.json()),
-        fetch(`/api/inscriptions?email=${encodeURIComponent(email)}`).then(r => r.json()),
-      ]);
-      setCopies(rc.copies || []);
-      setInscriptions(ri.inscriptions || []);
-    } catch { setCopies([]); setInscriptions([]); }
-    finally  { setLoading(false); }
+      const r = await fetch('/api/eleve/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErreur(j.message || 'Envoi impossible pour le moment. Réessaie dans un instant.');
+        return;
+      }
+      setDefi(j.defi || '');
+      setEtape('code');
+    } catch {
+      setErreur('Connexion impossible. Vérifie ta connexion internet.');
+    } finally { setLoading(false); }
+  };
+
+  /** Étape 2 — vérification du code, puis chargement. */
+  const validerCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErreur('');
+    setLoading(true);
+    try {
+      const r = await fetch('/api/eleve/connexion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code, defi }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErreur(j.error || 'Code incorrect ou expiré.');
+        return;
+      }
+      await chargerMesDonnees();
+      setEtape('entree');
+    } catch {
+      setErreur('Connexion impossible. Réessaie.');
+    } finally { setLoading(false); }
+  };
+
+  const deconnecter = async () => {
+    await fetch('/api/eleve/deconnexion', { method: 'POST' }).catch(() => {});
+    setCopies(null); setInscriptions(null);
+    setCode(''); setDefi(''); setErreur(''); setEtape('email');
   };
 
   const today = new Date(); today.setHours(0,0,0,0);
@@ -417,18 +495,43 @@ export function EspaceEleve() {
           <p style={{ color: '#6B7280', fontSize: '.95rem', marginBottom: 28, lineHeight: 1.6 }}>
             Accède à tes bacs blancs, ton salon visio et tes dossiers de correction.
           </p>
-          <form onSubmit={chercher}>
-            <input type="email" required placeholder="Ton adresse email" value={email}
-              onChange={e => setEmail(e.target.value)}
-              style={{ width: '100%', padding: '12px 16px', border: '2px solid #E5E7EB', borderRadius: 12, fontSize: '1rem', marginBottom: 6, outline: 'none', boxSizing: 'border-box' }} />
-            <p style={{ fontSize: '.78rem', color: '#9CA3AF', marginBottom: 12, textAlign: 'left' }}>
-              💡 Utilise l&rsquo;adresse donnée lors de ton inscription au bac blanc.
-            </p>
-            <button type="submit" disabled={loading}
-              style={{ width: '100%', padding: '13px', background: 'linear-gradient(135deg,#7C3AED,#581C87)', color: '#fff', border: 'none', borderRadius: 12, fontSize: '1rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? .7 : 1 }}>
-              {loading ? 'Chargement…' : 'Accéder à mon espace →'}
-            </button>
-          </form>
+          {etape === 'email' ? (
+            <form onSubmit={demanderCode}>
+              <input type="email" required placeholder="Ton adresse email" value={email}
+                onChange={e => setEmail(e.target.value)}
+                style={{ width: '100%', padding: '12px 16px', border: '2px solid #E5E7EB', borderRadius: 12, fontSize: '1rem', marginBottom: 6, outline: 'none', boxSizing: 'border-box' }} />
+              <p style={{ fontSize: '.78rem', color: '#9CA3AF', marginBottom: 12, textAlign: 'left' }}>
+                💡 Utilise l&rsquo;adresse donnée lors de ton inscription au bac blanc. Tu recevras un code à 6 caractères.
+              </p>
+              {erreur && (
+                <p style={{ fontSize: '.85rem', color: '#B91C1C', background: '#FEF2F2', borderRadius: 10, padding: '10px 12px', marginBottom: 12, textAlign: 'left' }}>{erreur}</p>
+              )}
+              <button type="submit" disabled={loading}
+                style={{ width: '100%', padding: '13px', background: 'linear-gradient(135deg,#7C3AED,#581C87)', color: '#fff', border: 'none', borderRadius: 12, fontSize: '1rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? .7 : 1 }}>
+                {loading ? 'Envoi…' : 'Recevoir mon code →'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={validerCode}>
+              <p style={{ fontSize: '.9rem', color: '#374151', marginBottom: 14, lineHeight: 1.6 }}>
+                Un code vient d&rsquo;être envoyé à <strong>{email}</strong>. Il est valable 15 minutes.
+              </p>
+              <input required placeholder="Ton code" value={code} inputMode="text" autoComplete="one-time-code"
+                maxLength={6} onChange={e => setCode(e.target.value.toUpperCase())}
+                style={{ width: '100%', padding: '12px 16px', border: '2px solid #E5E7EB', borderRadius: 12, fontSize: '1.4rem', fontWeight: 800, letterSpacing: 6, textAlign: 'center', marginBottom: 12, outline: 'none', boxSizing: 'border-box' }} />
+              {erreur && (
+                <p style={{ fontSize: '.85rem', color: '#B91C1C', background: '#FEF2F2', borderRadius: 10, padding: '10px 12px', marginBottom: 12, textAlign: 'left' }}>{erreur}</p>
+              )}
+              <button type="submit" disabled={loading}
+                style={{ width: '100%', padding: '13px', background: 'linear-gradient(135deg,#7C3AED,#581C87)', color: '#fff', border: 'none', borderRadius: 12, fontSize: '1rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? .7 : 1 }}>
+                {loading ? 'Vérification…' : 'Entrer dans mon espace →'}
+              </button>
+              <button type="button" onClick={() => { setEtape('email'); setCode(''); setErreur(''); }}
+                style={{ marginTop: 12, background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontWeight: 600, fontSize: '.85rem' }}>
+                ← Changer d&rsquo;adresse ou renvoyer un code
+              </button>
+            </form>
+          )}
           <p style={{ marginTop: 20, fontSize: '.8rem', color: '#9CA3AF' }}>
             Pas encore inscrit ? <a href="/inscription" style={{ color: '#7C3AED', fontWeight: 700 }}>S&rsquo;inscrire →</a>
           </p>
@@ -449,7 +552,7 @@ export function EspaceEleve() {
             M&rsquo;inscrire →
           </a>
           <p style={{ marginTop: 16 }}>
-            <button onClick={() => setInscriptions(null)} style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontWeight: 600 }}>
+            <button onClick={deconnecter} style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontWeight: 600 }}>
               ← Réessayer
             </button>
           </p>

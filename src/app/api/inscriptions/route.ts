@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { codeCopie } from '@/lib/codeCopie';
 import { apresInscription } from '@/lib/emails/declencheurs';
-import { gardeApiProf } from '@/lib/gardeAcces';
+import { gardeApiProfDetail } from '@/lib/gardeAcces';
+import { eleveConnecte } from '@/lib/authEleve';
 
 export const runtime = 'nodejs';
 
@@ -97,19 +98,36 @@ export async function POST(req: NextRequest) {
 }
 
 // GET — liste des élèves inscrits aux bacs blancs (filtrable par matière)
+/** Comparaison de matières tolérante aux accents et à la casse. */
+function normMatiere(v: unknown): string {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 /**
- * GET — inscriptions.
+ * GET — inscriptions. Chacun ne voit que ce qui le concerne :
  *
- * `?email=…` : l'espace élève ne demande que les siennes, la requête est bornée
- * plus bas — reste ouvert. Sans ce filtre c'est l'annuaire complet (noms,
- * e-mails, et surtout le `code_copie` signé qui ouvre l'application
- * d'écriture) : professeur connecté obligatoire.
+ *  - élève connecté  → ses inscriptions à lui, d'après le cookie signé et non
+ *    d'après `?email=`, qui laissait consulter l'annuaire de n'importe qui ;
+ *  - professeur      → les inscriptions de SES matières (`professeurs.matieres`) ;
+ *  - administratrice → tout.
+ *
+ * L'enjeu n'est pas seulement le nom et l'adresse : chaque ligne porte le
+ * `code_copie` signé, qui ouvre l'application d'écriture de l'élève.
  */
 export async function GET(req: NextRequest) {
-  const email = req.nextUrl.searchParams.get('email');
-  if (!email) {
-    const refus = await gardeApiProf();
-    if (refus) return refus;
+  const eleve = await eleveConnecte();
+  let matieresProf: string[] | null = null;
+
+  if (!eleve) {
+    const garde = await gardeApiProfDetail();
+    if (garde.refus) return garde.refus;
+    if (garde.prof.role !== 'admin') {
+      matieresProf = (garde.prof.matieres ?? []).map(normMatiere).filter(Boolean);
+    }
   }
 
   try {
@@ -117,7 +135,7 @@ export async function GET(req: NextRequest) {
     const build = (cols: string) => {
       let q = supabase.from('inscriptions').select(cols).order('created_at', { ascending: false });
       if (matiere) q = q.eq('matiere', matiere);
-      if (email) q = q.eq('email', email);
+      if (eleve) q = q.eq('email', eleve);
       return q;
     };
 
@@ -128,9 +146,18 @@ export async function GET(req: NextRequest) {
     }
     if (error) throw error;
 
+    // Le filtrage par matière se fait ici plutôt qu'en SQL : les libellés
+    // varient (accents, casse) entre `professeurs.matieres` et `inscriptions`.
+    // Les lignes écartées ne quittent jamais le serveur.
+    let lignes = (data ?? []) as unknown as { nom: string; matiere: string }[];
+    if (matieresProf) {
+      const permises = new Set(matieresProf);
+      lignes = lignes.filter((i) => permises.has(normMatiere(i.matiere)));
+    }
+
     // Le code d'accès à la copie est signé ici, côté serveur : le navigateur ne
     // peut pas le recalculer, il ne peut que recevoir celui de ses inscriptions.
-    const inscriptions = ((data ?? []) as unknown as { nom: string; matiere: string }[]).map(i => ({
+    const inscriptions = lignes.map(i => ({
       ...i,
       code_copie: codeCopie(i.nom ?? '', i.matiere ?? ''),
     }));
