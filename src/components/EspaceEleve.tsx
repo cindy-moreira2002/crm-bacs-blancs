@@ -156,6 +156,9 @@ const DEMO_COPIES: Copie[] = [
   { id: 'demo-fr', matiere: 'Français',      eleve_nom: 'Léa Martin', statut: 'corrigée', note: 14,   fichier_nom: 'copie-francais.pdf', pdf_pret: true, created_at: '2026-03-14T13:00:00Z' },
   { id: 'demo-ph', matiere: 'Philosophie',   eleve_nom: 'Léa Martin', statut: 'corrigée', note: 11.5, fichier_nom: 'copie-philo.pdf',    pdf_pret: true, created_at: '2026-04-11T13:00:00Z' },
   { id: 'demo-ma', matiere: 'Mathématiques', eleve_nom: 'Léa Martin', statut: 'corrigée', note: 8,    fichier_nom: 'copie-maths.pdf',    pdf_pret: true, created_at: '2026-05-16T13:00:00Z' },
+  // Deuxième copie de la même matière, sans inscription liée : vérifie que
+  // l'historique montre bien TOUTES les copies, pas une seule par matière.
+  { id: 'demo-fr2', matiere: 'Français',     eleve_nom: 'Léa Martin', statut: 'corrigée', note: 12,   fichier_nom: 'copie-francais-2.pdf', pdf_pret: true, created_at: '2026-06-10T13:00:00Z' },
 ];
 
 // ── Check-list du jour J ─────────────────────────────────────────────────────
@@ -340,11 +343,40 @@ export function EspaceEleve() {
     return acc;
   }, {});
   const sansDate = aVenir.filter(i => !i.date_epreuve);
-  // Date de passage d'une copie : date de l'épreuve inscrite, sinon date de dépôt
-  const dateCopie = (c: Copie) => {
-    const insc = (inscriptions ?? []).find(i => i.matiere.toLowerCase() === c.matiere.toLowerCase() && i.date_epreuve);
-    return insc?.date_epreuve ?? c.created_at;
+
+  // ── Historique : TOUTES les anciennes copies, pas une par matière ──
+  // Chaque inscription passée est appariée à la copie de sa matière la plus
+  // proche en date pas encore prise ; les copies restantes (deuxième bac blanc
+  // de la même matière, copie déposée sans inscription liée…) forment leurs
+  // propres lignes. Rien ne peut disparaître de l'historique.
+  type ItemHistorique = { cle: string; matiere: string; date: string | null; copie: Copie | null };
+  const copiesPrises = new Set<string>();
+  // Copie de la même matière dont la date de dépôt est la plus PROCHE de la
+  // date d'épreuve : deux bacs blancs de français ne se volent pas leur copie.
+  const copiePourInscription = (i: Inscription): Copie | null => {
+    const candidates = copiesFiltrees.filter(c => !copiesPrises.has(c.id) && c.matiere.toLowerCase() === i.matiere.toLowerCase());
+    if (candidates.length === 0) return null;
+    if (!i.date_epreuve) return candidates[0];
+    const ref = new Date(i.date_epreuve).getTime();
+    return candidates.reduce((best, c) =>
+      Math.abs(new Date(c.created_at).getTime() - ref) < Math.abs(new Date(best.created_at).getTime() - ref) ? c : best
+    );
   };
+  const historique: ItemHistorique[] = passes.map(i => {
+    const c = copiePourInscription(i);
+    if (c) copiesPrises.add(c.id);
+    return { cle: `i-${i.id}`, matiere: i.matiere, date: i.date_epreuve, copie: c };
+  });
+  for (const c of copiesFiltrees) {
+    if (!copiesPrises.has(c.id)) historique.push({ cle: `c-${c.id}`, matiere: c.matiere, date: c.created_at, copie: c });
+  }
+  historique.sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+
+  // Date de passage d'une copie : celle de son bac blanc apparié dans
+  // l'historique (sinon sa date de dépôt) — le graphe raconte la même
+  // chronologie que la liste.
+  const dateParCopie = new Map(historique.flatMap(h => h.copie ? [[h.copie.id, h.date ?? h.copie.created_at] as const] : []));
+  const dateCopie = (c: Copie) => dateParCopie.get(c.id) ?? c.created_at;
   // Notes réelles pour le graphe d'évolution (copies notées, ordre chronologique)
   const notesData = copiesFiltrees
     .filter(c => c.note != null)
@@ -524,8 +556,59 @@ export function EspaceEleve() {
         </div>
       )}
 
-      {/* ── GRID : FENÊTRE 2 (passés) + FENÊTRE 3 (calendrier à venir) ── */}
-      <div style={{ maxWidth: 900, margin: '32px auto 0', padding: '0 24px 48px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 22 }}>
+      {/* ── FENÊTRE 2 : Mes anciens bacs blancs & mes copies ── */}
+      {historique.length > 0 && (
+        <div style={{ maxWidth: 900, margin: '26px auto 0', padding: '0 24px' }}>
+          <div style={cadre}>
+            <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              🗂️ Mes anciens bacs blancs &amp; mes copies
+            </h3>
+            <p style={{ fontSize: '.82rem', color: '#6B7280', marginBottom: 14 }}>
+              Toutes tes copies restent ici : relis-les avec leur dossier de correction pour voir le chemin parcouru.
+            </p>
+            {historique.map(h => {
+              const c = h.copie;
+              const note = c?.note ?? null;
+              return (
+                <div key={h.cle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '13px 0', borderBottom: '1px solid #F3F4F6' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 170 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: couleur(h.matiere), flexShrink: 0 }} />
+                    <div>
+                      <p style={{ fontWeight: 700, fontSize: '.92rem', color: '#111827' }}>{h.matiere}</p>
+                      <p style={{ fontSize: '.75rem', color: '#9CA3AF' }}>{h.date ? fmtDate(h.date) : 'Date non renseignée'}</p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    {c?.fichier_nom && (
+                      <a href={`/api/copies/fichier?id=${c.id}`} target="_blank" rel="noreferrer"
+                        style={{ fontSize: '.78rem', fontWeight: 700, color: '#374151', background: '#F3F4F6', padding: '7px 14px', borderRadius: 100, textDecoration: 'none' }}>
+                        📄 Ma copie
+                      </a>
+                    )}
+                    {c?.pdf_pret && (
+                      <a href={`/api/copies/pdf?id=${c.id}`}
+                        style={{ fontSize: '.78rem', fontWeight: 800, color: '#fff', background: 'linear-gradient(135deg,#7C3AED,#581C87)', padding: '7px 14px', borderRadius: 100, textDecoration: 'none' }}>
+                        📘 Mon dossier de correction
+                      </a>
+                    )}
+                    {!c && (
+                      <span style={{ fontSize: '.75rem', fontWeight: 700, padding: '6px 12px', borderRadius: 100, background: '#FFF7ED', color: '#C2410C' }}>
+                        Correction en cours
+                      </span>
+                    )}
+                    {note != null
+                      ? <span style={{ fontSize: '.92rem', fontWeight: 800, padding: '5px 13px', borderRadius: 100, color: '#fff', background: couleurNote(note), flexShrink: 0 }}>{fmtNote(note)}/20</span>
+                      : c && <span style={{ fontSize: '.72rem', fontWeight: 700, padding: '5px 11px', borderRadius: 100, background: '#ECFDF5', color: '#059669', flexShrink: 0 }}>✓ Corrigé</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── GRID : FENÊTRE 3 (calendrier à venir) + graphe + sessions ── */}
+      <div style={{ maxWidth: 900, margin: '26px auto 0', padding: '0 24px 48px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 22 }}>
 
         {/* ── FENÊTRE 3 : Calendrier à venir ── */}
         {aVenir.length > 0 && (
@@ -583,53 +666,6 @@ export function EspaceEleve() {
                 ))}
               </div>
             )}
-          </div>
-        )}
-
-        {/* ── FENÊTRE 2 : Mes bacs blancs passés (aperçu + correction) ── */}
-        {passes.length > 0 && (
-          <div style={cadre}>
-            {titreSection('🗂️ Mes bacs blancs passés')}
-            {passes.map(i => {
-              const c = copieDe(i);
-              const note = c?.note ?? null;
-              return (
-                <div key={i.id} style={{ padding: '12px 0', borderBottom: '1px solid #F9FAFB' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: couleur(i.matiere), flexShrink: 0 }} />
-                      <div>
-                        <p style={{ fontWeight: 700, fontSize: '.9rem', color: '#111827' }}>{i.matiere}</p>
-                        <p style={{ fontSize: '.75rem', color: '#9CA3AF' }}>{i.date_epreuve ? fmtDate(i.date_epreuve) : 'Date non renseignée'}</p>
-                      </div>
-                    </div>
-                    {note != null
-                      ? <span style={{ fontSize: '.9rem', fontWeight: 800, padding: '4px 12px', borderRadius: 100, color: '#fff', background: couleurNote(note), flexShrink: 0 }}>{fmtNote(note)}/20</span>
-                      : <span style={{ fontSize: '.72rem', fontWeight: 700, padding: '4px 10px', borderRadius: 100, background: c ? '#ECFDF5' : '#FFF7ED', color: c ? '#059669' : '#C2410C', flexShrink: 0 }}>{c ? '✓ Corrigé' : 'Correction en cours'}</span>}
-                  </div>
-                  {(c?.fichier_nom || c?.pdf_pret) ? (
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, marginLeft: 20 }}>
-                      {c?.fichier_nom && (
-                        <a href={`/api/copies/fichier?id=${c.id}`} target="_blank" rel="noreferrer"
-                          style={{ fontSize: '.75rem', fontWeight: 700, color: '#6B7280', background: '#F3F4F6', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
-                          📄 Aperçu de ma copie
-                        </a>
-                      )}
-                      {c?.pdf_pret && (
-                        <a href={`/api/copies/pdf?id=${c.id}`}
-                          style={{ fontSize: '.75rem', fontWeight: 700, color: '#7C3AED', background: '#F5F3FF', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
-                          📘 Ma correction
-                        </a>
-                      )}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '.75rem', color: '#9CA3AF', marginTop: 6, marginLeft: 20 }}>
-                      Ta copie et ta correction apparaîtront ici.
-                    </p>
-                  )}
-                </div>
-              );
-            })}
           </div>
         )}
 
