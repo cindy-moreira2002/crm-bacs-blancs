@@ -277,15 +277,22 @@ export function EspaceEleve() {
     return () => clearInterval(t);
   }, []);
 
-  // Aperçu : ?demo=1 → charge l'élève fictif sans passer par Supabase.
-  // setTimeout : la règle set-state-in-effect de Next 16 interdit le setState
-  // synchrone dans un effet.
+  // Aperçu : ?demo=1 → élève fictif complet (notes, copies) ; ?demo=nouveau →
+  // élève qui vient de s'inscrire (aucune copie), pour voir les états vides.
+  // Sans passer par Supabase. setTimeout : la règle set-state-in-effect de
+  // Next 16 interdit le setState synchrone dans un effet.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (new URLSearchParams(window.location.search).get('demo') === '1') {
+    const demo = new URLSearchParams(window.location.search).get('demo');
+    if (demo === '1' || demo === 'nouveau') {
       const t = setTimeout(() => {
-        setInscriptions(DEMO_INSCRIPTIONS);
-        setCopies(DEMO_COPIES);
+        if (demo === 'nouveau') {
+          setInscriptions([DEMO_INSCRIPTIONS[3]]); // Histoire-Géo à venir, rien d'autre
+          setCopies([]);
+        } else {
+          setInscriptions(DEMO_INSCRIPTIONS);
+          setCopies(DEMO_COPIES);
+        }
       }, 0);
       return () => clearTimeout(t);
     }
@@ -556,9 +563,10 @@ export function EspaceEleve() {
         </div>
       )}
 
-      {/* ── FENÊTRE 2 : Mes anciens bacs blancs & mes copies ── */}
-      {historique.length > 0 && (
-        <div style={{ maxWidth: 900, margin: '26px auto 0', padding: '0 24px' }}>
+      {/* ── FENÊTRE 2 : Mes anciens bacs blancs & mes copies ──
+            Toujours affichée, même vide : un nouvel élève doit voir où ses
+            copies et ses dossiers de correction arriveront. */}
+      <div style={{ maxWidth: 900, margin: '26px auto 0', padding: '0 24px' }}>
           <div style={cadre}>
             <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
               🗂️ Mes anciens bacs blancs &amp; mes copies
@@ -566,6 +574,15 @@ export function EspaceEleve() {
             <p style={{ fontSize: '.82rem', color: '#6B7280', marginBottom: 14 }}>
               Toutes tes copies restent ici : relis-les avec leur dossier de correction pour voir le chemin parcouru.
             </p>
+            {historique.length === 0 && (
+              <div style={{ background: '#F8FAFC', border: '1px dashed #D1D5DB', borderRadius: 14, padding: '18px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
+                <span style={{ fontSize: '1.6rem' }}>🌱</span>
+                <p style={{ fontSize: '.88rem', color: '#4B5563', lineHeight: 1.6 }}>
+                  Tu n&rsquo;as pas encore passé de bac blanc. Après chaque épreuve, ta copie
+                  et son <strong>dossier de correction</strong>{' '}seront rangés ici, avec ta note.
+                </p>
+              </div>
+            )}
             {historique.map(h => {
               const c = h.copie;
               const note = c?.note ?? null;
@@ -604,8 +621,7 @@ export function EspaceEleve() {
               );
             })}
           </div>
-        </div>
-      )}
+      </div>
 
       {/* ── GRID : FENÊTRE 3 (calendrier à venir) + graphe + sessions ── */}
       <div style={{ maxWidth: 900, margin: '26px auto 0', padding: '0 24px 48px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 22 }}>
@@ -669,38 +685,48 @@ export function EspaceEleve() {
           </div>
         )}
 
-        {/* ── Graphique d'évolution des notes ── */}
-        {notesData.length > 0 && (
-          <div style={cadre}>
+        {/* ── Graphique d'évolution des notes (toujours visible : un nouvel
+              élève doit savoir que sa progression sera suivie ici) ── */}
+        <div style={cadre}>
             <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
               📈 Évolution de mes notes
             </h3>
+            {notesData.length === 0 && (
+              <div style={{ background: '#F8FAFC', border: '1px dashed #D1D5DB', borderRadius: 14, padding: '18px 20px', marginTop: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
+                <span style={{ fontSize: '1.6rem' }}>📊</span>
+                <p style={{ fontSize: '.88rem', color: '#4B5563', lineHeight: 1.6 }}>
+                  Ta courbe de progression se dessinera ici dès ta première note.
+                  Bac blanc après bac blanc, tu verras le chemin parcouru.
+                </p>
+              </div>
+            )}
             {moyenne != null && (
               <p style={{ fontSize: '.82rem', color: '#6B7280', marginBottom: 6 }}>
                 Moyenne : <strong style={{ color: couleurNote(moyenne) }}>{fmtNote(Math.round(moyenne * 10) / 10)}/20</strong> sur {notesData.length} épreuve{notesData.length > 1 ? 's' : ''}
               </p>
             )}
-            {/* Barres = note/20, dernières 8 épreuves */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 10, marginBottom: 4 }}>
-              {notesData.slice(-8).map(({ c, date }) => {
-                const n = c.note as number;
-                return (
-                  <div key={c.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-                    <span style={{ fontSize: '.78rem', fontWeight: 800, color: couleurNote(n) }}>{fmtNote(n)}</span>
-                    <div style={{ width: '100%', maxWidth: 46, borderRadius: '8px 8px 0 0', height: `${Math.max(4, Math.round((n / 20) * 120))}px`, background: couleurNote(n), transition: 'height .5s ease' }} />
-                    <p style={{ fontSize: '.62rem', color: '#9CA3AF', fontWeight: 600, textAlign: 'center', lineHeight: 1.25 }}>
-                      {c.matiere.replace('Mathématiques', 'Maths').replace('Histoire-Géo', 'Hist.')}<br />
-                      {new Date(date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-            <p style={{ fontSize: '.7rem', color: '#9CA3AF', borderTop: '1px solid #F3F4F6', paddingTop: 12, marginTop: 8 }}>
-              Notes sur 20. Vert = ≥ 10, rouge = &lt; 10.
-            </p>
+            {notesData.length > 0 && (<>
+              {/* Barres = note/20, dernières 8 épreuves */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 10, marginBottom: 4 }}>
+                {notesData.slice(-8).map(({ c, date }) => {
+                  const n = c.note as number;
+                  return (
+                    <div key={c.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+                      <span style={{ fontSize: '.78rem', fontWeight: 800, color: couleurNote(n) }}>{fmtNote(n)}</span>
+                      <div style={{ width: '100%', maxWidth: 46, borderRadius: '8px 8px 0 0', height: `${Math.max(4, Math.round((n / 20) * 120))}px`, background: couleurNote(n), transition: 'height .5s ease' }} />
+                      <p style={{ fontSize: '.62rem', color: '#9CA3AF', fontWeight: 600, textAlign: 'center', lineHeight: 1.25 }}>
+                        {c.matiere.replace('Mathématiques', 'Maths').replace('Histoire-Géo', 'Hist.')}<br />
+                        {new Date(date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: '.7rem', color: '#9CA3AF', borderTop: '1px solid #F3F4F6', paddingTop: 12, marginTop: 8 }}>
+                Notes sur 20. Vert = ≥ 10, rouge = &lt; 10.
+              </p>
+            </>)}
           </div>
-        )}
 
         {/* ── Prochains BB plateforme (sessions dispo) ── */}
         {sessionsDispos.length > 0 && (
