@@ -234,6 +234,11 @@ const paiement_attente: Modele = {
             ? h.t('payment_instructions')
             : `Réponds simplement à cet e-mail et on t'envoie les informations de virement.`,
           h.a('amount') ? `Montant : <strong>${h.t('amount')} €</strong>` : '',
+          // La référence est ce qui permet de reconnaître le virement tout
+          // seul à l'arrivée : elle mérite d'être bien visible.
+          h.a('payment_reference')
+            ? `Référence à indiquer dans le virement : <strong>${h.t('payment_reference')}</strong>`
+            : '',
         ].filter(Boolean),
       },
       {
@@ -242,6 +247,50 @@ const paiement_attente: Modele = {
       },
     ],
     bouton: { libelle: 'Voir mon inscription', url: h.r('student_space_url') },
+  }),
+};
+
+/**
+ * Facture — déclenchée par le classeur de suivi financier, jamais par le
+ * planificateur. Le PDF vit dans Drive : on envoie son lien plutôt qu'une
+ * pièce jointe, ce qui évite les blocages de messagerie et garde la facture
+ * accessible même des mois plus tard.
+ */
+const facture_disponible: Modele = {
+  type: 'facture_disponible',
+  categorie: 'transactional',
+  role: 'parent',
+  requises: ['invoice_number', 'invoice_url'],
+  sujet: (h) => `Votre facture ${h.r('invoice_number')} — Les Matinées du Bac`,
+  contenu: (h) => ({
+    titre: 'Votre facture',
+    blocs: [
+      {
+        type: 'paragraphe',
+        texte: h.a('first_name') ? `Bonjour ${h.t('first_name')},` : 'Bonjour,',
+      },
+      {
+        type: 'paragraphe',
+        texte:
+          'Merci pour votre confiance. Vous trouverez ci-dessous votre facture, ' +
+          'à conserver.',
+      },
+      {
+        type: 'fiche',
+        lignes: [
+          ['Numéro de facture', h.t('invoice_number')],
+          ...(h.a('invoice_date') ? ([['Date', h.t('invoice_date')]] as [string, string][]) : []),
+          ...(h.a('amount') ? ([['Montant', `${h.t('amount')} €`]] as [string, string][]) : []),
+        ] as [string, string][],
+      },
+    ],
+    bouton: { libelle: 'Ouvrir ma facture', url: h.r('invoice_url') },
+    apres: [
+      {
+        type: 'petit',
+        texte: `Une question sur cette facture ? Répondez simplement à ce message ou écrivez-nous à ${echapper(SUPPORT_EMAIL)}.`,
+      },
+    ],
   }),
 };
 
@@ -960,6 +1009,7 @@ const LISTE: Modele[] = [
   prof_copies_disponibles,
   prof_rappel_correction,
   prof_mission_terminee,
+  facture_disponible,
 ];
 
 export const MODELES: Record<string, Modele> = Object.fromEntries(

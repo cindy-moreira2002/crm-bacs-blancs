@@ -88,6 +88,8 @@ export const TYPES_EMAIL = [
   'inscription_confirmee',
   'paiement_confirme',
   'paiement_attente',
+  // Déclenché par le classeur de suivi financier, jamais par le planificateur.
+  'facture_disponible',
   // B — avant la session
   'infos_pratiques',
   'lien_visio',
@@ -128,6 +130,7 @@ export const LIBELLE_TYPE: Record<TypeEmail, string> = {
   inscription_confirmee: 'Inscription confirmée',
   paiement_confirme: 'Paiement confirmé',
   paiement_attente: 'Relance — paiement manquant',
+  facture_disponible: 'Facture envoyée au parent',
   infos_pratiques: 'Informations pratiques',
   lien_visio: 'Lien de visioconférence',
   rappel_veille: 'Rappel la veille',
