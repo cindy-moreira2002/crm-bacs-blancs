@@ -110,7 +110,7 @@ export const BUCKETS_COUVERTS: FicheBucket[] = [
 // --- Formes -----------------------------------------------------------
 
 export type LigneInventaire = FicheTable & { lignes: number };
-export type LigneBucket = FicheBucket & { objets: number };
+export type LigneBucket = FicheBucket & { objets: number; partiel: boolean };
 
 export type AnomalieGlobale = Diagnostic & {
   /** flux = tapis roulant des copies ; preparation = barèmes/sujets/gabarits ;
@@ -165,7 +165,7 @@ type BucketReel = { name: string };
  * liste qu'un niveau à la fois). Budget de requêtes borné : au-delà, le
  * compte est rendu tel quel, marqué approximatif par l'appelant si besoin.
  */
-async function bucketsReels(): Promise<{ nom: string; objets: number }[]> {
+async function bucketsReels(): Promise<{ nom: string; objets: number; partiel: boolean }[]> {
   const url = process.env.PIPELINE_SUPABASE_URL ?? '';
   const cle = process.env.PIPELINE_SUPABASE_SERVICE_ROLE_KEY ?? '';
   const entetes = { apikey: cle, Authorization: `Bearer ${cle}`, 'Content-Type': 'application/json' };
@@ -174,10 +174,15 @@ async function bucketsReels(): Promise<{ nom: string; objets: number }[]> {
   const buckets = (await r.json()) as BucketReel[];
 
   type Entree = { name: string; id: string | null; metadata: unknown };
-  const compterFichiers = async (bucket: string): Promise<number> => {
+  const compterFichiers = async (bucket: string): Promise<{ n: number; partiel: boolean }> => {
     let requetes = 0;
+    let partiel = false;
     const parcourir = async (prefix: string): Promise<number> => {
-      if (requetes >= 40) return 0; // garde-fou : bucket énorme = compte partiel
+      if (requetes >= 40) {
+        // Garde-fou : bucket énorme, on arrête et on le DIT (affiché « ≥ N »).
+        partiel = true;
+        return 0;
+      }
       requetes += 1;
       const rep = await fetch(`${url}/storage/v1/object/list/${bucket}`, {
         method: 'POST',
@@ -195,11 +200,15 @@ async function bucketsReels(): Promise<{ nom: string; objets: number }[]> {
       }
       return n;
     };
-    return parcourir('');
+    const n = await parcourir('');
+    return { n, partiel };
   };
 
   return Promise.all(
-    buckets.map(async (b) => ({ nom: b.name, objets: await compterFichiers(b.name).catch(() => -1) })),
+    buckets.map(async (b) => {
+      const r = await compterFichiers(b.name).catch(() => ({ n: -1, partiel: false }));
+      return { nom: b.name, objets: r.n, partiel: r.partiel };
+    }),
   );
 }
 
@@ -266,10 +275,10 @@ export async function chargerSante(): Promise<SanteSysteme> {
     .map((t) => ({ nom: t, lignes: compte.get(t) ?? 0 }));
 
   const bucketsConnus = new Set(BUCKETS_COUVERTS.map((b) => b.nom));
-  const inventaireBuckets: LigneBucket[] = BUCKETS_COUVERTS.map((b) => ({
-    ...b,
-    objets: buckets.find((x) => x.nom === b.nom)?.objets ?? 0,
-  }));
+  const inventaireBuckets: LigneBucket[] = BUCKETS_COUVERTS.map((b) => {
+    const reel = buckets.find((x) => x.nom === b.nom);
+    return { ...b, objets: reel?.objets ?? 0, partiel: reel?.partiel ?? false };
+  });
   const bucketsNonCouverts = buckets.filter((b) => !bucketsConnus.has(b.nom));
 
   // --- Anomalies ------------------------------------------------------

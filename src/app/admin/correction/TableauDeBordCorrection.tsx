@@ -475,12 +475,16 @@ export function TableauDeBordCorrection() {
           />
         )}
 
+        {/* Santé et lexique restent MONTÉS quand une matière est ouverte
+            (simplement masqués) : l'analyse santé est coûteuse en egress
+            Supabase, la démonter la relancerait à chaque aller-retour. */}
+        <div className={matiereOuverte ? 'hidden' : 'space-y-8'}>
+          <SanteSystemeVue onOuvrirMatiere={setMatiereOuverte} />
+          <ExplicationPipeline />
+        </div>
+
         {!matiereOuverte && (
         <>
-        <SanteSystemeVue onOuvrirMatiere={setMatiereOuverte} />
-
-        <ExplicationPipeline />
-
         {/* Synthèse */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[

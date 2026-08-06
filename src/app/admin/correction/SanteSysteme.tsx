@@ -223,7 +223,10 @@ export function SanteSystemeVue({ onOuvrirMatiere }: { onOuvrirMatiere: (m: stri
                   {sante.inventaire.buckets.map((b) => (
                     <div key={b.nom} className="rounded-xl border border-gray-200 p-3">
                       <p className="text-xs font-bold text-gray-800">
-                        {b.titre} <span className="text-gray-400 font-normal">· {b.objets < 0 ? '?' : b.objets} fichier{b.objets > 1 ? 's' : ''}</span>
+                        {b.titre}{' '}
+                        <span className="text-gray-400 font-normal" title={b.partiel ? 'Bucket très volumineux : comptage arrêté au garde-fou, il y en a au moins autant.' : undefined}>
+                          · {b.objets < 0 ? '?' : `${b.partiel ? '≥ ' : ''}${b.objets}`} fichier{b.objets > 1 ? 's' : ''}
+                        </span>
                       </p>
                       <p className="text-[11px] text-gray-500 mt-0.5">{b.explication}</p>
                       <p className="text-[10px] text-gray-300 font-mono mt-1">{b.nom}</p>
