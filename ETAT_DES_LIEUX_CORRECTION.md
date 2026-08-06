@@ -14,6 +14,13 @@ Mis à jour le même jour après le chantier décrit en partie 9.
 >    la base, interrupteurs activer/brouillon (matière, épreuve, sujet),
 >    corrections en direct, coûts estimés, retours des profs relecteurs.
 >    Voir `src/lib/pipelineEtat.ts` et `src/app/admin/correction/`.
+>
+> **6 août 2026 — les deux trous structurels sont bouchés** (voir partie 10) :
+> la **voie technologique du français** est installée et visible (3 épreuves),
+> et les **21 étalons orphelins** sont rattachés — il n'en reste aucun. Il ne
+> subsiste, sur les 9 matières, que ce qui demande une main humaine : de
+> vraies copies notées pour remplacer les étalons synthétiques, et le passage
+> en `validated` des étalons relus.
 
 ---
 
@@ -197,3 +204,139 @@ technique : il faut 3 vraies copies notées par matière.
 - **6 SQL d'activation** écrits (SVT, HGGSP, HLP, physique-chimie, maths, philo).
 - **Collision de numérotation levée** : profils de transcription en `19_`.
 - **Liens de relecture générés** pour les 9 matières dans `~/LIENS_RELECTURE_PROFS.txt`.
+
+---
+
+## 10. Ce qui a été fait le 6 août 2026
+
+Chantier « compléter les dossiers de correction partout ». Point de départ :
+les diagnostics de `/admin/correction` (règles de `src/lib/pipelineVerifs.ts`),
+rejoués matière par matière sur la base.
+
+### a) La voie technologique du français, qui n'existait pas
+
+Le français est la seule matière réellement en service (session du 6 septembre),
+mais **seule la voie générale existait en base**. Un élève de première
+technologique n'avait aucun sujet à choisir, aucune grille, aucun gabarit :
+une filière entière hors du tunnel. Le centre de santé le disait déjà
+(« étalons orphelins d'épreuves qu'AUCUNE matière installée ne propose »).
+
+Installé via `scripts/matieres/francais-techno.mjs` + `apply-matiere.mjs`
+(trace : `supabase/sql/30_installer_francais_technologique.sql`) :
+
+| | contraction | essai | commentaire techno |
+|---|---|---|---|
+| Grille `active` | `FR_TECHNO_CONTRACTION_V1` | `FR_TECHNO_ESSAI_V1` | `FR_TECHNO_COMMENTAIRE_V1` |
+| Barème | 20 (officiel /10, conversion écrite dans le `system_prompt`) | 20 (idem) | 20 |
+| Sujet `active` | Hugo, « Détruire la misère » (1849), 986 mots → 250 | même texte, essai lié | Baudelaire, « L'Albatros » (1861), 2 axes fournis |
+| Étalons | 5 (5 à 17/20) | 5 | 5 |
+| Gabarit élève `active` | oui | oui | oui |
+
+Deux partis pris à connaître :
+- **Posé en `active`, pas en `draft`** — contrairement aux 8 installations
+  précédentes. La voie générale est déjà en service et la session est dans un
+  mois : laisser la techno en brouillon revenait à laisser la filière sans
+  correction. La commande de retour en brouillon est en tête du fichier SQL.
+- **Textes du domaine public** (les textes d'idées contemporains du bac sont
+  protégés), établis d'après Wikisource. Comme pour la philosophie, ils sont
+  marqués `source_verification_required` : à vérifier mot à mot sur une édition
+  de référence avant la session.
+
+### b) Les 21 étalons orphelins, dont 12 vraies copies notées
+
+`scripts/rattacher-etalons-orphelins.mjs` (trace :
+`supabase/sql/31_rattacher_etalons_orphelins.sql`). Il ne reste **aucun**
+étalon sans sujet.
+
+- **7 fiches sujet créées en `draft`**, une par support de copie réelle :
+  Diderot (*Salon de 1767*), Duras (*Édouard*), Rimbaud (*Cahier de Douai*),
+  Sarraute (*Pour un oui ou pour un non*), Corneille (*Le Menteur*),
+  Olympe de Gouges (*DDFC*), Rognet (*Élégies*, techno). Elles portent l'œuvre
+  et l'exercice, **pas encore la consigne exacte ni le texte** : elles restent
+  en brouillon, donc non déposables. `role: fiche_support_etalonnage`.
+- **12 vraies copies** (notes réelles de 14 à 20) rattachées à la fiche de leur
+  support. Elles participent enfin au calage.
+- **9 profils de méthode synthétiques** (S01→S09) rangés sous le sujet de leur
+  épreuve, en gardant `validation_status='synthetic'` : le moteur ne lit que
+  `validated` et `candidate`, donc **aucune note ne dépend d'eux**. Ils portent
+  désormais `card_json.origin`, pour que le tableau de bord cesse de les
+  compter comme de vraies copies.
+
+### c) Ce qui reste, et qui ne peut pas se faire en base
+
+Après ce chantier, les diagnostics des 9 matières ne signalent plus **aucun**
+point bloquant. Les deux avertissements restants demandent une main humaine :
+
+1. **8 matières sur 9 n'ont que des étalons synthétiques.** Remède : 3 vraies
+   copies notées par matière. C'est le seul vrai remède à la calibration sévère.
+2. **0 étalon `validated` sur 466.** Un prof relit, on bascule le statut.
+
+À surveiller aussi : les deux sujets de français en service n'ont que des
+étalons entre **15 et 20/20** (`FR-COM-2025-ENSORCELEE`, `FR-DISS-MUSSET-BADINE`).
+Le correcteur n'a donc aucun point de repère en bas d'échelle — c'est une cause
+plausible de la sévérité constatée. Y ajouter des copies réelles moyennes ou
+faibles est probablement le geste le plus rentable du pipeline.
+
+---
+
+## 11. Recherche de copies réelles sur Internet — 6 août 2026
+
+Question posée : existe-t-il, en ligne, des copies d'élèves **réelles** avec la
+note mise par un professeur ? Six recherches ciblées (éduscol, académies,
+sites de profs, plateformes de révision, presse), matière par matière.
+
+### Ce qui existe
+
+| Source | Contenu | Notes | Exploitable |
+|---|---|---|---|
+| **dropbac.fr** | **64 copies réelles** anonymisées, avec note et sujet (français, philo, SES, HGGSP) | 14 à 20 | ✅ oui — 21 étaient déjà en base, **43 importées** |
+| **sosses.fr** | 3 copies de SES | 18 à 20 | marginal : le haut d'échelle est déjà couvert |
+| 20aubac, etudes-litteraires, letudiant, sujetdebac, digiSchool, APSES, mathsapiens | **corrigés types rédigés par des profs**, pas des copies d'élèves | aucune note | ❌ non |
+| éduscol / académies | sujets zéro, spécimens, guide de l'évaluation | aucune copie annotée publiée | ❌ non |
+
+### Le constat qui compte
+
+**Internet ne publie que les bonnes copies.** Les 64 copies trouvées vont de
+**14 à 20/20**, sans exception. C'est logique : ce sont les élèves qui ont
+réussi qui acceptent de publier. Les seules copies faibles rencontrées sont des
+anecdotes de presse (une copie à 5/20 citée dans un article du Figaro Étudiant),
+sans document consultable.
+
+Conséquence directe : **cet import ne corrige pas la calibration sévère.** Le
+bas de l'échelle (5 à 13/20) n'existe pas en ligne. Il ne peut venir que des
+professeurs partenaires.
+
+### Ce qui a été importé (`scripts/importer-copies-publiques.mjs`, SQL `32_`)
+
+43 copies réelles, lien source seul (`full_pdf_policy: source_link_only`),
+`validation_status: candidate`, `teacher_validation_required: true`.
+
+| Matière | Avant | Après | Où |
+|---|---|---|---|
+| Français | 21 réelles | **43** | 9 nouvelles fiches support en `draft` + fiches existantes |
+| Philosophie | **0** | **11** | rattachées aux 3 sujets actifs (`same_subject: false`) |
+| SES | **0** | **6** | rattachées à 5 sujets actifs |
+| HGGSP | **0** | **4** | rattachées à 4 sujets actifs |
+| Maths, histoire-géo, physique-chimie, SVT, HLP | 0 | **0** | rien de publié en ligne pour ces épreuves |
+
+Deux règles suivies pendant l'import :
+
+1. **Les deux sujets actifs du français n'ont reçu aucune copie.** Ils ont déjà
+   5 et 4 copies réelles entièrement décrites (forces, limites, erreurs), et le
+   moteur n'en retient que 4 : ajouter des fiches plus pauvres les aurait
+   évincées à un mois de la session. Le script refuse d'écrire sur un sujet
+   actif non déclaré receveur.
+2. **En philo, SES et HGGSP au contraire**, les sujets actifs n'avaient aucune
+   copie réelle : une vraie copie notée, même sans analyse rédigée, y vaut
+   mieux qu'un profil inventé. Le sujet réellement traité est dans
+   `card_json.support`, avec `same_subject: false`.
+
+Correction factuelle au passage : la fiche du commentaire techno portait
+« Jean-Claude Rognet » ; la source publique et le sujet 2025 donnent
+**Richard Rognet, Élégies pour le temps de vivre**.
+
+### Bilan des étalons
+
+503 étalons, dont **64 réels** (contre 21 le matin même) et 439 synthétiques.
+Quatre matières sur neuf ont désormais de vraies copies : français (43, 14→20),
+philosophie (11, 14→20), SES (6, 19→20), HGGSP (4, 15→20).

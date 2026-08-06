@@ -31,6 +31,8 @@ export const LABELS_MATIERES: Record<string, string> = {
 const LABELS_EXERCICES: Record<string, string> = {
   commentaire: 'Commentaire',
   dissertation: 'Dissertation',
+  contraction: 'Contraction de texte',
+  essai: 'Essai',
   epreuve_composee_partie_1: 'Épreuve composée — EC1',
   epreuve_composee_partie_2: 'Épreuve composée — EC2',
   epreuve_composee_partie_3: 'Épreuve composée — EC3',
