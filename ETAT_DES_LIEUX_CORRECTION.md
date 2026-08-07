@@ -15,6 +15,15 @@ Mis à jour le même jour après le chantier décrit en partie 9.
 >    corrections en direct, coûts estimés, retours des profs relecteurs.
 >    Voir `src/lib/pipelineEtat.ts` et `src/app/admin/correction/`.
 >
+> **⚠️ 7 août 2026 — la NOTE ne vient plus d'une grille de compétences.**
+>
+> Pour les **mathématiques** et la **physique-chimie**, la note sur 20 est
+> désormais produite par un **barème propre au sujet**, question par question,
+> verrouillé en version immuable. La grille générique de compétences reste, mais
+> elle produit un **diagnostic pédagogique**, plus la note. Tout ce que ce
+> fichier dit du calcul de la note ne vaut donc plus que pour les sept autres
+> matières. Voir **`GUIDE_BAREME_PAR_SUJET.md`** et **`/admin/bareme`**.
+>
 > **6 août 2026 — les deux trous structurels sont bouchés** (voir partie 10) :
 > la **voie technologique du français** est installée et visible (3 épreuves),
 > et les **21 étalons orphelins** sont rattachés — il n'en reste aucun. Il ne

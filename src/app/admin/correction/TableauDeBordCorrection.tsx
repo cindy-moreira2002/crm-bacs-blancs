@@ -449,6 +449,14 @@ export function TableauDeBordCorrection() {
           <div>
             <p className="text-sm text-purple-700 font-medium">Les Matinées du Bac · administration</p>
             <h1 className="text-3xl font-bold text-gray-900">Pilotage de la correction</h1>
+            <p className="text-sm text-gray-600 mt-1 max-w-2xl">
+              Cette page pilote les <strong>grilles de compétences</strong>, qui produisent le
+              diagnostic pédagogique. La <strong>note officielle</strong> d’un bac blanc, elle, vient
+              d’un barème propre au sujet :{' '}
+              <a href="/admin/bareme" className="text-purple-700 font-semibold underline">
+                Barèmes des bacs blancs →
+              </a>
+            </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-500">
             <span>à jour il y a {depuis} s</span>
