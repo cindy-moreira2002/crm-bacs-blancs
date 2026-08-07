@@ -12,8 +12,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AnomalieGlobale, SanteSysteme } from '@/lib/pipelineSante';
 
 const LIBELLES_CATEGORIES: Record<AnomalieGlobale['categorie'], string> = {
+  // En tête : c'est ici que se joue la note officielle des élèves.
+  bareme: '🎯 Barèmes des bacs blancs (la note officielle)',
   flux: '🎢 Tapis roulant des copies',
-  preparation: '📋 Préparation (barèmes, sujets, dossiers)',
+  preparation: '📋 Préparation (grilles de compétences, sujets, dossiers)',
   calibration: '⚖️ Calibration des notes (copies étalons)',
   config: '⚙️ Réglages',
   couverture: '🔭 Couverture de cette page',

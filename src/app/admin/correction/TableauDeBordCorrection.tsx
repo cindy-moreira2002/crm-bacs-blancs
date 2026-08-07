@@ -8,6 +8,7 @@
  * POST /api/admin/correction/statut.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { CorrectionLigne, MatiereEtat, RetourProf, SnapshotPipeline } from '@/lib/pipelineEtat';
 import { DetailMatiereVue } from './DetailMatiere';
 import { ExplicationPipeline } from './ExplicationPipeline';
@@ -85,6 +86,85 @@ function Interrupteur({
 
 // --- Check-list par matière ------------------------------------------
 
+/**
+ * La couche qui produit la NOTE : un bac blanc = un barème propre au sujet,
+ * verrouillé avant la première copie. Ce bandeau dit en un coup d'œil combien
+ * sont prêts, et surtout combien corrigent SANS avoir été calibrés.
+ */
+function BandeauBaremes({
+  b,
+  matieres,
+}: {
+  b: SnapshotPipeline['baremes'];
+  matieres: MatiereEtat[];
+}) {
+  const parBareme = matieres.filter((m) => m.moteur_note !== 'grille_generique');
+  const nonCalibres = matieres
+    .flatMap((m) => m.examens)
+    .filter((e) => e.statut === 'correction_open' && e.copies_comparees === 0);
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">🎯 La note officielle : les barèmes par sujet</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Un barème par bac blanc, question par question, verrouillé avant la première copie. C’est
+            lui — et lui seul — qui donne la note là où il existe.
+          </p>
+        </div>
+        <Link
+          href="/admin/bareme"
+          className="text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-full px-3 py-1.5 whitespace-nowrap"
+        >
+          Ouvrir les barèmes →
+        </Link>
+      </div>
+
+      {b.examens === 0 ? (
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          Aucun bac blanc n’a encore de barème propre. Toutes les notes viennent donc de la grille
+          générique de compétences de la matière — la même pour tous les sujets. C’est ce que le
+          chantier du 7 août 2026 remplace, matière par matière.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {[
+              { valeur: String(b.examens), legende: 'bacs blancs avec barème' },
+              { valeur: String(b.verrouilles), legende: 'barèmes verrouillés' },
+              { valeur: String(b.corrections_ouvertes), legende: 'corrections ouvertes' },
+              { valeur: String(b.etalons), legende: 'copies étalons' },
+              { valeur: String(b.copies_comparees), legende: 'copies comparées IA / profs' },
+            ].map((k) => (
+              <div key={k.legende} className="rounded-xl border border-gray-200 p-3">
+                <p className="text-xl font-bold text-gray-900">{k.valeur}</p>
+                <p className="text-[11px] text-gray-500 leading-tight mt-0.5">{k.legende}</p>
+              </div>
+            ))}
+          </div>
+
+          {nonCalibres.length > 0 && (
+            <p className="mt-3 text-xs text-red-800 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+              ⚠️ {nonCalibres.length} bac(s) blanc(s) corrigent des copies d’élèves sans qu’aucune
+              copie étalon n’ait été comparée : {nonCalibres.map((e) => e.titre).join(', ')}. Le
+              barème n’a jamais été confronté à un correcteur humain.
+            </p>
+          )}
+
+          {parBareme.length > 0 && (
+            <p className="mt-3 text-[11px] text-gray-500">
+              Notées par barème propre :{' '}
+              <strong>{parBareme.map((m) => m.label).join(', ')}</strong>. Les autres matières restent
+              notées par leur grille de compétences.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 function CarteMatiere({
   m,
   onStatut,
@@ -100,8 +180,26 @@ function CarteMatiere({
   const t = m.totaux;
   const etalonsReels = t.etalons - t.etalons_synthetiques;
 
+  // La couche 1 en premier : c'est elle qui donne la note.
+  const ouverts = m.examens.filter((e) => e.statut === 'correction_open');
+  const compares = m.examens.reduce((n, e) => n + e.copies_comparees, 0);
+
   const points: { ok: boolean; texte: string }[] = [
-    { ok: t.grilles_actives === t.grilles && t.grilles > 0, texte: `Barèmes actifs (${t.grilles_actives}/${t.grilles})` },
+    {
+      ok: m.examens.length > 0,
+      texte:
+        m.examens.length > 0
+          ? `${m.examens.length} bac(s) blanc(s) avec barème propre, dont ${ouverts.length} en correction`
+          : 'Aucun barème propre au sujet — la note vient encore de la grille de compétences',
+    },
+    {
+      ok: compares > 0,
+      texte:
+        compares > 0
+          ? `${compares} copie(s) étalon comparée(s) IA / professeurs`
+          : 'Barème jamais confronté à un correcteur humain (aucune copie comparée)',
+    },
+    { ok: t.grilles_actives === t.grilles && t.grilles > 0, texte: `Grilles de compétences actives (${t.grilles_actives}/${t.grilles})` },
     { ok: t.sujets_actifs > 0, texte: `Sujets visibles au dépôt (${t.sujets_actifs}/${t.sujets})` },
     { ok: t.gabarits_actifs === t.gabarits && t.gabarits > 0, texte: `Dossiers élève prêts (${t.gabarits_actifs}/${t.gabarits})` },
     {
@@ -128,6 +226,13 @@ function CarteMatiere({
             {m.visibilite === 'active' && <Pastille ton="vert">visible au dépôt</Pastille>}
             {m.visibilite === 'partielle' && <Pastille ton="orange">partiellement visible</Pastille>}
             {m.visibilite === 'draft' && <Pastille ton="gris">brouillon</Pastille>}
+            {/* D'où sort la note ici : c'est la question la plus importante
+                de cette carte, elle se lit donc au premier coup d'œil. */}
+            {m.moteur_note === 'bareme_sujet' && <Pastille ton="bleu">note : barème du sujet</Pastille>}
+            {m.moteur_note === 'mixte' && <Pastille ton="orange">note : barème + grille</Pastille>}
+            {m.moteur_note === 'grille_generique' && m.visibilite !== 'draft' && (
+              <Pastille ton="gris">note : grille de compétences</Pastille>
+            )}
           </div>
           {m.session ? (
             <p className="text-xs text-gray-500 mt-1">
@@ -162,7 +267,7 @@ function CarteMatiere({
         <div className="flex items-center gap-2">
           <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
             <div
-              className={`h-full rounded-full ${prets >= 6 ? 'bg-emerald-500' : prets >= 4 ? 'bg-amber-400' : 'bg-red-400'}`}
+              className={`h-full rounded-full ${prets >= points.length - 1 ? 'bg-emerald-500' : prets >= points.length - 3 ? 'bg-amber-400' : 'bg-red-400'}`}
               style={{ width: `${(prets / points.length) * 100}%` }}
             />
           </div>
@@ -191,6 +296,60 @@ function CarteMatiere({
               </li>
             ))}
           </ul>
+
+          {/* Les bacs blancs et leurs barèmes — la couche qui donne la note */}
+          {m.examens.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-700">Barèmes par sujet</p>
+              {m.examens.map((e) => (
+                <Link
+                  key={e.id}
+                  href={`/admin/bareme/${e.id}`}
+                  className="block bg-white rounded-xl border border-gray-200 p-3 hover:border-purple-300"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-gray-800 min-w-0 truncate">{e.titre}</p>
+                    {e.statut === 'correction_open' ? (
+                      <Pastille ton="vert">corrections ouvertes</Pastille>
+                    ) : e.statut_version === 'locked' ? (
+                      <Pastille ton="bleu">barème verrouillé</Pastille>
+                    ) : (
+                      <Pastille ton="gris">{e.statut}</Pastille>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Version {e.version ?? '—'} · {e.total_points ?? '—'} / {e.max_score ?? 20} points ·{' '}
+                    {e.etalons} étalon(s) · {e.copies} copie(s) notée(s)
+                  </p>
+                  {e.blocages > 0 && (
+                    <p className="text-[11px] text-red-700 mt-1">
+                      {e.blocages} blocage(s) : le barème ne peut pas être verrouillé.
+                    </p>
+                  )}
+                  {e.versions_utilisees > 1 && (
+                    <p className="text-[11px] text-red-700 mt-1">
+                      ⚠️ {e.versions_utilisees} versions de barème dans le même lot — deux élèves
+                      n’ont pas été notés pareil.
+                    </p>
+                  )}
+                  {e.copies_comparees === 0 ? (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      Calibration non réalisée : aucune copie étalon corrigée des deux côtés.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Calibration : {e.copies_comparees} copie(s) comparée(s), biais{' '}
+                      {e.biais_moyen !== null && e.biais_moyen > 0 ? '+' : ''}
+                      {e.biais_moyen ?? '—'}
+                      {e.biais_moyen !== null && Math.abs(e.biais_moyen) >= 1 && (
+                        <span className="text-amber-700 font-semibold"> — écart systématique, reprendre le barème</span>
+                      )}
+                    </p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
 
           {/* Épreuves et sujets, avec leurs interrupteurs fins */}
           <div className="space-y-2">
@@ -450,12 +609,11 @@ export function TableauDeBordCorrection() {
             <p className="text-sm text-purple-700 font-medium">Les Matinées du Bac · administration</p>
             <h1 className="text-3xl font-bold text-gray-900">Pilotage de la correction</h1>
             <p className="text-sm text-gray-600 mt-1 max-w-2xl">
-              Cette page pilote les <strong>grilles de compétences</strong>, qui produisent le
-              diagnostic pédagogique. La <strong>note officielle</strong> d’un bac blanc, elle, vient
-              d’un barème propre au sujet :{' '}
-              <a href="/admin/bareme" className="text-purple-700 font-semibold underline">
-                Barèmes des bacs blancs →
-              </a>
+              Deux couches, à ne pas confondre. La <strong>note officielle</strong> d’un bac blanc
+              vient de son <strong>barème propre au sujet</strong>, question par question. Les{' '}
+              <strong>grilles de compétences</strong> pilotées plus bas produisent le{' '}
+              <em>diagnostic pédagogique</em> — et la note, seulement pour les matières qui n’ont pas
+              encore de barème.
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -493,6 +651,9 @@ export function TableauDeBordCorrection() {
 
         {!matiereOuverte && (
         <>
+        {/* Couche 1 — la note officielle */}
+        <BandeauBaremes b={etat.baremes} matieres={etat.matieres} />
+
         {/* Synthèse */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[

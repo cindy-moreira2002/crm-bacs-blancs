@@ -11,9 +11,9 @@
  */
 import { pipelineDb, libelleSujet } from './pipeline';
 import { jetonRelecture } from './relecture';
-import { LABELS_MATIERES, labelExercice } from './pipelineEtat';
-import type { CorrectionLigne, RetourProf } from './pipelineEtat';
-import { echelleExpliquee, trierDiagnostics, verifierStructureMatiere } from './pipelineVerifs';
+import { LABELS_MATIERES, labelExercice, chargerExamens } from './pipelineEtat';
+import type { CorrectionLigne, RetourProf, ExamenEtat } from './pipelineEtat';
+import { echelleExpliquee, trierDiagnostics, verifierBaremes, verifierStructureMatiere } from './pipelineVerifs';
 import type { Diagnostic } from './pipelineVerifs';
 
 // --- Formes -----------------------------------------------------------
@@ -101,6 +101,8 @@ export type DetailMatiere = {
   matiere: string;
   label: string;
   genere_le: string;
+  /** Couche 1 : les bacs blancs de la matière et leur barème propre. */
+  baremes: ExamenEtat[];
   grilles: GrilleDetail[];
   sujets: SujetDetail[];
   gabarits: GabaritDetail[];
@@ -395,8 +397,13 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
     corrections_total: corrections.length,
     corrections_echecs: corrections.filter((cor) => cor.status.includes('failed')).length,
   });
+  // Couche 1 : les barèmes propres aux sujets. Ils passent AVANT la grille
+  // dans le tri, parce que c'est la note officielle qui s'y joue.
+  const baremes = (await chargerExamens()).get(matiere) ?? [];
+  diagnostics.unshift(...verifierBaremes(label, baremes));
+
   if (diagnostics.length === 0) {
-    diagnostics.push({ niveau: 'ok', texte: 'Rien à signaler : grilles, sujets, gabarits et étalons sont cohérents.' });
+    diagnostics.push({ niveau: 'ok', texte: 'Rien à signaler : barèmes, grilles, sujets, gabarits et étalons sont cohérents.' });
   }
   const diagnosticsTries = trierDiagnostics(diagnostics);
 
@@ -404,6 +411,7 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
     matiere,
     label,
     genere_le: new Date().toISOString(),
+    baremes,
     grilles,
     sujets,
     gabarits,

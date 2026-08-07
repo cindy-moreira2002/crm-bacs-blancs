@@ -9,6 +9,7 @@
  * Source : GET /api/admin/correction/matiere/[slug].
  */
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import type {
   DetailMatiere as Detail,
   Diagnostic,
@@ -16,6 +17,7 @@ import type {
   GrilleDetail,
   SujetDetail,
 } from '@/lib/pipelineDetail';
+import type { ExamenEtat } from '@/lib/pipelineEtat';
 
 function dateCourte(iso: string) {
   return new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -78,6 +80,86 @@ function BlocDiagnostics({ diags }: { diags: Diagnostic[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// --- Barèmes par sujet (couche 1) -------------------------------------
+
+/**
+ * Les bacs blancs de la matière et l'état de leur barème propre.
+ *
+ * Trois choses seulement, mais ce sont celles qui décident si des élèves
+ * peuvent être notés : le barème totalise-t-il 20, est-il verrouillé, et
+ * a-t-il été confronté à un correcteur humain ?
+ */
+function BlocBaremes({ baremes }: { baremes: ExamenEtat[] }) {
+  if (baremes.length === 0) {
+    return (
+      <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+        Aucun bac blanc de cette matière n’a de barème propre. La note vient donc de la grille
+        générique de compétences ci-dessous — la même pour tous les sujets.{' '}
+        <Link href="/admin/bareme" className="text-purple-700 font-semibold underline">
+          Créer un barème →
+        </Link>
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {baremes.map((e) => {
+        const totalOk =
+          e.total_points !== null && e.max_score !== null && Math.abs(e.total_points - e.max_score) < 0.001;
+        return (
+          <Link
+            key={e.id}
+            href={`/admin/bareme/${e.id}`}
+            className="block bg-white rounded-xl border border-gray-200 p-3 hover:border-purple-300"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="text-sm font-semibold text-gray-800">{e.titre}</p>
+              <span className="text-xs text-gray-500">
+                version {e.version ?? '—'} · {e.statut}
+              </span>
+            </div>
+            <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <p className={totalOk ? 'text-gray-600' : 'text-red-700 font-semibold'}>
+                Total {e.total_points ?? '—'} / {e.max_score ?? 20}
+              </p>
+              <p className={e.statut_version === 'locked' ? 'text-gray-600' : 'text-amber-700'}>
+                {e.statut_version === 'locked' ? 'Barème verrouillé' : 'Barème modifiable'}
+              </p>
+              <p className={e.etalons > 0 ? 'text-gray-600' : 'text-amber-700'}>
+                {e.etalons} copie(s) étalon
+              </p>
+              <p className="text-gray-600">{e.copies} copie(s) d’élève notée(s)</p>
+            </div>
+            {e.blocages > 0 && (
+              <p className="text-xs text-red-700 mt-2">
+                {e.blocages} blocage(s) : verrouillage impossible tant qu’ils sont là.
+              </p>
+            )}
+            {e.versions_utilisees > 1 && (
+              <p className="text-xs text-red-700 mt-1">
+                ⚠️ {e.versions_utilisees} versions de barème dans le même lot — deux élèves n’ont pas
+                été notés avec le même barème.
+              </p>
+            )}
+            <p className={`text-xs mt-1 ${e.copies_comparees === 0 ? 'text-amber-700' : 'text-gray-500'}`}>
+              {e.copies_comparees === 0
+                ? 'Calibration non réalisée : aucune copie corrigée à la fois par un prof et par le système.'
+                : `Calibration : ${e.copies_comparees} copie(s) comparée(s), biais moyen ${
+                    e.biais_moyen !== null && e.biais_moyen > 0 ? '+' : ''
+                  }${e.biais_moyen ?? '—'}${
+                    e.biais_moyen !== null && Math.abs(e.biais_moyen) >= 1
+                      ? ' — écart systématique, à corriger dans le barème pour toutes les copies'
+                      : ''
+                  }`}
+            </p>
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -369,8 +451,15 @@ export function DetailMatiereVue({
       </Section>
 
       <Section
-        titre={`Barèmes (${detail.grilles.length})`}
-        sousTitre="Cliquer un critère déplie ses paliers de notation ; la consigne correcteur est le system_prompt envoyé à l’IA."
+        titre={`Barèmes par sujet — la note officielle (${detail.baremes.length})`}
+        sousTitre="Un barème par bac blanc, question par question. Là où il existe, c’est lui — et lui seul — qui donne la note sur 20."
+      >
+        <BlocBaremes baremes={detail.baremes} />
+      </Section>
+
+      <Section
+        titre={`Grilles de compétences — le diagnostic (${detail.grilles.length})`}
+        sousTitre="Elles produisent le profil pédagogique de l’élève. Pour les matières sans barème propre, elles produisent encore la note. Cliquer un critère déplie ses paliers."
       >
         <div className="space-y-3">
           {detail.grilles.map((g) => (

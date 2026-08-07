@@ -15,10 +15,11 @@
  * (leçon du dépassement d'egress Supabase).
  */
 import { pipelineDb } from './pipeline';
-import { LABELS_MATIERES } from './pipelineEtat';
+import { LABELS_MATIERES, chargerExamens } from './pipelineEtat';
 import {
   echelleExpliquee,
   trierDiagnostics,
+  verifierBaremes,
   verifierStructureMatiere,
   type Diagnostic,
   type NiveauDiag,
@@ -90,6 +91,109 @@ export const TABLES_COUVERTES: FicheTable[] = [
     explication: 'Les réponses des profs relecteurs sur les barèmes et corrections de leur matière.',
     ou_voir: 'Retours des profs relecteurs + Vue matière',
   },
+  // --- Couche 1 : le barème propre au sujet, qui produit la NOTE -----
+  {
+    nom: 'exams',
+    titre: 'Bacs blancs (barème propre)',
+    explication: 'Un bac blanc précis avec son sujet, son corrigé et son barème. C’est lui qui produit la note officielle, question par question.',
+    ou_voir: '/admin/bareme',
+  },
+  {
+    nom: 'bareme_versions',
+    titre: 'Versions de barème',
+    explication: 'Une version immuable par barème (1.0, 1.1…). Une fois verrouillée, elle ne peut plus changer : c’est ce qui garantit que toutes les copies d’un lot sont notées pareil.',
+    ou_voir: '/admin/bareme → écran examen',
+  },
+  {
+    nom: 'bareme_exercices',
+    titre: 'Exercices du barème',
+    explication: 'Le découpage du sujet en exercices, pour l’ordre et les titres.',
+    ou_voir: '/admin/bareme → Éditeur de barème',
+  },
+  {
+    nom: 'bareme_questions',
+    titre: 'Questions du barème',
+    explication: 'Le cœur : une ligne par question, avec l’attendu, la démarche, les tolérances, les méthodes alternatives et les règles de poursuite après erreur.',
+    ou_voir: '/admin/bareme → Éditeur de barème',
+  },
+  {
+    nom: 'bareme_awards',
+    titre: 'Fractions de points',
+    explication: 'Les paliers attribuables à une question, au quart de point. Cumulables (ils s’additionnent) ou exclusifs (0,25 OU 0,5).',
+    ou_voir: '/admin/bareme → Éditeur de barème',
+  },
+  {
+    nom: 'competence_referentiels',
+    titre: 'Compétences par discipline',
+    explication: 'Les compétences suivies dans chaque matière. Celles marquées « pas toujours mobilisées » sortent en non_applicable quand le sujet ne les mobilise pas — jamais à zéro.',
+    ou_voir: 'Vue matière → Barèmes · posé par scripts/seed-referentiels.mjs',
+  },
+  {
+    nom: 'taxonomie_erreurs',
+    titre: 'Codes d’erreur par discipline',
+    explication: 'Les erreurs types, séparées en quatre familles : faute de l’élève, incident de transcription, incertitude de reconnaissance, anomalie du sujet.',
+    ou_voir: 'Vue matière → Barèmes · posé par scripts/seed-referentiels.mjs',
+  },
+  {
+    nom: 'etalon_copies',
+    titre: 'Copies étalons (barème)',
+    explication: 'Les copies qui servent à calibrer un barème avant son verrouillage. Distinctes des benchmark_cards, qui calent l’ancienne grille.',
+    ou_voir: '/admin/bareme → Copies étalons',
+  },
+  {
+    nom: 'etalon_corrections_humaines',
+    titre: 'Corrections humaines de référence',
+    explication: 'Une ligne PAR PROFESSEUR. Deux profs qui corrigent la même copie ne sont jamais fusionnés : c’est ce qui permet de dire honnêtement qu’ils ne sont pas d’accord.',
+    ou_voir: '/admin/bareme → Copies étalons',
+  },
+  {
+    nom: 'etalon_correction_humaine_questions',
+    titre: 'Détail humain par question',
+    explication: 'Les points que le professeur a mis, question par question.',
+    ou_voir: '/admin/bareme → Copies étalons',
+  },
+  {
+    nom: 'etalon_corrections_ia',
+    titre: 'Corrections IA des étalons',
+    explication: 'Ce que le système a mis sur la même copie et la même version de barème. La comparaison des deux est la calibration.',
+    ou_voir: '/admin/bareme → Calibration',
+  },
+  {
+    nom: 'calibration_runs',
+    titre: 'Tableaux de calibration figés',
+    explication: 'Une trace datée de ce que valait le barème un jour donné : écart moyen, biais, questions en désaccord.',
+    ou_voir: '/admin/bareme → Calibration → « Figer ce tableau »',
+  },
+  {
+    nom: 'correction_questions',
+    titre: 'Notes par question',
+    explication: 'Le détail d’une copie corrigée : points, éléments observés et manquants, erreurs, citations, incertitudes. La note de la copie en est la somme.',
+    ou_voir: 'Corrections en direct → dossier de la copie',
+  },
+  {
+    nom: 'correction_competences',
+    titre: 'Profils de compétences',
+    explication: 'Le diagnostic pédagogique d’une copie. Aucune fonction ne le fait remonter vers la note — c’est vérifié par les tests.',
+    ou_voir: 'Corrections en direct → dossier de la copie',
+  },
+  {
+    nom: 'relectures_humaines',
+    titre: 'Demandes de relecture',
+    explication: 'Une ligne par motif de doute : transcription incertaine, méthode non prévue, justification introuvable, anomalie du sujet…',
+    ou_voir: 'Corrections en direct (copies marquées ⚑)',
+  },
+  {
+    nom: 'bareme_audit',
+    titre: 'Historique des barèmes',
+    explication: 'Trace non destructive des verrouillages, nouvelles versions et recalculs de lots. Rien n’y est jamais écrasé.',
+    ou_voir: 'Consultable en base — jamais purgé',
+  },
+  {
+    nom: 'vue_versions_par_examen',
+    titre: 'Versions employées par lot',
+    explication: 'Vue de contrôle : plusieurs lignes pour un même examen = plusieurs versions de barème dans le même lot, donc des élèves notés différemment.',
+    ou_voir: 'Anomalies (mélange de versions)',
+  },
   {
     nom: 'transcription_profiles',
     titre: 'Profils de transcription',
@@ -113,9 +217,10 @@ export type LigneInventaire = FicheTable & { lignes: number };
 export type LigneBucket = FicheBucket & { objets: number; partiel: boolean };
 
 export type AnomalieGlobale = Diagnostic & {
-  /** flux = tapis roulant des copies ; preparation = barèmes/sujets/gabarits ;
-   *  calibration = étalons ; config = profils & co ; couverture = inventaire. */
-  categorie: 'flux' | 'preparation' | 'calibration' | 'config' | 'couverture';
+  /** bareme = la couche qui produit la note ; flux = tapis roulant des copies ;
+   *  preparation = grilles/sujets/gabarits ; calibration = étalons ;
+   *  config = profils & co ; couverture = inventaire. */
+  categorie: 'bareme' | 'flux' | 'preparation' | 'calibration' | 'config' | 'couverture';
   matiere?: string;
   matiere_label?: string;
 };
@@ -233,7 +338,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
   type DossierRow = { correction_id: string };
   type ProfilRow = { matiere: string; status: string };
 
-  const [nomsTables, buckets, rubRes, sujRes, tplRes, benchRes, corrRes, dossierRes, profilsRes, retoursN] =
+  const [nomsTables, buckets, rubRes, sujRes, tplRes, benchRes, corrRes, dossierRes, profilsRes, retoursN, examensParMatiere] =
     await Promise.all([
       tablesReelles(),
       bucketsReels(),
@@ -245,6 +350,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
       db.from('dossiers').select('correction_id').limit(2000),
       db.from('transcription_profiles').select('matiere, status'),
       compterTable('relecture_feedback'),
+      chargerExamens(),
     ]);
   for (const r of [rubRes, sujRes, tplRes, benchRes, corrRes, dossierRes, profilsRes]) {
     if (r.error) throw new Error(r.error.message ?? 'Lecture pipeline impossible');
@@ -457,6 +563,14 @@ export async function chargerSante(): Promise<SanteSysteme> {
       if (d.texte.includes('correction(s) en échec')) continue;
       const categorie = d.texte.includes('étalon') ? 'calibration' : 'preparation';
       ajouter(categorie, d.niveau, d.texte, { piste: d.piste, matiere });
+    }
+  }
+
+  // Couche 1 : les barèmes propres aux sujets. C'est la note officielle qui
+  // se joue ici — ces anomalies passent donc avant celles de la grille.
+  for (const [matiere, examens] of examensParMatiere.entries()) {
+    for (const d of verifierBaremes(LABELS_MATIERES[matiere] ?? matiere, examens)) {
+      ajouter('bareme', d.niveau, d.texte, { piste: d.piste, matiere });
     }
   }
 

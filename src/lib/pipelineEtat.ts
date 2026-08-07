@@ -4,15 +4,22 @@
  *
  * ⚠️ SERVEUR UNIQUEMENT — lit la base pipeline avec la clé service_role.
  *
- * Tout part de quatre tables du projet pipeline (xgdaibekjmtffvkwvcge) :
- * rubrics (barèmes), subject_cards (sujets), dossier_templates (gabarits du
- * dossier élève), benchmark_cards (copies étalons qui calent l'échelle de
- * notes). S'y ajoutent les corrections lancées, les retours des profs
- * relecteurs et — quand la base CRM répond — les sessions vendues, pour
- * mettre les dates en face de l'état de préparation.
+ * Deux couches y sont lues côte à côte, et il ne faut jamais les confondre.
+ *
+ * • La couche qui produit la NOTE : exams + bareme_versions + bareme_questions,
+ *   un barème propre à chaque bac blanc, question par question. C'est elle qui
+ *   fait foi partout où elle existe (maths, physique-chimie).
+ * • La couche de DIAGNOSTIC : rubrics (grilles de compétences), subject_cards,
+ *   dossier_templates, benchmark_cards. Elle produit encore la note pour les
+ *   matières non migrées, et seulement le profil pédagogique pour les autres.
+ *
+ * S'y ajoutent les corrections lancées, les retours des profs relecteurs et —
+ * quand la base CRM répond — les sessions vendues, pour mettre les dates en
+ * face de l'état de préparation.
  */
 import { crmAdmin, authManquant } from './authProf';
 import { pipelineDb, libelleSujet } from './pipeline';
+import type { StructExamen } from './pipelineVerifs';
 
 // --- Libellés ---------------------------------------------------------
 // Ils vivent dans matieres.ts, sans aucun import : un composant client peut
@@ -58,11 +65,27 @@ export type SessionVendue = {
   statut: string | null;
 };
 
+/**
+ * Un bac blanc et son barème propre — la couche qui produit la NOTE.
+ * Voir StructExamen dans pipelineVerifs.ts : c'est la même forme, pour que
+ * les diagnostics s'appliquent sans conversion.
+ */
+export type ExamenEtat = StructExamen & { date_epreuve: string | null };
+
 export type MatiereEtat = {
   matiere: string;
   label: string;
   session: SessionVendue | null;
   exercices: ExerciceEtat[];
+  /** Les bacs blancs de la matière qui ont un barème propre. */
+  examens: ExamenEtat[];
+  /**
+   * D'où sort la note dans cette matière :
+   *   grille_generique — la grille de compétences, comme avant ;
+   *   bareme_sujet     — un barème propre au sujet, question par question ;
+   *   mixte            — les deux coexistent (migration en cours).
+   */
+  moteur_note: 'grille_generique' | 'bareme_sujet' | 'mixte';
   totaux: {
     grilles_actives: number;
     grilles: number;
@@ -120,11 +143,118 @@ export type SnapshotPipeline = {
   alertes: string[];
   etalons_orphelins: number;
   sessions_disponibles: boolean;
+  /** Couche 1 — les bacs blancs qui ont un barème propre, toutes matières. */
+  baremes: {
+    examens: number;
+    corrections_ouvertes: number;
+    verrouilles: number;
+    copies: number;
+    etalons: number;
+    copies_comparees: number;
+  };
 };
 
 // --- Collecte ---------------------------------------------------------
 
 const USD_PAR_COPIE = 0.22;
+
+/**
+ * La couche 1 : un examen, sa version de barème affichée, l'état de sa
+ * calibration et les copies déjà notées avec lui.
+ *
+ * Les tables peuvent ne pas exister sur un déploiement antérieur au chantier
+ * du 7 août 2026 : on dégrade en liste vide plutôt que de casser la page de
+ * pilotage entière.
+ */
+export async function chargerExamens(): Promise<Map<string, ExamenEtat[]>> {
+  const db = pipelineDb();
+  const parMatiere = new Map<string, ExamenEtat[]>();
+
+  const { data: exams, error } = await db
+    .from('exams')
+    .select('id, code, matiere, titre, statut, date_epreuve, bareme_version_active')
+    .order('date_epreuve', { ascending: true, nullsFirst: false });
+  if (error || !exams?.length) return parMatiere;
+
+  type Exam = {
+    id: string; code: string; matiere: string; titre: string; statut: string;
+    date_epreuve: string | null; bareme_version_active: string | null;
+  };
+  type Version = {
+    id: string; exam_id: string; version: string; statut: string;
+    total_points: number; max_score: number; cree_le: string;
+    controles: { blocages?: unknown[] } | null;
+  };
+
+  const [versionsRes, etalonsRes, corrRes] = await Promise.all([
+    db.from('bareme_versions').select('id, exam_id, version, statut, total_points, max_score, cree_le, controles').order('cree_le'),
+    db.from('etalon_copies').select('id, exam_id'),
+    db.from('corrections').select('id, exam_id, bareme_version_id').eq('moteur', 'bareme_sujet').eq('est_etalon', false),
+  ]);
+
+  const versions = (versionsRes.data ?? []) as Version[];
+  const etalons = (etalonsRes.data ?? []) as { id: string; exam_id: string }[];
+  const copies = (corrRes.data ?? []) as { exam_id: string | null; bareme_version_id: string | null }[];
+
+  const idsEtalons = etalons.map((e) => e.id);
+  const [humainesRes, iasRes] = idsEtalons.length
+    ? await Promise.all([
+        db.from('etalon_corrections_humaines').select('etalon_copie_id, bareme_version_id, note_totale').in('etalon_copie_id', idsEtalons),
+        db.from('etalon_corrections_ia').select('etalon_copie_id, bareme_version_id, note_brute').in('etalon_copie_id', idsEtalons),
+      ])
+    : [{ data: [] }, { data: [] }];
+
+  const humaines = (humainesRes.data ?? []) as { etalon_copie_id: string; bareme_version_id: string; note_totale: number }[];
+  const ias = (iasRes.data ?? []) as { etalon_copie_id: string; bareme_version_id: string; note_brute: number | null }[];
+
+  for (const e of exams as Exam[]) {
+    const siennes = versions.filter((v) => v.exam_id === e.id);
+    // La version active, sinon la plus récente : un examen en préparation n'a
+    // pas encore d'active, et il faut quand même voir où en est son barème.
+    const version = siennes.find((v) => v.id === e.bareme_version_active) ?? siennes[siennes.length - 1] ?? null;
+
+    const mesEtalons = etalons.filter((x) => x.exam_id === e.id).map((x) => x.id);
+    const mesCopies = copies.filter((c) => c.exam_id === e.id);
+
+    // La calibration ne compare que ce qui a été noté avec LA MÊME version.
+    const ecarts: number[] = [];
+    if (version) {
+      for (const id of mesEtalons) {
+        const notes = humaines
+          .filter((h) => h.etalon_copie_id === id && h.bareme_version_id === version.id)
+          .map((h) => Number(h.note_totale));
+        const ia = ias.find((i) => i.etalon_copie_id === id && i.bareme_version_id === version.id);
+        if (!notes.length || !ia || ia.note_brute === null) continue;
+        ecarts.push(Number(ia.note_brute) - notes.reduce((a, b) => a + b, 0) / notes.length);
+      }
+    }
+
+    const ligne: ExamenEtat = {
+      id: e.id,
+      code: e.code,
+      titre: e.titre,
+      statut: e.statut,
+      date_epreuve: e.date_epreuve,
+      version: version?.version ?? null,
+      statut_version: version?.statut ?? null,
+      total_points: version ? Number(version.total_points) : null,
+      max_score: version ? Number(version.max_score) : null,
+      blocages: (version?.controles?.blocages ?? []).length,
+      etalons: mesEtalons.length,
+      corrections_humaines: humaines.filter((h) => mesEtalons.includes(h.etalon_copie_id)).length,
+      copies_comparees: ecarts.length,
+      biais_moyen: ecarts.length ? Math.round((ecarts.reduce((a, b) => a + b, 0) / ecarts.length) * 100) / 100 : null,
+      copies: mesCopies.length,
+      versions_utilisees: new Set(mesCopies.map((c) => c.bareme_version_id ?? 'sans')).size,
+    };
+
+    const liste = parMatiere.get(e.matiere) ?? [];
+    liste.push(ligne);
+    parMatiere.set(e.matiere, liste);
+  }
+
+  return parMatiere;
+}
 
 async function compterCorrections(depuisJours: number | null): Promise<number> {
   const db = pipelineDb();
@@ -167,7 +297,7 @@ async function chargerSessions(): Promise<Map<string, SessionVendue> | null> {
 export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
   const db = pipelineDb();
 
-  const [rubRes, sujRes, tplRes, benchRes, corrRes, retoursRes, sessions, c7, c30, cTot] =
+  const [rubRes, sujRes, tplRes, benchRes, corrRes, retoursRes, sessions, examensParMatiere, c7, c30, cTot] =
     await Promise.all([
       db.from('rubrics').select('id, matiere, track, exercise_type, status, version'),
       db.from('subject_cards').select('id, matiere, track, exercise_type, status, card_json'),
@@ -185,6 +315,7 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
         .limit(60),
       db.from('relecture_feedback').select('*').order('created_at', { ascending: false }).limit(200),
       chargerSessions(),
+      chargerExamens(),
       compterCorrections(7),
       compterCorrections(30),
       compterCorrections(null),
@@ -283,6 +414,12 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
     parMatiere.set(ex.matiere, liste);
   }
 
+  // Une matiere peut n'avoir qu'un bareme propre, sans aucune grille generique :
+  // sans cette boucle, elle serait invisible dans le pilotage.
+  for (const matiere of examensParMatiere?.keys() ?? []) {
+    if (!parMatiere.has(matiere)) parMatiere.set(matiere, []);
+  }
+
   const matieres: MatiereEtat[] = [...parMatiere.entries()]
     .map(([matiere, exs]) => {
       exs.sort((a, b) => a.label.localeCompare(b.label, 'fr'));
@@ -306,11 +443,23 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
       const total = totaux.grilles + totaux.sujets + totaux.gabarits;
       const visibilite: MatiereEtat['visibilite'] =
         actifs === 0 ? 'draft' : actifs === total ? 'active' : 'partielle';
+
+      // D'ou sort la note ici ? Un examen dont les corrections sont ouvertes
+      // note par son bareme ; les sujets encore servis par la grille generique
+      // notent par elle. Les deux peuvent coexister pendant la migration.
+      const examens = examensParMatiere?.get(matiere) ?? [];
+      const parBareme = examens.some((e) => e.statut === 'correction_open');
+      const parGrille = totaux.sujets_actifs > 0;
+      const moteur_note: MatiereEtat['moteur_note'] =
+        parBareme && parGrille ? 'mixte' : parBareme ? 'bareme_sujet' : 'grille_generique';
+
       return {
         matiere,
         label: LABELS_MATIERES[matiere] ?? matiere,
         session: sessions?.get(matiere) ?? null,
         exercices: exs,
+        examens,
+        moteur_note,
         totaux,
         visibilite,
       };
@@ -356,6 +505,38 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
     alertes.push('Base CRM injoignable d’ici : dates de sessions non affichées.');
   }
 
+  // --- Couche 1 : les barèmes propres aux sujets ----------------------
+  const tousExamens = matieres.flatMap((m) => m.examens);
+  for (const e of tousExamens) {
+    if (e.versions_utilisees > 1) {
+      alertes.push(
+        `« ${e.titre} » : ${e.copies} copies corrigées avec ${e.versions_utilisees} versions de barème différentes — deux élèves n'ont pas été notés pareil.`,
+      );
+    }
+    if (e.statut === 'correction_open' && e.statut_version !== 'locked') {
+      alertes.push(`« ${e.titre} » accepte des copies alors que son barème n'est pas verrouillé.`);
+    }
+    if (e.statut === 'correction_open' && e.copies_comparees === 0) {
+      alertes.push(
+        `« ${e.titre} » corrige des copies d'élèves sans qu'aucune copie étalon n'ait été comparée : le barème n'a jamais été confronté à un correcteur humain.`,
+      );
+    }
+    if (e.biais_moyen !== null && Math.abs(e.biais_moyen) >= 1) {
+      alertes.push(
+        `« ${e.titre} » : écart systématique de ${e.biais_moyen > 0 ? '+' : ''}${e.biais_moyen} point(s) entre l'IA et les professeurs — à corriger dans le barème, pour toutes les copies.`,
+      );
+    }
+  }
+
+  const baremes = {
+    examens: tousExamens.length,
+    corrections_ouvertes: tousExamens.filter((e) => e.statut === 'correction_open').length,
+    verrouilles: tousExamens.filter((e) => e.statut_version === 'locked').length,
+    copies: tousExamens.reduce((n, e) => n + e.copies, 0),
+    etalons: tousExamens.reduce((n, e) => n + e.etalons, 0),
+    copies_comparees: tousExamens.reduce((n, e) => n + e.copies_comparees, 0),
+  };
+
   return {
     genere_le: new Date().toISOString(),
     matieres,
@@ -370,5 +551,6 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
     alertes,
     etalons_orphelins: orphelins,
     sessions_disponibles: Boolean(sessions),
+    baremes,
   };
 }
