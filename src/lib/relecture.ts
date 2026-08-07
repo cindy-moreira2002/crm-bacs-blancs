@@ -110,6 +110,47 @@ export type ExempleCorrige = {
   pagesCopie: string[];
 };
 
+/** Un barème propre au sujet, tel que le relecteur doit le voir. */
+export type BaremeRelecture = {
+  examId: string;
+  examTitre: string;
+  examStatut: string;
+  version: string;
+  statutVersion: string;
+  totalPoints: number;
+  maxScore: number;
+  verrouille: boolean;
+  questions: {
+    question_key: string;
+    numero: string;
+    libelle: string;
+    partie: string | null;
+    max_points: number;
+    reponse_attendue: string | null;
+    raisonnement_attendu: string | null;
+    etapes: { libelle: string }[];
+    methodes_alternatives: { libelle: string }[];
+    tolerances: string | null;
+    competences: string[];
+    depend_de: string[];
+    regle_poursuite: string | null;
+    regle_resultat_sans_justification: string | null;
+    regle_raisonnement_juste_calcul_faux: string | null;
+    criteres_relecture_humaine: string | null;
+    paliers: { libelle: string; points: number; cumulable: boolean; nature: string }[];
+  }[];
+  competences: { code: string; libelle: string; description: string | null; toujours_mobilisee: boolean }[];
+  /** État réel de la calibration : c'est ce qui décide de ce que la page ose affirmer. */
+  calibration: {
+    etalons: number;
+    corrections_humaines: number;
+    corrections_ia: number;
+    copies_comparees: number;
+    biais_moyen: number | null;
+    ecart_absolu_moyen: number | null;
+  };
+};
+
 export type DonneesRelecture = {
   matiere: string;
   grilles: Grille[];
@@ -117,6 +158,16 @@ export type DonneesRelecture = {
   exemple: ExempleCorrige | null;
   /** Autres corrections consultables (dossier élève), ex. la dissertation. */
   autresExemples: { correctionId: string; exerciseType: string; noteFinale: number; bareme: number }[];
+  /** Barèmes propres aux sujets de cette matière. Vide tant qu'aucun n'existe. */
+  baremes: BaremeRelecture[];
+  /** Nouvelle taxonomie interrogeable, séparant erreur d'élève et incident technique. */
+  taxonomieDiscipline: {
+    code: string;
+    description: string;
+    gravite: string;
+    nature: string;
+    domaine: string | null;
+  }[];
 };
 
 /**
@@ -245,5 +296,165 @@ export async function chargerDonneesRelecture(matiere: string): Promise<DonneesR
     exemple.pagesCopie = (pages ?? []).map((p) => p.text ?? '').filter(Boolean);
   }
 
-  return { matiere, grilles: grilles as Grille[], taxonomie: taxonomie ?? [], exemple, autresExemples };
+  return {
+    matiere,
+    grilles: grilles as Grille[],
+    taxonomie: taxonomie ?? [],
+    exemple,
+    autresExemples,
+    baremes: await chargerBaremesRelecture(db, matiere),
+    taxonomieDiscipline: await chargerTaxonomieDiscipline(db, matiere),
+  };
+}
+
+/**
+ * Les barèmes propres aux sujets de la matière, avec l'état RÉEL de leur
+ * calibration.
+ *
+ * C'est ce dernier point qui compte pour la page de relecture : tant qu'aucune
+ * copie étalon n'a été corrigée des deux côtés, on n'a pas le droit de
+ * présenter le système comme validé, ni de demander à un professeur si « la
+ * note est juste » — il n'y a rien à juger.
+ */
+async function chargerBaremesRelecture(
+  db: ReturnType<typeof pipelineDb>,
+  matiere: string,
+): Promise<BaremeRelecture[]> {
+  const { data: examens, error } = await db
+    .from('exams')
+    .select('id, titre, statut, bareme_version_active')
+    .eq('matiere', matiere)
+    .neq('statut', 'archived')
+    .order('date_epreuve', { ascending: true, nullsFirst: false });
+  // Les tables du barème par sujet peuvent ne pas exister sur un ancien
+  // déploiement : on dégrade au lieu de casser la page du relecteur.
+  if (error || !examens?.length) return [];
+
+  const { data: competences } = await db
+    .from('competence_referentiels')
+    .select('code, libelle, description, toujours_mobilisee')
+    .eq('matiere', matiere)
+    .order('ordre');
+
+  const baremes: BaremeRelecture[] = [];
+
+  for (const e of examens as { id: string; titre: string; statut: string; bareme_version_active: string | null }[]) {
+    // Faute de version active, on montre la plus récente : le relecteur doit
+    // pouvoir relire un barème encore en brouillon, c'est même le but.
+    let versionId = e.bareme_version_active;
+    if (!versionId) {
+      const { data } = await db
+        .from('bareme_versions')
+        .select('id')
+        .eq('exam_id', e.id)
+        .order('cree_le', { ascending: false })
+        .limit(1);
+      versionId = (data ?? [])[0]?.id ?? null;
+    }
+    if (!versionId) continue;
+
+    const [{ data: version }, { data: questions }, { data: etalons }] = await Promise.all([
+      db.from('bareme_versions').select('*').eq('id', versionId).maybeSingle(),
+      db.from('bareme_questions').select('*').eq('bareme_version_id', versionId).order('ordre'),
+      db.from('etalon_copies').select('id').eq('exam_id', e.id),
+    ]);
+    if (!version) continue;
+
+    const ids = ((questions ?? []) as { id: string }[]).map((q) => q.id);
+    const { data: paliers } = ids.length
+      ? await db.from('bareme_awards').select('*').in('question_id', ids).order('ordre')
+      : { data: [] };
+
+    const etalonIds = ((etalons ?? []) as { id: string }[]).map((x) => x.id);
+    const [{ data: humaines }, { data: ias }] = etalonIds.length
+      ? await Promise.all([
+          db.from('etalon_corrections_humaines')
+            .select('etalon_copie_id, note_totale')
+            .in('etalon_copie_id', etalonIds)
+            .eq('bareme_version_id', versionId),
+          db.from('etalon_corrections_ia')
+            .select('etalon_copie_id, note_brute')
+            .in('etalon_copie_id', etalonIds)
+            .eq('bareme_version_id', versionId),
+        ])
+      : [{ data: [] }, { data: [] }];
+
+    const parCopieHumain = new Map<string, number[]>();
+    for (const h of (humaines ?? []) as { etalon_copie_id: string; note_totale: number }[]) {
+      const l = parCopieHumain.get(h.etalon_copie_id) ?? [];
+      l.push(Number(h.note_totale));
+      parCopieHumain.set(h.etalon_copie_id, l);
+    }
+    const ecarts: number[] = [];
+    for (const i of (ias ?? []) as { etalon_copie_id: string; note_brute: number | null }[]) {
+      const notes = parCopieHumain.get(i.etalon_copie_id);
+      if (!notes?.length || i.note_brute === null) continue;
+      ecarts.push(Number(i.note_brute) - notes.reduce((a, b) => a + b, 0) / notes.length);
+    }
+    const moy = (t: number[]) =>
+      t.length ? Math.round((t.reduce((a, b) => a + b, 0) / t.length) * 100) / 100 : null;
+
+    const v = version as { version: string; statut: string; total_points: number; max_score: number };
+    baremes.push({
+      examId: e.id,
+      examTitre: e.titre,
+      examStatut: e.statut,
+      version: v.version,
+      statutVersion: v.statut,
+      totalPoints: Number(v.total_points),
+      maxScore: Number(v.max_score),
+      verrouille: v.statut === 'locked',
+      questions: ((questions ?? []) as Record<string, unknown>[]).map((q) => ({
+        question_key: String(q.question_key),
+        numero: String(q.numero),
+        libelle: String(q.libelle ?? ''),
+        partie: (q.partie as string) ?? null,
+        max_points: Number(q.max_points),
+        reponse_attendue: (q.reponse_attendue as string) ?? null,
+        raisonnement_attendu: (q.raisonnement_attendu as string) ?? null,
+        etapes: (q.etapes as { libelle: string }[]) ?? [],
+        methodes_alternatives: (q.methodes_alternatives as { libelle: string }[]) ?? [],
+        tolerances: (q.tolerances as string) ?? null,
+        competences: (q.competences as string[]) ?? [],
+        depend_de: (q.depend_de as string[]) ?? [],
+        regle_poursuite: (q.regle_poursuite as string) ?? null,
+        regle_resultat_sans_justification: (q.regle_resultat_sans_justification as string) ?? null,
+        regle_raisonnement_juste_calcul_faux: (q.regle_raisonnement_juste_calcul_faux as string) ?? null,
+        criteres_relecture_humaine: (q.criteres_relecture_humaine as string) ?? null,
+        paliers: ((paliers ?? []) as Record<string, unknown>[])
+          .filter((p) => p.question_id === q.id)
+          .map((p) => ({
+            libelle: String(p.libelle),
+            points: Number(p.points),
+            cumulable: p.cumulable === true,
+            nature: String(p.nature),
+          })),
+      })),
+      competences: (competences ?? []) as BaremeRelecture['competences'],
+      calibration: {
+        etalons: etalonIds.length,
+        corrections_humaines: (humaines ?? []).length,
+        corrections_ia: (ias ?? []).length,
+        copies_comparees: ecarts.length,
+        biais_moyen: moy(ecarts),
+        ecart_absolu_moyen: moy(ecarts.map(Math.abs)),
+      },
+    });
+  }
+
+  return baremes;
+}
+
+async function chargerTaxonomieDiscipline(
+  db: ReturnType<typeof pipelineDb>,
+  matiere: string,
+): Promise<DonneesRelecture['taxonomieDiscipline']> {
+  const { data, error } = await db
+    .from('taxonomie_erreurs')
+    .select('code, description, gravite, nature, domaine')
+    .eq('matiere', matiere)
+    .order('nature')
+    .order('code');
+  if (error) return [];
+  return (data ?? []) as DonneesRelecture['taxonomieDiscipline'];
 }

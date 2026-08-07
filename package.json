@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test:emails": "tsx scripts/test-emails.ts",
-    "apercu:emails": "tsx scripts/apercu-emails.ts"
+    "test:bareme": "tsx scripts/test-bareme.ts",
+    "test:bareme:supabase": "node scripts/test-bareme-supabase.mjs",
+    "apercu:emails": "tsx scripts/apercu-emails.ts",
+    "test:hggsp": "node --test scripts/test-hggsp.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
