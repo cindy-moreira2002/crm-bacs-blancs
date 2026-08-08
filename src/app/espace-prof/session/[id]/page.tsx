@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { SessionProf } from '@/components/SessionProf';
+import { SujetEtRetour } from '@/components/SujetEtRetour';
 import { profCourant } from '@/lib/authProf';
 import {
   chargerElevesSession,
@@ -31,6 +32,9 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           dateLisible={dateLongue(session.date_epreuve)}
           creneau={creneau(session)}
         />
+        {/* Le sujet de l'épreuve, puis le questionnaire de fin de session.
+            Le composant ne montre rien si le prof n'est pas assigné. */}
+        <SujetEtRetour sessionId={session.id} />
       </div>
     </div>
   );
