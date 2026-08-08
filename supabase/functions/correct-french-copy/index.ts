@@ -287,6 +287,9 @@ type BenchmarkRow = {
   error_codes: string[] | null;
   card_json: Record<string, unknown>;
   validation_status: string;
+  subject_id?: string | null;
+  /** Renseigne par la fonction : l'etalon porte-t-il sur le sujet corrige ? */
+  meme_sujet?: boolean;
 };
 
 function selectBenchmarks(rows: BenchmarkRow[]): BenchmarkRow[] {
@@ -438,7 +441,7 @@ Deno.serve(async (req: Request) => {
       supabase.from("subject_cards").select("*").eq("id", correction.subject_id).single(),
       supabase
         .from("benchmark_cards")
-        .select("id, score, error_codes, card_json, validation_status")
+        .select("id, score, error_codes, card_json, validation_status, subject_id")
         .eq("track", correction.track)
         .eq("exercise_type", correction.exercise_type)
         .eq("subject_id", correction.subject_id)
@@ -484,9 +487,64 @@ Deno.serve(async (req: Request) => {
       ? taxonomieDeLaGrille
       : (errorsResult.data ?? []);
 
-    const benchmarks = selectBenchmarks((benchmarkResult.data ?? []) as BenchmarkRow[]);
+    // --- Étalons -------------------------------------------------------
+    //
+    // Un étalon sert à situer un NIVEAU, pas à comparer deux copies sur le
+    // même texte : le sujet d'un bac blanc est presque toujours inédit,
+    // alors que les copies de référence, elles, ne changent pas. Exiger
+    // trois étalons portant exactement le même subject_id revenait donc à
+    // rendre incorrigible tout sujet nouveau — c'est-à-dire tous.
+    //
+    // On garde la priorité au même sujet quand il en a (comparaison la plus
+    // juste), puis on complète avec les étalons de la MÊME épreuve, dans la
+    // MÊME matière et la MÊME filière. Chaque étalon dit ensuite au
+    // correcteur, par meme_sujet, s'il porte ou non sur le sujet corrigé.
+    const etalonsMemeSujet = ((benchmarkResult.data ?? []) as BenchmarkRow[]).map((b) => ({
+      ...b,
+      meme_sujet: true,
+    }));
+
+    const matiereCorrigee = (correction.matiere as string | null) ??
+      (subjectResult.data.matiere as string | null);
+
+    let etalonsAutresSujets: BenchmarkRow[] = [];
+    if (etalonsMemeSujet.length < 4 && matiereCorrigee) {
+      const { data: sujetsFreres } = await supabase
+        .from("subject_cards")
+        .select("id")
+        .eq("matiere", matiereCorrigee)
+        .eq("track", correction.track)
+        .eq("exercise_type", correction.exercise_type);
+
+      const idsFreres = (sujetsFreres ?? [])
+        .map((s: { id: string }) => s.id)
+        .filter((id: string) => id !== correction.subject_id);
+
+      if (idsFreres.length) {
+        const { data: autres } = await supabase
+          .from("benchmark_cards")
+          .select("id, score, error_codes, card_json, validation_status, subject_id")
+          .in("subject_id", idsFreres)
+          .eq("track", correction.track)
+          .eq("exercise_type", correction.exercise_type)
+          .in("validation_status", ["validated", "candidate"]);
+        etalonsAutresSujets = ((autres ?? []) as BenchmarkRow[])
+          .filter((b) => b.score !== null)
+          .map((b) => ({ ...b, meme_sujet: false }));
+      }
+    }
+
+    const benchmarks = selectBenchmarks(etalonsMemeSujet);
+    if (benchmarks.length < 4 && etalonsAutresSujets.length) {
+      for (const complement of selectBenchmarks(etalonsAutresSujets)) {
+        if (benchmarks.length >= 4) break;
+        if (!benchmarks.some((b) => b.id === complement.id)) benchmarks.push(complement);
+      }
+    }
     if (benchmarks.length < 3) {
-      throw new Error("Moins de trois copies étalons sont reliées à ce sujet.");
+      throw new Error(
+        "Moins de trois copies étalons disponibles : ni pour ce sujet, ni pour cette épreuve dans cette matière et cette filière.",
+      );
     }
 
     await supabase
@@ -498,6 +556,9 @@ Deno.serve(async (req: Request) => {
       rubric: rubricResult.data.rubric_json,
       subject: subjectResult.data.card_json,
       benchmarks,
+      benchmarks_mode: benchmarks.every((b) => b.meme_sujet)
+        ? "Tous les etalons portent sur le sujet corrige."
+        : "Certains etalons portent sur un AUTRE sujet de la meme epreuve (meme_sujet vaut false, et card_json.support dit lequel). Ils servent a situer un NIVEAU, jamais a comparer les contenus : ne reproche jamais a l'eleve de ne pas avoir traite ce que traite un etalon d'un autre sujet.",
       error_taxonomy: errorTaxonomy,
     };
 

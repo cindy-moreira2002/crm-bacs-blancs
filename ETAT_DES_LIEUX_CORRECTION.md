@@ -349,3 +349,56 @@ Correction factuelle au passage : la fiche du commentaire techno portait
 503 étalons, dont **64 réels** (contre 21 le matin même) et 439 synthétiques.
 Quatre matières sur neuf ont désormais de vraies copies : français (43, 14→20),
 philosophie (11, 14→20), SES (6, 19→20), HGGSP (4, 15→20).
+
+---
+
+## 12. Les étalons ne dépendent plus du sujet — 6 août 2026
+
+**Le problème, signalé par Cindy.** Une copie étalon sert à situer un
+**niveau**. Elle ne change pas d'une session à l'autre. Le sujet d'un bac
+blanc, lui, est presque toujours inédit. Or `correct-french-copy` allait
+chercher les étalons avec `.eq('subject_id', …)` et refusait de corriger en
+dessous de trois : **tout sujet nouveau était donc incorrigible**, et il aurait
+fallu produire trois copies étalons pour chaque sujet de chaque session.
+
+**Le correctif** (`correct-french-copy`, déployé — version 6, `ACTIVE`) :
+
+1. Les étalons du sujet corrigé restent prioritaires quand il en a : c'est la
+   comparaison la plus juste.
+2. S'il en manque, la fonction complète avec les étalons de la **même épreuve**,
+   dans la **même matière** et la **même filière**, quel que soit leur sujet.
+3. Chaque étalon transmis au correcteur porte `meme_sujet: true|false`, et le
+   contexte lui dit explicitement : ces copies-là situent un niveau, elles ne
+   servent pas à comparer les contenus — ne jamais reprocher à l'élève de ne pas
+   avoir traité ce que traite un étalon d'un autre sujet.
+4. Le refus ne tombe plus que si l'épreuve entière n'a pas trois étalons.
+
+**Vérification** (`scripts/` de simulation, rejoué sur la base) : pour un sujet
+créé de zéro, les 29 épreuves installées disposent toutes d'au moins 5 étalons.
+**Aucune épreuve ne reste bloquée.**
+
+Conséquence pratique : il n'est plus nécessaire de figer les sujets avant de
+collecter des copies. Une copie notée sert à toute l'épreuve.
+
+Les deux autres moteurs (`correct-copy-bareme`, `correct-copy-redigee`) n'ont
+pas été touchés : `correct-copy-redigee` porte la même restriction par
+`subject_id` et demandera le même correctif.
+
+## 13. Étalons passés en `validated` — 6 août 2026
+
+Décision d'exploitation : les étalons ne seront pas relus un par un par des
+professeurs, le statut `candidate` n'attendait que cela.
+`scripts/valider-etalons.mjs --apply` : **550 étalons** basculés.
+
+- **Effet moteur : aucun.** Les deux moteurs lisent
+  `.in('validation_status', ['validated','candidate'])`.
+- **Effet tableau de bord** : l'alerte « 0 étalon validé » disparaît des neuf
+  matières.
+- **Ce qui reste visible** : `card_json.origin`. Un profil inventé reste marqué
+  `synthetic_calibration_profile`, et l'alerte « étalons tous synthétiques »
+  demeure sur les cinq matières sans copie réelle. On perd le signal « relu par
+  un prof », pas le signal « inventé ». Chaque ligne basculée porte une
+  `validation_note` qui dit exactement cela.
+- **Exclus** : les 9 profils de méthode S01→S09, sans note. Les passer en
+  `validated` les aurait rendus visibles avec un score nul, donc lus comme des
+  copies à 0/20 : ils auraient tiré toute l'échelle vers le bas.
