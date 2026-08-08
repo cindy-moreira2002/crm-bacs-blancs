@@ -58,6 +58,53 @@ const ECRITURE_URL = (
 const ecritureUrl = (i: Inscription) =>
   `${ECRITURE_URL}/copie/${i.code_copie}?m=${encodeURIComponent(i.matiere)}`;
 
+// --- Le sujet de l'épreuve -------------------------------------------
+
+/** Ce que renvoie /api/eleve/sujets. Miroir de `SujetEleve` côté serveur. */
+type SujetEleveVue = {
+  sujet_id: string;
+  session_id: string;
+  matiere: string;
+  date_epreuve: string;
+  heure_debut: string | null;
+  debut_le: string | null;
+  titre: string | null;
+  consigne: string | null;
+  fichier_nom: string | null;
+  disponible: boolean;
+  ouverture_prevue: string | null;
+};
+
+/** Jamais bloquant : pas de session, table absente → aucun sujet, pas d'erreur. */
+async function chargerSujets(): Promise<SujetEleveVue[]> {
+  try {
+    const r = await fetch('/api/eleve/sujets');
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.sujets ?? []) as SujetEleveVue[];
+  } catch {
+    return [];
+  }
+}
+
+function fmtHeure(iso: string) {
+  return new Date(iso).toLocaleTimeString('fr-FR', {
+    timeZone: 'Europe/Paris',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** « dans 7 min », « dans 2 h 15 ». Null quand c'est passé. */
+function dansCombien(iso: string, now: Date): string | null {
+  const minutes = Math.round((new Date(iso).getTime() - now.getTime()) / 60000);
+  if (minutes <= 0) return null;
+  if (minutes < 60) return `dans ${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `dans ${h} h ${String(m).padStart(2, '0')}` : `dans ${h} h`;
+}
+
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
 }
@@ -73,6 +120,80 @@ function joursRestants(iso: string) {
   if (diff < 0)  return null;
   return `J-${diff}`;
 }
+/**
+ * Le sujet du jour : soit il est ouvert et l'élève le télécharge, soit il
+ * s'ouvre à une heure précise et on la lui dit — avec le décompte, pour qu'il
+ * n'ait pas à recharger la page ni à demander au surveillant.
+ *
+ * Le lien de téléchargement dure cinq minutes et n'est demandé qu'au clic :
+ * rien de partageable ne traîne dans la page.
+ */
+function CarteSujet({ s, now }: { s: SujetEleveVue; now: Date }) {
+  const [chargement, setChargement] = useState(false);
+  const [erreur, setErreur] = useState('');
+  const c = couleur(s.matiere);
+
+  const ouvrir = async () => {
+    setErreur('');
+    setChargement(true);
+    try {
+      const r = await fetch('/api/eleve/sujets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sujet_id: s.sujet_id }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.url) throw new Error(data.error || 'Sujet indisponible.');
+      window.open(data.url, '_blank', 'noopener');
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setChargement(false);
+    }
+  };
+
+  const attente = !s.disponible && s.ouverture_prevue ? dansCombien(s.ouverture_prevue, now) : null;
+
+  return (
+    <div style={{ background: '#fff', border: `2px solid ${s.disponible ? c : '#E5E7EB'}`, borderRadius: 18, padding: '18px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+      <div>
+        <p style={{ fontSize: '.78rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: c, marginBottom: 4 }}>
+          Sujet · {s.matiere}
+        </p>
+        <p style={{ fontWeight: 800, color: '#1E1145', fontSize: '1.05rem' }}>
+          {s.titre || `Bac blanc du ${fmtDate(s.date_epreuve)}`}
+        </p>
+        {s.consigne && <p style={{ fontSize: '.85rem', color: '#4B5563', marginTop: 4 }}>{s.consigne}</p>}
+        {!s.disponible && (
+          <p style={{ fontSize: '.85rem', color: '#6B7280', marginTop: 6 }}>
+            {s.ouverture_prevue
+              ? attente
+                ? `🔒 Il s’ouvre à ${fmtHeure(s.ouverture_prevue)} — ${attente}`
+                : '🔓 Ouverture imminente, actualise dans une minute'
+              : '🔒 Le sujet sera mis en ligne juste avant l’épreuve'}
+          </p>
+        )}
+      </div>
+
+      {s.disponible ? (
+        <button
+          onClick={ouvrir}
+          disabled={chargement}
+          style={{ background: c, color: '#fff', border: 'none', padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', cursor: chargement ? 'wait' : 'pointer', flexShrink: 0 }}
+        >
+          {chargement ? 'Ouverture…' : '📄 Ouvrir mon sujet'}
+        </button>
+      ) : (
+        <span style={{ fontSize: '.85rem', fontWeight: 800, color: '#9CA3AF', flexShrink: 0 }}>
+          {s.heure_debut ? `Épreuve à ${s.heure_debut}` : 'Horaire à confirmer'}
+        </span>
+      )}
+
+      {erreur && <p style={{ width: '100%', fontSize: '.8rem', color: '#DC2626' }}>{erreur}</p>}
+    </div>
+  );
+}
+
 function prenom(nom: string) { return nom.split(' ')[0]; }
 // Couleur d'une note /20 : rouge < 8, orange < 10, ambre < 12, vert < 16, vert vif ≥ 16
 function couleurNote(n: number) {
@@ -160,6 +281,45 @@ const DEMO_COPIES: Copie[] = [
   // l'historique montre bien TOUTES les copies, pas une seule par matière.
   { id: 'demo-fr2', matiere: 'Français',     eleve_nom: 'Léa Martin', statut: 'corrigée', note: 12,   fichier_nom: 'copie-francais-2.pdf', pdf_pret: true, created_at: '2026-06-10T13:00:00Z' },
 ];
+
+/**
+ * Aperçu des deux états du sujet, pour `?demo=1` : celui d'aujourd'hui, déjà
+ * ouvert, et celui qui s'ouvrira tout à l'heure avec son décompte. Les dates
+ * sont calculées à l'affichage, sinon l'aperçu vieillirait.
+ */
+function demoSujets(): SujetEleveVue[] {
+  const auj = new Date();
+  const jour = auj.toISOString().slice(0, 10);
+  const dansUneHeure = new Date(auj.getTime() + 60 * 60_000);
+  return [
+    {
+      sujet_id: 'demo-sujet-1',
+      session_id: 'demo-session-1',
+      matiere: 'Histoire-Géo',
+      date_epreuve: jour,
+      heure_debut: '9h',
+      debut_le: auj.toISOString(),
+      titre: 'Bac blanc Histoire-Géo — sujet',
+      consigne: 'Deux exercices. Aucun document personnel autorisé.',
+      fichier_nom: 'sujet-histoire-geo.pdf',
+      disponible: true,
+      ouverture_prevue: null,
+    },
+    {
+      sujet_id: 'demo-sujet-2',
+      session_id: 'demo-session-2',
+      matiere: 'Français',
+      date_epreuve: jour,
+      heure_debut: '14h',
+      debut_le: new Date(dansUneHeure.getTime() + 10 * 60_000).toISOString(),
+      titre: 'Bac blanc Français — sujet',
+      consigne: null,
+      fichier_nom: null,
+      disponible: false,
+      ouverture_prevue: dansUneHeure.toISOString(),
+    },
+  ];
+}
 
 // ── Check-list du jour J ─────────────────────────────────────────────────────
 const CHECKLIST: { icone: string; titre: string; detail: string }[] = [
@@ -265,6 +425,8 @@ export function EspaceEleve() {
   const [email, setEmail]               = useState('');
   const [copies, setCopies]             = useState<Copie[] | null>(null);
   const [inscriptions, setInscriptions] = useState<Inscription[] | null>(null);
+  // Le sujet de l'épreuve, ouvert automatiquement quelques minutes avant.
+  const [sujets, setSujets]             = useState<SujetEleveVue[]>([]);
   const [loading, setLoading]           = useState(false);
   // Connexion en deux temps : l'adresse identifie, le code envoyé par e-mail
   // prouve. `defi` est la signature rendue par le serveur — il ne stocke rien.
@@ -283,6 +445,25 @@ export function EspaceEleve() {
     return () => clearInterval(t);
   }, []);
 
+  // Le sujet s'ouvre tout seul, dix minutes avant l'épreuve : tant qu'une
+  // ouverture approche, on redemande la liste à chaque battement d'horloge.
+  // Sans cela, l'élève resterait devant un cadenas jusqu'à ce qu'il pense à
+  // recharger la page — précisément au moment où il ne faut pas y penser.
+  // La dépendance est un NOMBRE (la prochaine ouverture), pas la liste : mettre
+  // la liste en dépendance relancerait l'effet à chaque réponse, donc en boucle.
+  const prochaineOuverture = sujets.reduce((min, s) => {
+    if (s.disponible || !s.ouverture_prevue) return min;
+    const t = new Date(s.ouverture_prevue).getTime();
+    return min === 0 || t < min ? t : min;
+  }, 0);
+  useEffect(() => {
+    if (etape !== 'entree' || !prochaineOuverture) return;
+    if (prochaineOuverture - now.getTime() > 2 * 3600_000) return; // encore loin
+    let annule = false;
+    chargerSujets().then((l) => { if (!annule) setSujets(l); });
+    return () => { annule = true; };
+  }, [now, etape, prochaineOuverture]);
+
   // Aperçu : ?demo=1 → élève fictif complet (notes, copies) ; ?demo=nouveau →
   // élève qui vient de s'inscrire (aucune copie), pour voir les états vides.
   // Sans passer par Supabase. setTimeout : la règle set-state-in-effect de
@@ -298,6 +479,7 @@ export function EspaceEleve() {
         } else {
           setInscriptions(DEMO_INSCRIPTIONS);
           setCopies(DEMO_COPIES);
+          setSujets(demoSujets());
         }
       }, 0);
       return () => clearTimeout(t);
@@ -310,12 +492,14 @@ export function EspaceEleve() {
    * l'URL revenait à laisser chacun demander les copies de son choix.
    */
   const chargerMesDonnees = async () => {
-    const [rc, ri] = await Promise.all([
+    const [rc, ri, rs] = await Promise.all([
       fetch('/api/copies').then(r => r.json()),
       fetch('/api/inscriptions').then(r => r.json()),
+      chargerSujets(),
     ]);
     setCopies(rc.copies || []);
     setInscriptions(ri.inscriptions || []);
+    setSujets(rs);
   };
 
   // Session encore ouverte (cookie de 30 jours) → on entre sans redemander de code.
@@ -329,9 +513,11 @@ export function EspaceEleve() {
         if (!r.ok || annule) return;
         const ri = await r.json();
         const rc = await fetch('/api/copies').then(x => x.json()).catch(() => ({}));
+        const rs = await chargerSujets();
         if (annule) return;
         setCopies(rc.copies || []);
         setInscriptions(ri.inscriptions || []);
+        setSujets(rs);
         setEtape('entree');
       } catch { /* pas de session : on reste sur l'écran de connexion */ }
     })();
@@ -665,6 +851,30 @@ export function EspaceEleve() {
           )}
         </div>
       )}
+
+      {/* ── FENÊTRE 1 bis : LE SUJET DE L'ÉPREUVE ──
+            Ouvert automatiquement quelques minutes avant le début. Filtré sur
+            les épreuves du jour et à venir : un sujet d'il y a trois mois n'a
+            rien à faire là. ── */}
+      {(() => {
+        const auj = new Date(now).toISOString().slice(0, 10);
+        const aMontrer = sujets
+          .filter((s) => s.date_epreuve >= auj)
+          .filter((s) => (filtre ? s.matiere === filtre : true));
+        if (!aMontrer.length) return null;
+        return (
+          <div style={{ maxWidth: 900, margin: '20px auto 0', padding: '0 24px' }}>
+            <h3 style={{ fontWeight: 900, color: '#1E1145', fontSize: '1.05rem', margin: '0 0 10px' }}>
+              📄 Mon sujet
+            </h3>
+            <div style={{ display: 'grid', gap: 12 }}>
+              {aMontrer.map((s) => (
+                <CarteSujet key={s.sujet_id} s={s} now={now} />
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── FENÊTRE 2 : Mes anciens bacs blancs & mes copies ──
             Toujours affichée, même vide : un nouvel élève doit voir où ses

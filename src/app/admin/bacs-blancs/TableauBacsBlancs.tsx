@@ -37,12 +37,19 @@ function dateLongue(iso: string) {
   });
 }
 
-function Pastille({ ton, children }: { ton: 'vert' | 'orange' | 'rouge' | 'gris'; children: React.ReactNode }) {
+function Pastille({
+  ton,
+  children,
+}: {
+  ton: 'vert' | 'orange' | 'rouge' | 'gris' | 'bleu';
+  children: React.ReactNode;
+}) {
   const classes = {
     vert: 'bg-emerald-100 text-emerald-800',
     orange: 'bg-amber-100 text-amber-800',
     rouge: 'bg-red-100 text-red-700',
     gris: 'bg-gray-100 text-gray-600',
+    bleu: 'bg-sky-100 text-sky-800',
   }[ton];
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${classes}`}>
@@ -57,6 +64,105 @@ function compteARebours(b: BacBlanc) {
   if (b.jours <= 7) return <Pastille ton="rouge">dans {b.jours} j</Pastille>;
   if (b.jours <= 21) return <Pastille ton="orange">dans {b.jours} j</Pastille>;
   return <Pastille ton="vert">dans {b.jours} j</Pastille>;
+}
+
+// --- Publication du sujet aux élèves ----------------------------------
+
+/** « 12 mars, 08:50 » — heure de Paris, quelle que soit celle du navigateur. */
+function heureLisible(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('fr-FR', {
+    timeZone: 'Europe/Paris',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Le sujet part tout seul aux élèves inscrits, quelques minutes avant l'épreuve.
+ *
+ * Trois états lisibles d'un coup d'œil : ouvert · programmé pour telle heure ·
+ * pas programmé. Le bouton « ouvrir maintenant » existe pour le jour où la
+ * salle attend et où personne ne veut regarder une horloge.
+ */
+function PublicationEleves({
+  bac,
+  sujet,
+  agir,
+  occupe,
+}: {
+  bac: BacBlanc;
+  sujet: SujetSession;
+  agir: (corps: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
+  occupe: boolean;
+}) {
+  const minutes = sujet.minutes_avant ?? 10;
+  const [saisie, setSaisie] = useState(String(minutes));
+  const ouvert = sujet.visible_eleve === true;
+  const arme = sujet.publication_active === true;
+
+  const majMinutes = (valeur: string) => {
+    setSaisie(valeur);
+    const n = Number(valeur);
+    if (!Number.isFinite(n) || n < 0 || n > 1440) return;
+    agir({ action: 'maj-sujet', sujet_id: sujet.id, minutes_avant: Math.round(n) });
+  };
+
+  return (
+    <div className="w-full mt-2 pt-2 border-t border-dashed border-gray-200 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <span className="font-medium text-gray-700">Élèves :</span>
+
+      {ouvert ? (
+        <Pastille ton="vert">ouvert depuis {heureLisible(sujet.publie_le)}</Pastille>
+      ) : arme && sujet.publication_prevue ? (
+        <Pastille ton="bleu">s’ouvre le {heureLisible(sujet.publication_prevue)}</Pastille>
+      ) : arme ? (
+        <Pastille ton="rouge">heure de début illisible — le sujet ne partira pas</Pastille>
+      ) : (
+        <Pastille ton="gris">publication non programmée</Pastille>
+      )}
+
+      {!ouvert && (
+        <>
+          <label className="flex items-center gap-1.5 text-gray-600">
+            <input
+              type="checkbox"
+              checked={arme}
+              disabled={occupe || !sujet.fichier_path}
+              onChange={(e) =>
+                agir({ action: 'maj-sujet', sujet_id: sujet.id, publication_active: e.target.checked })
+              }
+            />
+            publier automatiquement
+          </label>
+
+          <label className="flex items-center gap-1.5 text-gray-600">
+            <input
+              type="number"
+              min={0}
+              max={1440}
+              value={saisie}
+              disabled={occupe || !arme}
+              onChange={(e) => majMinutes(e.target.value)}
+              className="w-16 px-2 py-1 border border-gray-300 rounded-lg disabled:opacity-40"
+            />
+            min avant le début ({bac.heure_debut ?? 'heure non saisie'})
+          </label>
+        </>
+      )}
+
+      <button
+        type="button"
+        onClick={() => agir({ action: 'maj-sujet', sujet_id: sujet.id, visible_eleve: !ouvert })}
+        disabled={occupe || !sujet.fichier_path}
+        className="ml-auto text-xs font-semibold text-purple-700 hover:underline disabled:opacity-40"
+      >
+        {ouvert ? 'refermer' : 'ouvrir maintenant'}
+      </button>
+    </div>
+  );
 }
 
 // --- Bloc « sujets » --------------------------------------------------
@@ -182,6 +288,10 @@ function BlocSujets({
                   supprimer
                 </button>
               </span>
+
+              {s.type === 'sujet' && (
+                <PublicationEleves bac={bac} sujet={s} agir={agir} occupe={occupe} />
+              )}
             </li>
           ))}
         </ul>

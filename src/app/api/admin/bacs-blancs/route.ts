@@ -88,6 +88,13 @@ export async function POST(req: NextRequest) {
       }
 
       case 'maj-sujet': {
+        // `minutes_avant` est borné ici aussi : la contrainte SQL renverrait
+        // une erreur Postgres illisible dans l'interface.
+        const minutes =
+          corps.minutes_avant !== undefined
+            ? Math.min(1440, Math.max(0, Math.round(Number(corps.minutes_avant) || 0)))
+            : undefined;
+
         await majSujet(String(corps.sujet_id), {
           ...(corps.titre !== undefined ? { titre: corps.titre ? String(corps.titre) : null } : {}),
           ...(corps.consigne !== undefined ? { consigne: corps.consigne ? String(corps.consigne) : null } : {}),
@@ -96,6 +103,14 @@ export async function POST(req: NextRequest) {
           ...(corps.subject_card_id !== undefined
             ? { subject_card_id: corps.subject_card_id ? String(corps.subject_card_id) : null }
             : {}),
+          ...(corps.publication_active !== undefined
+            ? { publication_active: corps.publication_active === true }
+            : {}),
+          ...(minutes !== undefined ? { minutes_avant: minutes } : {}),
+          ...(corps.publier_le !== undefined
+            ? { publier_le: corps.publier_le ? String(corps.publier_le) : null }
+            : {}),
+          ...(corps.visible_eleve !== undefined ? { visible_eleve: corps.visible_eleve === true } : {}),
         });
         return NextResponse.json({ ok: true });
       }
