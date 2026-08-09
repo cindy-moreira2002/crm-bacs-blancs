@@ -374,7 +374,7 @@ function construireTaches(r: Omit<ResumeDirection, 'taches' | 'genere_le'>): Tac
         cle: 'classeur-financier',
         urgence: 'info',
         titre: 'Le classeur de suivi financier n’est pas relié',
-        detail: 'Une variable à poser (NEXT_PUBLIC_SUIVI_FINANCIER_URL) et l’onglet Paiements l’ouvre directement.',
+        detail: 'Une variable à poser (SUIVI_FINANCIER_URL = l’adresse du Google Sheet) et l’onglet Paiements l’ouvre directement.',
         lien: '/admin/paiements',
         libelleLien: 'Voir comment faire',
       });

@@ -9,9 +9,10 @@
  *     encaissements Revolut, factures des profs, Urssaf. Le site ne recopie pas
  *     ces chiffres, il pointe vers le classeur.
  *
- * L'adresse du classeur se pose une fois dans la variable d'environnement
- * `NEXT_PUBLIC_SUIVI_FINANCIER_URL`. Tant qu'elle manque, la page explique
- * comment la renseigner plutôt que d'afficher un lien mort.
+ * L'adresse du classeur se pose une fois dans `SUIVI_FINANCIER_URL`. Variable
+ * SERVEUR (pas de préfixe NEXT_PUBLIC_) : le lien du classeur ne doit pas être
+ * embarqué dans le JavaScript envoyé à tous les navigateurs — seule la page
+ * d'administration, rendue côté serveur, le connaît.
  */
 import { crmAdmin } from '@/lib/authProf';
 
@@ -46,7 +47,13 @@ export type EtatPaiements = {
 const PRIX_INDICATIF = 0;
 
 export function urlClasseurFinancier(): string | null {
-  const url = (process.env.NEXT_PUBLIC_SUIVI_FINANCIER_URL ?? '').trim();
+  // L'ancien nom reste accepté : si la variable a déjà été posée avec le
+  // préfixe NEXT_PUBLIC_, le bouton fonctionne quand même.
+  const url = (
+    process.env.SUIVI_FINANCIER_URL ??
+    process.env.NEXT_PUBLIC_SUIVI_FINANCIER_URL ??
+    ''
+  ).trim();
   return url.startsWith('http') ? url : null;
 }
 

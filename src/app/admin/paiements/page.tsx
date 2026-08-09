@@ -92,10 +92,12 @@ export default async function PagePaiements() {
             <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">
               <p className="font-semibold">L’adresse du classeur n’est pas encore renseignée.</p>
               <p className="mt-1">
-                Pose-la une seule fois dans Vercel → Settings → Environment Variables :
+                Ouvre le classeur dans Google Sheets, copie l’adresse de la barre du navigateur,
+                et pose-la une seule fois dans Vercel → Settings → Environment Variables
+                (Production et Preview) :
               </p>
               <p className="mt-2 font-mono text-xs bg-white rounded-lg p-3 border border-amber-200">
-                NEXT_PUBLIC_SUIVI_FINANCIER_URL = https://docs.google.com/spreadsheets/d/…
+                SUIVI_FINANCIER_URL = https://docs.google.com/spreadsheets/d/…/edit
               </p>
               <p className="mt-2 text-xs">
                 Puis redéploie : le bouton d’ouverture apparaîtra ici même.
