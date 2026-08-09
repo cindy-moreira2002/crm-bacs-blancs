@@ -106,13 +106,31 @@ export default async function PagePaiements() {
           )}
         </section>
 
+        {/* --- L'alerte qui vide une relance de son sens --- */}
+        {!etat.instructions_pretes && (
+          <div className="rounded-2xl bg-red-50 border border-red-200 p-4 text-sm text-red-900">
+            <p className="font-bold">Les relances de paiement ne disent pas où payer.</p>
+            <p className="mt-1">
+              Le réglage <span className="font-mono text-xs">paiement_instructions</span> est vide :
+              l’e-mail de relance part sans IBAN ni référence de virement. À remplir dans{' '}
+              <Link href="/admin/emails" className="underline font-semibold">
+                E-mails → Réglages
+              </Link>{' '}
+              avant la première relance.
+            </p>
+          </div>
+        )}
+
         {/* --- Les chiffres du CRM --- */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { valeur: etat.total_inscriptions, label: 'inscriptions au total' },
             { valeur: etat.payes, label: 'paiements encaissés' },
             { valeur: etat.en_attente, label: 'en attente de paiement', alerte: etat.en_attente > 0 },
-            { valeur: euros(etat.encaisse), label: 'encaissé (montants saisis)' },
+            {
+              valeur: euros(etat.attendu),
+              label: `à encaisser (${euros(etat.montant_defaut)} la matinée)`,
+            },
           ].map((c) => (
             <div key={c.label} className="bg-white rounded-2xl border border-slate-200 p-5">
               <p

@@ -40,11 +40,18 @@ export type EtatPaiements = {
   annulees: number;
   encaisse: number;
   attendu: number;
+  /** Prix d'une matinée, tel que réglé dans les e-mails. */
+  montant_defaut: number;
+  /**
+   * Les instructions de virement (IBAN, référence) sont-elles renseignées ?
+   * Sans elles, une relance de paiement part sans dire OÙ payer.
+   */
+  instructions_pretes: boolean;
   lignes: LignePaiement[];
 };
 
-/** Prix par défaut d'une matinée quand le montant n'a pas été saisi. */
-const PRIX_INDICATIF = 0;
+/** Prix d'une matinée quand le réglage est illisible. */
+const PRIX_DE_SECOURS = 0;
 
 export function urlClasseurFinancier(): string | null {
   // L'ancien nom reste accepté : si la variable a déjà été posée avec le
@@ -59,6 +66,15 @@ export function urlClasseurFinancier(): string | null {
 
 export async function chargerPaiements(): Promise<EtatPaiements> {
   const db = crmAdmin();
+
+  // Le prix et les instructions de virement vivent dans les réglages des
+  // e-mails : c'est là qu'on les a saisis une fois pour toutes.
+  const { data: reglages } = await db.from('email_reglages').select('cle, valeur');
+  const reglage = (cle: string) =>
+    ((reglages ?? []) as { cle: string; valeur: string | null }[]).find((r) => r.cle === cle)?.valeur ?? '';
+
+  const montantDefaut = Number(reglage('paiement_montant_defaut')) || PRIX_DE_SECOURS;
+  const instructionsPretes = reglage('paiement_instructions').trim().length > 0;
 
   const { data, error } = await db
     .from('inscriptions')
@@ -114,7 +130,11 @@ export async function chargerPaiements(): Promise<EtatPaiements> {
     rembourses: lignesBrutes.filter((l) => l.paiement_statut === 'rembourse').length,
     annulees: lignesBrutes.filter((l) => l.annulee_le).length,
     encaisse: payes.reduce((s, l) => s + Number(l.paiement_montant ?? 0), 0),
-    attendu: enAttente.reduce((s, l) => s + Number(l.paiement_montant ?? PRIX_INDICATIF), 0),
+    // Un montant non saisi vaut le prix par défaut : sinon « attendu : 0 € »
+    // laisserait croire qu'il n'y a rien à encaisser.
+    attendu: enAttente.reduce((s, l) => s + Number(l.paiement_montant ?? montantDefaut), 0),
+    montant_defaut: montantDefaut,
+    instructions_pretes: instructionsPretes,
     lignes: enAttente.map((l) => ({
       id: l.id,
       nom: l.nom ?? '—',

@@ -87,8 +87,12 @@ export type ResumePaiements = {
   /** Inscriptions impayées depuis plus d'une semaine. */
   en_retard: number;
   encaisse: number;
+  /** Somme encore à encaisser, prix par défaut compris. */
+  attendu: number;
   /** Le classeur de suivi financier est-il relié ? */
   classeur: boolean;
+  /** IBAN + référence renseignés dans les relances de paiement ? */
+  instructions_pretes: boolean;
 };
 
 export type ResumeDiscord = {
@@ -207,7 +211,9 @@ async function resumePaiements(): Promise<Bloc<ResumePaiements>> {
     payes: etat.payes,
     en_retard: etat.lignes.filter((l) => l.jours_depuis > 7).length,
     encaisse: etat.encaisse,
+    attendu: etat.attendu,
     classeur: etat.classeur_url !== null,
+    instructions_pretes: etat.instructions_pretes,
   };
 }
 
@@ -367,6 +373,17 @@ function construireTaches(r: Omit<ResumeDirection, 'taches' | 'genere_le'>): Tac
         detail: 'Les relances partent seules, mais au-delà d’une semaine mieux vaut un appel.',
         lien: '/admin/paiements',
         libelleLien: 'Voir les paiements',
+      });
+    }
+    if (!r.paiements.instructions_pretes && r.paiements.en_attente > 0) {
+      taches.push({
+        cle: 'instructions-virement',
+        urgence: 'rouge',
+        titre: 'Les relances de paiement partent sans dire où payer',
+        detail:
+          'Le réglage « instructions de virement » est vide : ni IBAN ni référence dans l’e-mail. À remplir avant la première relance.',
+        lien: '/admin/emails',
+        libelleLien: 'Remplir les instructions',
       });
     }
     if (!r.paiements.classeur) {
