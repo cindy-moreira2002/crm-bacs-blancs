@@ -82,28 +82,72 @@ async function rest(chemin, methode = 'GET', corps = null, prefer = null) {
 /* ------------------------------------------------------------------ */
 
 // Dictee sur 10, plancher a 0, une meme erreur repetee comptee une fois.
-// Trois niveaux de gravite, plus deux categories a penalite nulle qui
-// existent pour ne PAS penaliser l'eleve.
+//
+// BAREME RETENU PAR CINDY LE 2026-08-09 (variante « C ») : penalites douces,
+// parce qu'au DNB la dictee valorise plus qu'elle ne sanctionne. Simule sur
+// cinq profils avant d'etre choisi : un eleve moyen obtient 6,5/10, un eleve
+// fragile 3/10. Avec 1 pt par faute grammaticale, ils tombaient a 3,5 et 0.
+//
+// ATTENTION : `plafond` est applique PAR CATEGORIE par le noyau
+// (cumulParCategorie dans evaluerDictee), pas par famille. Un plafond de 3 sur
+// « accord » ne borne QUE les accords : les quatre categories grammaticales
+// peuvent donc retirer jusqu'a 9 points a elles toutes. Les plafonds ci-dessous
+// sont calibres en connaissance de cela — ils bornent les cas pathologiques
+// (vingt fois la meme faute) sans toucher les copies ordinaires.
 const DICTEE_REGLES = [
-  { categorie: 'accord', penalite: 1, regle: 'Erreur d’accord (sujet-verbe, groupe nominal, participe passé) : 1 point.' },
-  { categorie: 'conjugaison', penalite: 1, regle: 'Erreur de conjugaison ou de temps : 1 point.' },
-  { categorie: 'homophone', penalite: 1, regle: 'Confusion d’homophones grammaticaux (a/à, et/est, ce/se…) : 1 point.' },
-  { categorie: 'grammaire', penalite: 1, regle: 'Autre erreur grammaticale : 1 point.' },
-  { categorie: 'lexique', penalite: 0.5, regle: 'Erreur d’orthographe lexicale : 0,5 point.' },
-  { categorie: 'substitution', penalite: 0.5, regle: 'Mot remplacé par un autre : 0,5 point.' },
-  { categorie: 'mot_oublie', penalite: 0.5, regle: 'Mot omis : 0,5 point.' },
-  { categorie: 'mot_ajoute', penalite: 0.5, regle: 'Mot ajouté : 0,5 point.' },
-  { categorie: 'accent', penalite: 0.25, regle: 'Accent absent ou fautif : 0,25 point.' },
-  { categorie: 'majuscule', penalite: 0.25, regle: 'Majuscule absente ou fautive : 0,25 point.' },
-  { categorie: 'ponctuation', penalite: 0.25, regle: 'Ponctuation absente ou fautive : 0,25 point.' },
-  { categorie: 'trait_union', penalite: 0.25, regle: 'Trait d’union absent ou fautif : 0,25 point.' },
-  { categorie: 'apostrophe', penalite: 0.25, regle: 'Apostrophe absente ou fautive : 0,25 point.' },
-  { categorie: 'segmentation', penalite: 0.25, regle: 'Mot mal segmenté : 0,25 point.' },
+  { categorie: 'accord', penalite: 0.5, plafond: 3, regle: 'Erreur d’accord (sujet-verbe, groupe nominal, participe passé) : 0,5 point, dans la limite de 3 points.' },
+  { categorie: 'conjugaison', penalite: 0.5, plafond: 2, regle: 'Erreur de conjugaison ou de temps : 0,5 point, dans la limite de 2 points.' },
+  { categorie: 'homophone', penalite: 0.5, plafond: 2, regle: 'Confusion d’homophones grammaticaux (a/à, et/est, ce/se…) : 0,5 point, dans la limite de 2 points.' },
+  { categorie: 'grammaire', penalite: 0.5, plafond: 2, regle: 'Autre erreur grammaticale : 0,5 point, dans la limite de 2 points.' },
+  { categorie: 'lexique', penalite: 0.25, plafond: 2, regle: 'Erreur d’orthographe lexicale : 0,25 point, dans la limite de 2 points.' },
+  { categorie: 'substitution', penalite: 0.25, plafond: 1, regle: 'Mot remplacé par un autre : 0,25 point, dans la limite de 1 point.' },
+  { categorie: 'mot_oublie', penalite: 0.25, plafond: 1, regle: 'Mot omis : 0,25 point, dans la limite de 1 point.' },
+  { categorie: 'mot_ajoute', penalite: 0.25, plafond: 1, regle: 'Mot ajouté : 0,25 point, dans la limite de 1 point.' },
+  { categorie: 'accent', penalite: 0.25, plafond: 1, regle: 'Accent absent ou fautif : 0,25 point, dans la limite de 1 point.' },
+  { categorie: 'majuscule', penalite: 0.25, plafond: 0.5, regle: 'Majuscule absente ou fautive : 0,25 point, dans la limite de 0,5 point.' },
+  { categorie: 'ponctuation', penalite: 0.25, plafond: 0.5, regle: 'Ponctuation absente ou fautive : 0,25 point, dans la limite de 0,5 point.' },
+  { categorie: 'trait_union', penalite: 0.25, plafond: 0.5, regle: 'Trait d’union absent ou fautif : 0,25 point, dans la limite de 0,5 point.' },
+  { categorie: 'apostrophe', penalite: 0.25, plafond: 0.5, regle: 'Apostrophe absente ou fautive : 0,25 point, dans la limite de 0,5 point.' },
+  { categorie: 'segmentation', penalite: 0.25, plafond: 0.5, regle: 'Mot mal segmenté : 0,25 point, dans la limite de 0,5 point.' },
   // Les deux suivantes valent zero, et c'est le point important : elles
   // existent pour que le moteur les reconnaisse SANS retirer de point.
-  { categorie: 'graphie_rectifiee', penalite: 0, regle: 'Orthographe rectifiée de 1990 : admise, aucun retrait.' },
-  { categorie: 'reconnaissance_ocr', penalite: 0, regle: 'Doute de lecture de la copie : aucun retrait, l’élève n’est pas responsable.' },
+  { categorie: 'graphie_rectifiee', penalite: 0, plafond: null, regle: 'Orthographe rectifiée de 1990 : admise, aucun retrait.' },
+  { categorie: 'reconnaissance_ocr', penalite: 0, plafond: null, regle: 'Doute de lecture de la copie : aucun retrait, l’élève n’est pas responsable.' },
 ];
+
+// Profils servant a verifier que le bareme ne produit pas de zeros absurdes.
+// Les fautes sont reparties sur les categories d'une meme famille, comme dans
+// une vraie copie.
+const PROFILS = [
+  { nom: 'Très bon', gram: 1, lex: 2, typo: 0 },
+  { nom: 'Bon', gram: 2, lex: 3, typo: 1 },
+  { nom: 'Moyen', gram: 4, lex: 4, typo: 2 },
+  { nom: 'Fragile', gram: 8, lex: 8, typo: 4 },
+  { nom: 'Grande difficulté', gram: 14, lex: 14, typo: 7 },
+];
+
+const FAMILLES = {
+  gram: ['accord', 'conjugaison', 'homophone', 'grammaire'],
+  lex: ['lexique', 'substitution', 'mot_oublie', 'mot_ajoute'],
+  typo: ['accent', 'majuscule', 'ponctuation', 'trait_union', 'apostrophe', 'segmentation'],
+};
+
+/** Rejoue la regle du noyau : retrait par categorie, plafonne par categorie. */
+function simuler(profil) {
+  const regles = new Map(DICTEE_REGLES.map((r) => [r.categorie, r]));
+  let total = 0;
+  for (const [famille, categories] of Object.entries(FAMILLES)) {
+    const n = profil[famille];
+    for (let i = 0; i < categories.length; i += 1) {
+      // Reparti au plus juste sur les categories de la famille.
+      const part = Math.floor(n / categories.length) + (i < n % categories.length ? 1 : 0);
+      const r = regles.get(categories[i]);
+      const brut = part * r.penalite;
+      total += r.plafond === null ? brut : Math.min(brut, r.plafond);
+    }
+  }
+  return Math.max(0, Math.round((10 - total) * 100) / 100);
+}
 
 // 40 points par grille. La langue pese lourd au DNB, sans absorber le reste.
 const REDACTION = {
@@ -161,8 +205,19 @@ if (DEFAIRE) {
 const sommeImagination = REDACTION.imagination.reduce((s, c) => s + c.max_points, 0);
 const sommeReflexion = REDACTION.reflexion.reduce((s, c) => s + c.max_points, 0);
 
-console.log('Dictée — règles de retrait proposées (sur 10, plancher 0) :');
-for (const r of DICTEE_REGLES) console.log(`  ${r.penalite.toFixed(2).padStart(5)} pt  ${r.categorie}`);
+console.log('Dictée — règles de retrait (sur 10, plancher 0) :');
+for (const r of DICTEE_REGLES) {
+  const plafond = r.plafond === null ? '' : `  plafond ${r.plafond}`;
+  console.log(`  ${r.penalite.toFixed(2).padStart(5)} pt  ${r.categorie.padEnd(20)}${plafond}`);
+}
+
+console.log('\nCe que ce barème donne sur cinq profils (126 mots) :');
+for (const p of PROFILS) {
+  const note = simuler(p);
+  const barre = '█'.repeat(Math.round(note)) + '·'.repeat(10 - Math.round(note));
+  const fautes = p.gram + p.lex + p.typo;
+  console.log(`  ${p.nom.padEnd(18)} ${String(fautes).padStart(2)} fautes  ${barre} ${note.toFixed(2)}/10`);
+}
 console.log(`\nRédaction — imagination : ${sommeImagination} / 40`);
 for (const c of REDACTION.imagination) console.log(`  ${String(c.max_points).padStart(3)} pts  ${c.libelle}`);
 console.log(`\nRédaction — réflexion : ${sommeReflexion} / 40`);
@@ -179,6 +234,16 @@ if (!APPLIQUER) {
 }
 
 // --- Dictee ----------------------------------------------------------
+//
+// On SUPPRIME avant d'inserer, et surtout pas un upsert. La contrainte
+// `unique (bareme_version_id, categorie, sous_categorie)` ne protege rien ici :
+// `sous_categorie` vaut NULL, et Postgres ne considere jamais deux NULL comme
+// egaux dans un index unique. Un `Prefer: resolution=merge-duplicates` laisse
+// donc passer les doublons en silence — verifie le 2026-08-09, ou une seconde
+// execution avait porte la table a 32 lignes, deux regles par categorie avec
+// des penalites differentes. Le noyau construit une Map par categorie : il
+// aurait retenu l'une des deux, sans qu'on sache laquelle.
+await rest(`brevet_dictee_regles?bareme_version_id=eq.${version.id}`, 'DELETE');
 await rest(
   'brevet_dictee_regles',
   'POST',
@@ -187,12 +252,11 @@ await rest(
     categorie: r.categorie,
     sous_categorie: null,
     penalite: r.penalite,
-    plafond: null,
+    plafond: r.plafond,
     cumul_repetitions: false,
     regle: r.regle,
     ordre: i,
   })),
-  'resolution=merge-duplicates',
 );
 // `admin_instruction` et jamais `official_correction` : ce barème est une
 // décision d'établissement, pas une source ministérielle.
@@ -209,6 +273,8 @@ const grilles = await rest(
 for (const g of grilles) {
   const criteres = REDACTION[g.type_sujet];
   if (!criteres) continue;
+  // Meme raison que pour la dictee : on remplace, on n'upserte pas.
+  await rest(`brevet_redaction_criteres?grille_id=eq.${g.id}`, 'DELETE');
   await rest(
     'brevet_redaction_criteres',
     'POST',
@@ -223,7 +289,6 @@ for (const g of grilles) {
       actif: true,
       ordre: i,
     })),
-    'resolution=merge-duplicates',
   );
   console.log(`  ✓ grille ${g.type_sujet} : ${criteres.length} critères, 40 points`);
 }
