@@ -11,6 +11,7 @@
     "test:bareme": "tsx scripts/test-bareme.ts",
     "test:bareme:supabase": "node scripts/test-bareme-supabase.mjs",
     "apercu:emails": "tsx scripts/apercu-emails.ts",
+    "test:brevo": "tsx scripts/test-brevo.ts",
     "test:hggsp": "node --test scripts/test-hggsp.mjs",
     "test:sujets": "tsx scripts/test-sujets-eleves.ts",
     "test:brevet": "npm run test:brevet:francais && npm run test:brevet:maths && npm run test:brevet:nonregression",
