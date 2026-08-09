@@ -8,10 +8,18 @@
  * POST /api/admin/emails/action.
  */
 import { useCallback, useEffect, useState } from 'react';
-import type { MessageAdmin, SnapshotEmails } from '@/lib/emails/admin';
+import type { CaseParcours, LigneParcours, MessageAdmin, SnapshotEmails } from '@/lib/emails/admin';
 import { LIBELLE_TYPE, TYPES_EMAIL } from '@/lib/emails/config';
 import { LIBELLE_REGLAGE, type Reglages } from '@/lib/emails/reglages-libelles';
-import { instantCourt } from '@/lib/emails/temps';
+import {
+  LIBELLE_ETAT,
+  LIBELLE_PHASE,
+  SYMBOLE_ETAT,
+  volumeNominal,
+  type EtapeParcours,
+  type PhaseParcours,
+} from '@/lib/emails/parcours';
+import { instantCourt, jourCourt } from '@/lib/emails/temps';
 
 const RAFRAICHISSEMENT_MS = 60_000;
 
@@ -58,7 +66,12 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
   const [occupe, setOccupe] = useState<string | null>(null);
   const [apercu, setApercu] = useState<Apercu | null>(null);
   const [journal, setJournal] = useState<string | null>(null);
-  const [onglet, setOnglet] = useState<'messages' | 'paiements' | 'reglages'>('messages');
+  const [onglet, setOnglet] = useState<'parcours' | 'messages' | 'paiements' | 'reglages'>(
+    'parcours',
+  );
+  const [rechercheEleve, setRechercheEleve] = useState('');
+  const [seulementTrous, setSeulementTrous] = useState(false);
+  const [masquerTests, setMasquerTests] = useState(false);
 
   const [filtres, setFiltres] = useState({
     statut: 'tous',
@@ -120,7 +133,11 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
   }
 
   async function previsualiser(m: MessageAdmin) {
-    const data = await agir({ action: 'previsualiser', id: m.id }, `apercu-${m.id}`);
+    return previsualiserId(m.id);
+  }
+
+  async function previsualiserId(id: string) {
+    const data = await agir({ action: 'previsualiser', id }, `apercu-${id}`);
     if (data) setApercu(data as unknown as Apercu);
   }
 
@@ -300,10 +317,14 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
           ))}
         </div>
 
+        {/* Le parcours prévu — toujours sous la main, quel que soit l'onglet. */}
+        <TableauReference etapes={etat.etapes} reglages={etat.reglages} />
+
         {/* Onglets */}
         <div className="flex gap-2 border-b border-gray-200">
           {(
             [
+              ['parcours', `Par élève (${etat.parcours.length})`],
               ['messages', 'Messages'],
               ['paiements', `Paiements à confirmer (${etat.paiementsEnAttente.length})`],
               ['reglages', 'Réglages'],
@@ -322,6 +343,20 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
             </button>
           ))}
         </div>
+
+        {onglet === 'parcours' && (
+          <VueParEleve
+            lignes={etat.parcours}
+            etapes={etat.etapes}
+            recherche={rechercheEleve}
+            onRecherche={setRechercheEleve}
+            seulementTrous={seulementTrous}
+            onSeulementTrous={setSeulementTrous}
+            masquerTests={masquerTests}
+            onMasquerTests={setMasquerTests}
+            onApercu={previsualiserId}
+          />
+        )}
 
         {onglet === 'messages' && (
           <>
@@ -629,6 +664,385 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+// --- Le parcours prévu, en clair --------------------------------------
+
+const TON_PHASE: Record<PhaseParcours, string> = {
+  inscription: 'bg-violet-50 text-violet-900',
+  avant: 'bg-blue-50 text-blue-900',
+  apres: 'bg-emerald-50 text-emerald-900',
+  exception: 'bg-gray-50 text-gray-700',
+};
+
+/**
+ * Le rappel permanent : tout ce qu'une inscription déclenche, dans l'ordre.
+ * Les délais affichés sont ceux des réglages en vigueur, pas des valeurs
+ * écrites en dur : ce tableau ne peut donc pas mentir.
+ */
+function TableauReference({ etapes, reglages }: { etapes: EtapeParcours[]; reglages: Reglages }) {
+  const v = volumeNominal(reglages);
+  const phases: PhaseParcours[] = ['inscription', 'avant', 'apres', 'exception'];
+
+  return (
+    <details className="rounded-2xl border border-gray-200 bg-white" open>
+      <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-gray-900">
+        📋 Ce qu’un élève reçoit — le parcours complet
+        <span className="ml-2 font-normal text-gray-500">
+          {v.eleveMin}–{v.eleveMax} e-mails à l’élève, {v.parentMin}–{v.parentMax} au parent, par
+          inscription
+        </span>
+      </summary>
+
+      <div className="border-t border-gray-100 px-4 pb-4 pt-3">
+        <p className="mb-3 text-sm text-gray-600">
+          Un parcours = <strong>une inscription</strong>, c’est-à-dire un élève <em>et</em> une
+          matière. Un élève inscrit à trois matières parcourt trois fois cette liste. Les délais
+          ci-dessous sont ceux de l’onglet <strong>Réglages</strong> : les changer change ce tableau.
+        </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-3 py-2 w-10">#</th>
+                <th className="px-3 py-2">E-mail</th>
+                <th className="px-3 py-2">Quand il part</th>
+                <th className="px-3 py-2">Ce qui le déclenche</th>
+                <th className="px-3 py-2 text-center">Parent aussi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {phases.map((phase) => {
+                const groupe = etapes.filter((e) => e.phase === phase);
+                if (!groupe.length) return null;
+                return (
+                  <ReactFragmentPhase key={phase} phase={phase} groupe={groupe} etapes={etapes} />
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-3 text-xs text-gray-500">
+          Total dans le cours normal des choses (ni modification ni annulation de session) :{' '}
+          <strong>
+            {v.totalMin} à {v.totalMax} envois par inscription
+          </strong>
+          , parent compris quand son adresse est renseignée.
+        </p>
+      </div>
+    </details>
+  );
+}
+
+/** Un bloc de phase : sa bande de titre, puis ses étapes numérotées. */
+function ReactFragmentPhase({
+  phase,
+  groupe,
+  etapes,
+}: {
+  phase: PhaseParcours;
+  groupe: EtapeParcours[];
+  etapes: EtapeParcours[];
+}) {
+  return (
+    <>
+      <tr className={TON_PHASE[phase]}>
+        <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide">
+          {LIBELLE_PHASE[phase]}
+        </td>
+      </tr>
+      {groupe.map((e) => (
+        <tr key={e.type} className="hover:bg-gray-50">
+          <td className="px-3 py-2 text-gray-400">{etapes.indexOf(e) + 1}</td>
+          <td className="px-3 py-2 font-medium text-gray-900">{e.libelle}</td>
+          <td className="px-3 py-2 text-gray-700">{e.quand}</td>
+          <td className="px-3 py-2 text-gray-500">{e.declencheur}</td>
+          <td className="px-3 py-2 text-center">{e.parent ? '✅' : '—'}</td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+// --- Vue « Par élève » ------------------------------------------------
+
+const TON_CASE: Record<string, string> = {
+  envoye: 'bg-emerald-50 text-emerald-800',
+  programme: 'bg-blue-50 text-blue-800',
+  attendu: 'bg-white text-gray-400',
+  sans_objet: 'bg-gray-50 text-gray-300',
+  annule: 'bg-gray-100 text-gray-400',
+  bloque: 'bg-amber-100 text-amber-900',
+  echec: 'bg-red-100 text-red-800',
+};
+
+/**
+ * Une ligne par inscription, une colonne par e-mail du parcours.
+ *
+ * C'est la réponse à « suis-je sûre que personne n'est passé au travers ». Une
+ * case n'est jamais muette : au survol, elle dit son état, sa date, et — si
+ * rien ne partira — pourquoi.
+ */
+function VueParEleve({
+  lignes,
+  etapes,
+  recherche,
+  onRecherche,
+  seulementTrous,
+  onSeulementTrous,
+  masquerTests,
+  onMasquerTests,
+  onApercu,
+}: {
+  lignes: LigneParcours[];
+  etapes: EtapeParcours[];
+  recherche: string;
+  onRecherche: (v: string) => void;
+  seulementTrous: boolean;
+  onSeulementTrous: (v: boolean) => void;
+  masquerTests: boolean;
+  onMasquerTests: (v: boolean) => void;
+  onApercu: (id: string) => void;
+}) {
+  const terme = recherche.trim().toLowerCase();
+  const visibles = lignes.filter((l) => {
+    if (masquerTests && l.adresseDeTest) return false;
+    if (seulementTrous && !l.avertissements.length && !l.problemes) return false;
+    if (!terme) return true;
+    return [l.eleve, l.email, l.email_parent, l.matiere].some((c) =>
+      String(c ?? '').toLowerCase().includes(terme),
+    );
+  });
+
+  const sansDate = lignes.filter((l) => !l.date_epreuve).length;
+  const tests = lignes.filter((l) => l.adresseDeTest).length;
+  const enPanne = lignes.filter((l) => l.problemes > 0).length;
+
+  return (
+    <div className="space-y-3">
+      {/* Ce qui doit sauter aux yeux */}
+      {(sansDate > 0 || tests > 0 || enPanne > 0) && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-1 text-sm text-amber-900">
+          {enPanne > 0 && (
+            <p>
+              ❌ <strong>{enPanne}</strong> inscription(s) ont au moins un message bloqué ou en
+              échec.
+            </p>
+          )}
+          {sansDate > 0 && (
+            <p>
+              📅 <strong>{sansDate}</strong> inscription(s) sans date d’épreuve : les quatre
+              messages d’avant-épreuve ne partiront jamais pour elles.
+            </p>
+          )}
+          {tests > 0 && (
+            <p>
+              🧪 <strong>{tests}</strong> inscription(s) portent une adresse manifestement fictive.
+              À annuler avant la vraie mise en service : un envoi vers une adresse inexistante
+              rebondit et abîme la réputation de l’expéditeur.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Filtres */}
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-gray-200 bg-white p-4">
+        <label className="text-sm flex-1 min-w-[12rem]">
+          <span className="block text-xs font-medium text-gray-600 mb-1">
+            Élève, adresse ou matière
+          </span>
+          <input
+            type="search"
+            value={recherche}
+            onChange={(e) => onRecherche(e.target.value)}
+            placeholder="Marie, gmail.com, Philosophie…"
+            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700 pb-1.5">
+          <input
+            type="checkbox"
+            checked={seulementTrous}
+            onChange={(e) => onSeulementTrous(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          Seulement les élèves à problème
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700 pb-1.5">
+          <input
+            type="checkbox"
+            checked={masquerTests}
+            onChange={(e) => onMasquerTests(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          Masquer les adresses de test
+        </label>
+        <p className="pb-1.5 text-sm text-gray-500">
+          {visibles.length} / {lignes.length} inscription(s)
+        </p>
+      </div>
+
+      {/* Légende */}
+      <div className="flex flex-wrap gap-3 px-1 text-xs text-gray-600">
+        {(['envoye', 'programme', 'attendu', 'sans_objet', 'bloque', 'echec'] as const).map((e) => (
+          <span key={e} className="inline-flex items-center gap-1">
+            <span>{SYMBOLE_ETAT[e]}</span>
+            {LIBELLE_ETAT[e]}
+          </span>
+        ))}
+      </div>
+
+      {/* Le damier */}
+      <div className="rounded-2xl border border-gray-200 bg-white overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs text-gray-500">
+            <tr>
+              <th className="px-3 py-2 sticky left-0 bg-gray-50 z-10 min-w-[13rem]">
+                Élève / matière
+              </th>
+              {etapes.map((e) => (
+                <th key={e.type} className="px-2 py-2 text-center font-medium">
+                  <span title={`${e.libelle} — ${e.quand}`}>{e.court}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {visibles.length === 0 && (
+              <tr>
+                <td colSpan={etapes.length + 1} className="px-3 py-8 text-center text-gray-500">
+                  Aucune inscription pour ces filtres.
+                </td>
+              </tr>
+            )}
+            {visibles.map((l) => (
+              <LigneEleve key={l.inscription_id} ligne={l} etapes={etapes} onApercu={onApercu} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function LigneEleve({
+  ligne: l,
+  etapes,
+  onApercu,
+}: {
+  ligne: LigneParcours;
+  etapes: EtapeParcours[];
+  onApercu: (id: string) => void;
+}) {
+  const aUnParent = Boolean(l.email_parent);
+
+  return (
+    <>
+      <tr className="align-top hover:bg-gray-50">
+        <td className="px-3 py-2 sticky left-0 bg-white z-10">
+          <p className="font-medium text-gray-900">
+            {l.eleve}
+            {l.adresseDeTest && (
+              <span className="ml-1 rounded bg-gray-200 px-1 text-[10px] uppercase text-gray-600">
+                test
+              </span>
+            )}
+          </p>
+          <p className="text-xs text-gray-500">
+            {l.matiere ?? '—'}
+            {l.date_epreuve ? ` · ${l.date_epreuve}` : ' · sans date'}
+          </p>
+          <p className="text-xs text-gray-400 break-all">{l.email ?? 'aucune adresse'}</p>
+          {l.avertissements.map((a) => (
+            <p key={a} className="mt-1 text-[11px] text-amber-700">
+              ⚠️ {a}
+            </p>
+          ))}
+        </td>
+        {etapes.map((e) => (
+          <Case key={e.type} c={l.cases[e.type]} etape={e} qui="élève" onApercu={onApercu} />
+        ))}
+      </tr>
+
+      {aUnParent && (
+        <tr className="align-top bg-gray-50/60 hover:bg-gray-100/60">
+          <td className="px-3 py-1.5 sticky left-0 bg-gray-50 z-10">
+            <p className="text-xs text-gray-600">↳ parent</p>
+            <p className="text-xs text-gray-400 break-all">{l.email_parent}</p>
+          </td>
+          {etapes.map((e) => (
+            <Case
+              key={e.type}
+              c={e.parent ? l.casesParent[e.type] : undefined}
+              etape={e}
+              qui="parent"
+              onApercu={onApercu}
+            />
+          ))}
+        </tr>
+      )}
+    </>
+  );
+}
+
+function Case({
+  c,
+  etape,
+  qui,
+  onApercu,
+}: {
+  c: CaseParcours | undefined;
+  etape: EtapeParcours;
+  qui: string;
+  onApercu: (id: string) => void;
+}) {
+  // Pas de case du tout : ce message ne concerne pas ce destinataire.
+  if (!c) {
+    return (
+      <td className="px-2 py-2 text-center text-gray-200" title={`${etape.libelle} — jamais envoyé au parent`}>
+        ·
+      </td>
+    );
+  }
+
+  const infobulle = [
+    `${etape.libelle} — ${qui}`,
+    `état : ${LIBELLE_ETAT[c.etat]}`,
+    c.quand ? (c.etat === 'envoye' ? `envoyé le ${instantCourt(c.quand)}` : `prévu le ${instantCourt(c.quand)}`) : null,
+    c.nombre > 1 ? `${c.nombre} messages` : null,
+    c.detail,
+    c.etat === 'attendu' ? `sera créé quand : ${etape.declencheur}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const contenu = (
+    <span className="block text-base leading-none">{SYMBOLE_ETAT[c.etat]}</span>
+  );
+
+  return (
+    <td className={`px-2 py-2 text-center ${TON_CASE[c.etat] ?? ''}`} title={infobulle}>
+      {c.emailId ? (
+        <button
+          onClick={() => onApercu(c.emailId as string)}
+          className="w-full rounded hover:ring-2 hover:ring-purple-300"
+          aria-label={infobulle}
+        >
+          {contenu}
+        </button>
+      ) : (
+        contenu
+      )}
+      {c.quand && (
+        <span className="mt-0.5 block text-[10px] leading-tight opacity-70">
+          {jourCourt(c.quand)}
+        </span>
+      )}
+      {c.nombre > 1 && <span className="block text-[10px] leading-tight">×{c.nombre}</span>}
+    </td>
   );
 }
 

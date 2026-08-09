@@ -21,6 +21,15 @@ import {
   type TypeEmail,
 } from './config';
 import { secretDesinscriptionPresent } from './desinscription';
+import { CHAMPS_INSCRIPTION, type LigneInscription } from './donnees';
+import {
+  ETATS_PROBLEME,
+  etatDepuisStatut,
+  parcoursEleve,
+  type EtatCase,
+  type EtapeParcours,
+} from './parcours';
+import { instantSession } from './temps';
 
 export type FiltresEmails = {
   statut?: string;
@@ -71,6 +80,41 @@ export type PaiementEnAttente = {
   relances: number;
 };
 
+/** Une case du tableau « Par élève » : un e-mail, pour une inscription. */
+export type CaseParcours = {
+  etat: EtatCase;
+  /** Date affichée : celle de l'envoi si c'est parti, sinon celle prévue. */
+  quand: string | null;
+  /** Identifiant du message en base, quand il existe (permet l'aperçu). */
+  emailId: string | null;
+  /** Pourquoi cet état — raison de blocage, erreur Brevo, ou « sans objet ». */
+  detail: string | null;
+  /** Nombre de messages de ce type pour cette inscription (relances). */
+  nombre: number;
+};
+
+/** Une ligne du tableau « Par élève » = une inscription (élève × matière). */
+export type LigneParcours = {
+  inscription_id: string;
+  eleve: string;
+  email: string | null;
+  email_parent: string | null;
+  matiere: string | null;
+  date_epreuve: string | null;
+  session_id: string | null;
+  paiement_statut: string | null;
+  /** Ce qui empêchera cet élève de tout recevoir. Vide = tout va bien. */
+  avertissements: string[];
+  /** Adresse manifestement fictive (jeu d'essai) : à ne pas envoyer en vrai. */
+  adresseDeTest: boolean;
+  /** Une case par type d'e-mail du parcours, clé = le type. */
+  cases: Record<string, CaseParcours>;
+  /** Idem pour le parent, uniquement pour les types qui le concernent. */
+  casesParent: Record<string, CaseParcours>;
+  /** Combien de cases sont en échec ou bloquées. */
+  problemes: number;
+};
+
 export type SnapshotEmails = {
   messages: MessageAdmin[];
   total: number;
@@ -92,6 +136,10 @@ export type SnapshotEmails = {
   paiementsEnAttente: PaiementEnAttente[];
   matieres: string[];
   sessions: { id: string; libelle: string }[];
+  /** Le parcours de chaque élève, une ligne par inscription. */
+  parcours: LigneParcours[];
+  /** Les étapes du parcours, dans l'ordre : ce sont les colonnes. */
+  etapes: EtapeParcours[];
 };
 
 const CHAMPS =
@@ -215,7 +263,240 @@ export async function chargerSnapshotEmails(f: FiltresEmails = {}): Promise<Snap
       id: s.id,
       libelle: `${s.matiere} — ${s.date_epreuve}`,
     })),
+    parcours: await chargerParcoursEleves(reglages),
+    etapes: parcoursEleve(reglages),
   };
+}
+
+// --- Vue « Par élève » ------------------------------------------------
+
+/**
+ * Adresses manifestement fictives. On ne les bloque pas — on les signale,
+ * pour qu'elles ne partent pas en vrai et n'abîment pas la réputation de
+ * l'expéditeur à coups de rebonds.
+ */
+const MOTIFS_ADRESSE_TEST = [
+  /@matineesdubac\.local$/i,
+  /@(test|example)\.(com|org|net|fr)$/i,
+  /^(test|diag|demo)[-.@]/i,
+];
+
+function adresseDeTest(email: string | null): boolean {
+  const a = (email ?? '').trim();
+  if (!a) return false;
+  return MOTIFS_ADRESSE_TEST.some((m) => m.test(a));
+}
+
+const EMAIL_VALIDE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** La gravité décide quel message représente une étape jouée plusieurs fois. */
+const GRAVITE: Record<EtatCase, number> = {
+  echec: 6,
+  bloque: 5,
+  envoye: 4,
+  programme: 3,
+  annule: 2,
+  attendu: 1,
+  sans_objet: 0,
+};
+
+/**
+ * Le parcours de chaque inscription : pour chaque e-mail prévu, où il en est.
+ *
+ * C'est la réponse à « suis-je sûre que personne n'est passé au travers ? ».
+ * Une case vide n'est jamais ambiguë : soit le message est encore à venir,
+ * soit on dit pourquoi il ne partira pas.
+ */
+export async function chargerParcoursEleves(r: Reglages): Promise<LigneParcours[]> {
+  const db = emailsDb();
+  const maintenant = new Date();
+  const etapes = parcoursEleve(r);
+  // La date de mise en service : le planificateur ne remonte jamais avant.
+  const actifDepuis = new Date(r.actif_depuis);
+
+  const [insc, sess] = await Promise.all([
+    db
+      .from('inscriptions')
+      .select(CHAMPS_INSCRIPTION)
+      .is('annulee_le', null)
+      .order('date_epreuve', { ascending: true, nullsFirst: false })
+      .limit(500),
+    db.from('sessions_bacs_blancs').select('id, date_epreuve, heure_debut, annulee_le, statut').limit(300),
+  ]);
+
+  if (insc.error) return [];
+  const inscriptions = ((insc.data ?? []) as unknown as LigneInscription[]).filter(
+    (i) => i.statut_eleve !== 'annule',
+  );
+  if (!inscriptions.length) return [];
+
+  const sessionsParId = new Map(
+    ((sess.data ?? []) as {
+      id: string;
+      date_epreuve: string | null;
+      heure_debut: string | null;
+      annulee_le: string | null;
+      statut: string | null;
+    }[]).map((s) => [s.id, s]),
+  );
+
+  // Tous les messages de ces inscriptions, en une requête.
+  const { data: msgs } = await db
+    .from('emails')
+    .select('id, type, statut, planifie_le, envoye_le, destinataire_role, raison_blocage, derniere_erreur, inscription_id')
+    .in(
+      'inscription_id',
+      inscriptions.map((i) => i.id),
+    )
+    .limit(5000);
+
+  type LigneMsg = {
+    id: string;
+    type: string;
+    statut: string;
+    planifie_le: string;
+    envoye_le: string | null;
+    destinataire_role: string;
+    raison_blocage: string | null;
+    derniere_erreur: string | null;
+    inscription_id: string;
+  };
+
+  // inscription → rôle → type → messages
+  const parInscription = new Map<string, LigneMsg[]>();
+  for (const m of ((msgs ?? []) as LigneMsg[])) {
+    const liste = parInscription.get(m.inscription_id) ?? [];
+    liste.push(m);
+    parInscription.set(m.inscription_id, liste);
+  }
+
+  return inscriptions.map((i) => {
+    const s = i.session_id ? sessionsParId.get(i.session_id) : undefined;
+    const date = s?.date_epreuve ?? i.date_epreuve ?? null;
+    const annulee = Boolean(s?.annulee_le) || s?.statut === 'annulee';
+    const debut = date ? instantSession(date, s?.heure_debut ?? '9h') : null;
+    const passee = Boolean(debut && debut.getTime() < maintenant.getTime());
+    const messages = parInscription.get(i.id) ?? [];
+
+    const construire = (etape: EtapeParcours, role: 'eleve' | 'parent'): CaseParcours => {
+      const lignes = messages.filter((m) => m.type === etape.type && m.destinataire_role === role);
+
+      if (lignes.length) {
+        // Plusieurs messages (relances de paiement) : on montre le plus grave,
+        // pour qu'un blocage ne se cache pas derrière un envoi réussi.
+        const choisi = lignes.reduce((a, b) =>
+          GRAVITE[etatDepuisStatut(b.statut)] > GRAVITE[etatDepuisStatut(a.statut)] ? b : a,
+        );
+        const etat = etatDepuisStatut(choisi.statut);
+        return {
+          etat,
+          quand: choisi.envoye_le ?? choisi.planifie_le,
+          emailId: choisi.id,
+          detail: choisi.raison_blocage ?? choisi.derniere_erreur ?? null,
+          nombre: lignes.length,
+        };
+      }
+
+      const vide = (etat: EtatCase, detail: string | null): CaseParcours => ({
+        etat,
+        quand: null,
+        emailId: null,
+        detail,
+        nombre: 0,
+      });
+
+      if (annulee && etape.type !== 'session_annulee') {
+        return vide('sans_objet', 'session annulée');
+      }
+
+      // Aucun message en base : est-ce normal, ou est-ce un trou ?
+      switch (etape.type) {
+        case 'inscription_confirmee':
+          return i.email_envoye
+            ? vide('envoye', 'envoyé par l’ancien système Gmail (avant Brevo)')
+            : vide('attendu', null);
+
+        case 'paiement_attente':
+          if ((i.paiement_statut ?? 'en_attente') !== 'en_attente') {
+            return vide('sans_objet', 'paiement déjà réglé');
+          }
+          if (passee) return vide('sans_objet', 'épreuve déjà passée');
+          // Même garde que le planificateur : rien de rétroactif. Sans ce
+          // test, la case annoncerait une relance qui ne viendra jamais.
+          if (new Date(i.created_at) < actifDepuis) {
+            return vide('sans_objet', 'inscription antérieure à la mise en service des e-mails');
+          }
+          return vide('attendu', null);
+
+        case 'paiement_confirme':
+          return i.paiement_confirme_le ||
+            i.paiement_statut === 'paye' ||
+            i.paiement_statut === 'offert'
+            ? vide('attendu', null)
+            : vide('sans_objet', 'paiement pas encore confirmé');
+
+        case 'infos_pratiques':
+        case 'lien_visio':
+        case 'rappel_veille':
+        case 'dernier_rappel':
+          if (!date) return vide('sans_objet', 'aucune date d’épreuve');
+          if (passee) return vide('sans_objet', 'épreuve déjà passée');
+          return vide('attendu', null);
+
+        case 'session_terminee':
+          return i.copie_recue ? vide('attendu', null) : vide('sans_objet', 'copie pas encore reçue');
+
+        case 'correction_disponible':
+        case 'demande_avis':
+          return i.correction_publiee_le
+            ? vide('attendu', null)
+            : vide('sans_objet', 'correction pas encore publiée');
+
+        default:
+          // session_modifiee / session_annulee : rien tant que rien ne bouge.
+          return vide('sans_objet', 'ne s’est pas produit');
+      }
+    };
+
+    const cases: Record<string, CaseParcours> = {};
+    const casesParent: Record<string, CaseParcours> = {};
+    const parentConnu = EMAIL_VALIDE.test((i.email_parent ?? '').trim());
+
+    for (const e of etapes) {
+      cases[e.type] = construire(e, 'eleve');
+      if (e.parent && parentConnu) casesParent[e.type] = construire(e, 'parent');
+    }
+
+    const avertissements: string[] = [];
+    if (!EMAIL_VALIDE.test((i.email ?? '').trim())) {
+      avertissements.push('adresse élève absente ou invalide : cet élève ne recevra rien');
+    }
+    if (!date) {
+      avertissements.push('aucune date d’épreuve : les 4 messages d’avant-épreuve ne partiront jamais');
+    }
+    if (annulee) avertissements.push('session annulée');
+    if (!parentConnu) avertissements.push('pas d’adresse parent : les copies au parent ne partiront pas');
+
+    const problemes = [...Object.values(cases), ...Object.values(casesParent)].filter((c) =>
+      ETATS_PROBLEME.includes(c.etat),
+    ).length;
+
+    return {
+      inscription_id: i.id,
+      eleve: (i.nom ?? '').trim() || '—',
+      email: i.email,
+      email_parent: parentConnu ? i.email_parent : null,
+      matiere: i.matiere,
+      date_epreuve: date,
+      session_id: i.session_id,
+      paiement_statut: i.paiement_statut,
+      avertissements,
+      adresseDeTest: adresseDeTest(i.email),
+      cases,
+      casesParent,
+      problemes,
+    };
+  });
 }
 
 async function chargerPaiementsEnAttente(): Promise<PaiementEnAttente[]> {

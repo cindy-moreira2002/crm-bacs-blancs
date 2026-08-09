@@ -139,6 +139,21 @@ export function jourDecale(dateISO: string, jours: number): string {
   return new Date(t).toISOString().slice(0, 10);
 }
 
+/**
+ * Le jour seul, sans l'heure — pour les cases du tableau « Par élève », où
+ * l'heure ne tient pas et n'apporte rien : elle reste dans l'infobulle.
+ */
+export function jourCourt(instant: Date | string | null | undefined): string {
+  if (!instant) return '';
+  const d = typeof instant === 'string' ? new Date(instant) : instant;
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('fr-FR', {
+    timeZone: FUSEAU,
+    day: 'numeric',
+    month: 'short',
+  }).format(d);
+}
+
 /** Affichage court d'un instant, pour l'administration. */
 export function instantCourt(instant: Date | string | null | undefined): string {
   if (!instant) return '—';
