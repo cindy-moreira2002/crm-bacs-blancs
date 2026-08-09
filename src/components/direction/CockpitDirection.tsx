@@ -128,7 +128,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
     }
   };
 
-  const { bacs, correction, emails, profs, discord, taches } = resume;
+  const { bacs, correction, paiements, emails, profs, discord, taches } = resume;
 
   return (
     <div className="space-y-6">
@@ -370,22 +370,64 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           }
         >
           {correction.disponible && (
-            <div className="grid grid-cols-3 gap-3">
-              <Chiffre valeur={correction.en_cours} label="en cours" />
-              <Chiffre valeur={correction.corrigees_7j} label="corrigées 7 j" />
-              <Chiffre
-                valeur={correction.en_erreur}
-                label="bloquées"
-                ton={correction.en_erreur ? 'alerte' : 'ok'}
-              />
-            </div>
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <Chiffre valeur={correction.en_cours} label="en cours" />
+                <Chiffre valeur={correction.corrigees_7j} label="corrigées 7 j" />
+                <Chiffre
+                  valeur={correction.en_erreur}
+                  label="bloquées"
+                  ton={correction.en_erreur ? 'alerte' : 'ok'}
+                />
+              </div>
+              <p className="mt-3 rounded-lg bg-slate-50 border border-slate-200 p-2.5 text-[11px] text-slate-600 leading-relaxed">
+                <strong>Le barème d’un sujet</strong> = les points question par question de CE
+                sujet-là. Il se saisit une fois, juste avant de corriger ce bac blanc, et il est
+                réutilisé si tu redonnes le même sujet. Rien à refaire tant que le sujet ne change
+                pas.{' '}
+                <Link href="/admin/bareme" className="underline font-semibold">
+                  Ouvrir les barèmes
+                </Link>
+              </p>
+            </>
+          )}
+        </CarteOutil>
+
+        <CarteOutil
+          emoji="💶"
+          titre="Paiements"
+          aQuoiCaSert="Qui a payé, qui n’a pas payé, depuis combien de temps. La comptabilité complète (encaissements, factures des profs, Urssaf) reste dans le classeur de suivi financier, qui s’ouvre d’un bouton."
+          href="/admin/paiements"
+          libelleLien="Ouvrir les paiements"
+          indisponible={
+            paiements.disponible ? undefined : { raison: paiements.raison, manquants: paiements.manquants }
+          }
+        >
+          {paiements.disponible && (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <Chiffre valeur={paiements.payes} label="réglés" />
+                <Chiffre
+                  valeur={paiements.en_attente}
+                  label="en attente"
+                  ton={paiements.en_attente ? 'alerte' : 'ok'}
+                />
+                <Chiffre valeur={paiements.en_retard} label="+ d’une semaine" />
+              </div>
+              {!paiements.classeur && (
+                <p className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-900">
+                  Le classeur de suivi financier n’est pas encore relié : une variable à poser sur
+                  Vercel et le bouton apparaît.
+                </p>
+              )}
+            </>
           )}
         </CarteOutil>
 
         <CarteOutil
           emoji="📬"
           titre="E-mails automatiques"
-          aQuoiCaSert="Tous les messages envoyés seuls aux élèves, aux parents et aux profs : confirmation d’inscription, rappel de paiement, infos pratiques la veille, dossier de correction prêt. Ici on voit ce qui est parti, ce qui part bientôt et ce qui a échoué."
+          aQuoiCaSert="L’historique de tous les messages partis tout seuls — élèves, parents, profs : confirmation d’inscription, infos pratiques la veille, dossier de correction prêt. Les relances de paiement y figurent aussi, parce que ce sont des e-mails ; l’argent, lui, se suit dans l’onglet Paiements."
           href="/admin/emails"
           libelleLien="Ouvrir les e-mails"
           indisponible={emails.disponible ? undefined : { raison: emails.raison, manquants: emails.manquants }}
@@ -468,17 +510,6 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           )}
         </CarteOutil>
 
-        <CarteOutil
-          emoji="📐"
-          titre="Barèmes des sujets"
-          aQuoiCaSert="Le barème question par question d’un sujet donné : c’est lui qui décide de la note. Sans barème saisi, la correction reste un diagnostic, pas une note."
-          href="/admin/bareme"
-          libelleLien="Ouvrir les barèmes"
-        >
-          <p className="text-xs text-slate-500 leading-relaxed">
-            À remplir une fois par sujet, avant de lancer les corrections de ce bac blanc.
-          </p>
-        </CarteOutil>
       </div>
 
       <p className="text-center text-[11px] text-slate-400">

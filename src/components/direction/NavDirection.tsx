@@ -10,14 +10,22 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+/**
+ * Les sept écrans de la Direction, dans l'ordre où on s'en sert.
+ *
+ * Les barèmes n'y figurent pas : ils appartiennent à la correction (on saisit
+ * le barème d'un sujet juste avant de corriger ce sujet-là), et on y accède
+ * depuis /admin/correction. Un onglet de plus ici les aurait fait passer pour
+ * un réglage permanent, ce qu'ils ne sont pas.
+ */
 export const OUTILS_DIRECTION = [
   { href: '/espace-prof?vue=direction', racine: '/espace-prof', emoji: '🧭', label: 'Vue d’ensemble' },
   { href: '/admin/bacs-blancs', racine: '/admin/bacs-blancs', emoji: '📅', label: 'Bacs blancs & sujets' },
   { href: '/admin/correction', racine: '/admin/correction', emoji: '🎛️', label: 'Correction' },
+  { href: '/admin/paiements', racine: '/admin/paiements', emoji: '💶', label: 'Paiements' },
   { href: '/admin/emails', racine: '/admin/emails', emoji: '📬', label: 'E-mails' },
   { href: '/admin/discord', racine: '/admin/discord', emoji: '🎙️', label: 'Salles Discord' },
   { href: '/admin/profs', racine: '/admin/profs', emoji: '👥', label: 'Profs & accès' },
-  { href: '/admin/bareme', racine: '/admin/bareme', emoji: '📐', label: 'Barèmes' },
 ];
 
 export function NavDirection() {

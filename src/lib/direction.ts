@@ -19,6 +19,7 @@ import { crmAdmin, CHAMPS_PROF, type Professeur } from '@/lib/authProf';
 import { chargerEtatBacsBlancs, type BacBlanc } from '@/lib/bacsBlancs';
 import { discordManquant } from '@/lib/discord/config';
 import { emailsManquant } from '@/lib/emails/config';
+import { chargerPaiements } from '@/lib/paiements';
 import { pipelineDb, pipelineManquant, STATUTS_CORRIGE, STATUTS_ECHEC } from '@/lib/pipeline';
 
 // --- Formes -----------------------------------------------------------
@@ -80,6 +81,16 @@ export type ResumeProfs = {
   derniers: { id: string; nom: string; matieres: string[]; depuis: string; statut: string }[];
 };
 
+export type ResumePaiements = {
+  en_attente: number;
+  payes: number;
+  /** Inscriptions impayées depuis plus d'une semaine. */
+  en_retard: number;
+  encaisse: number;
+  /** Le classeur de suivi financier est-il relié ? */
+  classeur: boolean;
+};
+
 export type ResumeDiscord = {
   configure: boolean;
   manquants: string[];
@@ -99,6 +110,7 @@ export type ResumeDirection = {
   genere_le: string;
   bacs: Bloc<ResumeBacs>;
   correction: Bloc<ResumeCorrection>;
+  paiements: Bloc<ResumePaiements>;
   emails: Bloc<ResumeEmails>;
   profs: Bloc<ResumeProfs>;
   discord: ResumeDiscord;
@@ -184,6 +196,18 @@ async function resumeCorrection(): Promise<Bloc<ResumeCorrection>> {
     en_erreur,
     total_30j,
     cout_30j_usd: Math.round(total_30j * USD_PAR_COPIE * 100) / 100,
+  };
+}
+
+async function resumePaiements(): Promise<Bloc<ResumePaiements>> {
+  const etat = await chargerPaiements();
+  return {
+    disponible: true,
+    en_attente: etat.en_attente,
+    payes: etat.payes,
+    en_retard: etat.lignes.filter((l) => l.jours_depuis > 7).length,
+    encaisse: etat.encaisse,
+    classeur: etat.classeur_url !== null,
   };
 }
 
@@ -334,6 +358,29 @@ function construireTaches(r: Omit<ResumeDirection, 'taches' | 'genere_le'>): Tac
     });
   }
 
+  if (r.paiements.disponible) {
+    if (r.paiements.en_retard > 0) {
+      taches.push({
+        cle: 'paiements-retard',
+        urgence: 'orange',
+        titre: `${pluriel(r.paiements.en_retard, 'inscription impayée', 'inscriptions impayées')} depuis plus d’une semaine`,
+        detail: 'Les relances partent seules, mais au-delà d’une semaine mieux vaut un appel.',
+        lien: '/admin/paiements',
+        libelleLien: 'Voir les paiements',
+      });
+    }
+    if (!r.paiements.classeur) {
+      taches.push({
+        cle: 'classeur-financier',
+        urgence: 'info',
+        titre: 'Le classeur de suivi financier n’est pas relié',
+        detail: 'Une variable à poser (NEXT_PUBLIC_SUIVI_FINANCIER_URL) et l’onglet Paiements l’ouvre directement.',
+        lien: '/admin/paiements',
+        libelleLien: 'Voir comment faire',
+      });
+    }
+  }
+
   if (r.emails.disponible) {
     if (!r.emails.actif && r.emails.en_attente + r.emails.programmes > 0) {
       taches.push({
@@ -421,9 +468,10 @@ export async function chargerResumeDirection(): Promise<ResumeDirection> {
     }
   };
 
-  const [bacs, correction, emails, profs] = await Promise.all([
+  const [bacs, correction, paiements, emails, profs] = await Promise.all([
     sur(resumeBacs, 'bacs blancs'),
     sur(resumeCorrection, 'correction'),
+    sur(resumePaiements, 'paiements'),
     sur(resumeEmails, 'e-mails'),
     sur(resumeProfs, 'professeurs'),
   ]);
@@ -432,6 +480,7 @@ export async function chargerResumeDirection(): Promise<ResumeDirection> {
   const partiel = {
     bacs,
     correction,
+    paiements,
     emails,
     profs,
     discord: { configure: manquantsDiscord.length === 0, manquants: manquantsDiscord },
