@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { NavDirection } from '@/components/direction/NavDirection';
 import { authManquant, profConnecte } from '@/lib/authProf';
 import { TableauDeBordEmails } from './TableauDeBordEmails';
 
@@ -49,5 +50,10 @@ export default async function PageEmails() {
     );
   }
 
-  return <TableauDeBordEmails monEmail={moi.email} />;
+  return (
+    <>
+      <NavDirection />
+      <TableauDeBordEmails monEmail={moi.email} />
+    </>
+  );
 }

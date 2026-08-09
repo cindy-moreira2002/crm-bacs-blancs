@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { NavDirection } from '@/components/direction/NavDirection';
 import { authManquant, profConnecte } from '@/lib/authProf';
 import { TableauBacsBlancs } from './TableauBacsBlancs';
 
@@ -52,5 +53,10 @@ export default async function BacsBlancsPage() {
     );
   }
 
-  return <TableauBacsBlancs />;
+  return (
+    <>
+      <NavDirection />
+      <TableauBacsBlancs />
+    </>
+  );
 }

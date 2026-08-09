@@ -87,11 +87,20 @@ continue de fonctionner **tant que `BREVO_API_KEY` n'est pas posée**.
 utilisées par le reste du site) : `NEXT_PUBLIC_SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY`, `PROF_SESSION_SECRET`, `PIPELINE_INTERNAL_SECRET`.
 
-> **Pour fabriquer les deux secrets aléatoires** — ouvre le Terminal et lance
-> cette commande deux fois (une valeur pour chaque variable) :
+> **Pour fabriquer les deux secrets aléatoires** — ouvre le Terminal.
+>
+> Pour `EMAILS_CRON_SECRET` (il voyage dans un en-tête, tout caractère est permis) :
 >
 > ```bash
 > openssl rand -base64 32
+> ```
+>
+> Pour `EMAILS_WEBHOOK_SECRET`, il faut **impérativement** une valeur sans
+> caractère spécial : ce secret part dans une URL, et un `+` y serait
+> interprété comme un espace — Brevo se ferait refuser à chaque appel.
+>
+> ```bash
+> openssl rand -hex 32
 > ```
 
 3. Une fois toutes les variables posées : onglet **Deployments** → sur le
@@ -122,10 +131,24 @@ Ce script est rejouable : le relancer ne casse rien et n'efface rien.
 5. Si Supabase refuse `create extension` : menu **Database** → **Extensions** →
    cherche `pg_cron`, active-le ; idem pour `pg_net` ; puis relance le script.
 
-### Étape 6 — Le webhook Brevo (2 min)
+### Étape 6 — Le webhook Brevo (2 min) — FACULTATIF
 
-1. Brevo → <https://app.brevo.com/settings/webhook> (Transactional → Settings →
-   Webhooks) → **Add a new webhook**.
+> **À faire quand tu veux, même dans un mois.** Sans webhook, tout fonctionne :
+> les e-mails partent, les rappels se déclenchent, l'administration affiche
+> « envoyé ». Le webhook ajoute seulement le retour de Brevo — délivré, ouvert,
+> cliqué, adresse qui rebondit — et l'enregistrement automatique des
+> désinscriptions faites depuis un e-mail.
+
+1. Brevo → en haut à droite, clique sur **le nom de ton compte** → **Settings**
+   → entrée **Webhooks** → créer un **webhook SORTANT** (*outbound*).
+   Choisis bien la catégorie **Transactional email** (les webhooks
+   « Marketing » sont un autre écran et ne servent pas ici).
+
+   ⚠️ **Sortant, pas entrant.** Les deux noms sont donnés du point de vue de
+   Brevo : *sortant* = Brevo envoie l'information vers notre site (« délivré »,
+   « ouvert », « a rebondi ») — c'est ce dont on a besoin, et c'est inclus dans
+   l'offre gratuite. *Entrant* = un autre outil écrit dans Brevo ; on ne s'en
+   sert pas, et il est réservé aux forfaits supérieurs.
 2. URL à coller (remplace `TON_SECRET` par la valeur de `EMAILS_WEBHOOK_SECRET`) :
 
    ```
@@ -141,10 +164,27 @@ Ce script est rejouable : le relancer ne casse rien et n'efface rien.
 Sans cette étape, certains élèves recevraient **deux** confirmations (une de
 Gmail, une de Brevo).
 
-1. Ouvre ton projet Apps Script « Matinées du Bac » (script.google.com).
-2. Menu de gauche → **Déclencheurs** (l'icône réveil).
-3. Sur le déclencheur `tachePrincipale`, clique `···` → **Supprimer le
-   déclencheur**.
+Tu as plusieurs projets Apps Script, et le repère n'est **pas** le nom du projet
+mais **le nom de la fonction : `tachePrincipale`**.
+
+1. Va sur [script.google.com](https://script.google.com) → menu de gauche →
+   **Mes déclencheurs**. Cette page liste TOUS les déclencheurs, tous projets
+   confondus, avec la fonction exécutée.
+2. Repère la ligne dont la fonction est **`tachePrincipale`** (toutes les 5 min).
+3. `⋮` → **Supprimer le déclencheur**. Supprime **le déclencheur, pas le
+   projet** : le code reste, il ne se lance simplement plus tout seul.
+
+**Comment distinguer tes projets :**
+
+| Projet | Signe distinctif | Action |
+|---|---|---|
+| Celui à couper | `tachePrincipale`, `envoyerRappelsJ1`, `envoyerRappelsH1` ; contient `orpbfnmdlvxmkvyrpvtj.supabase.co` | supprimer le déclencheur |
+| Professeurs — Les Matinées du Bac | seulement `doPost`, écrit dans un Sheet ; aucun e-mail | ne rien toucher |
+| Prospection MDB | menu « Prospection MDB », brouillons Gmail, `scanNewProspectsAndCreateDrafts` | **ne rien toucher** |
+
+⚠️ **Piège** : « Prospection MDB » a lui aussi un déclencheur toutes les
+5 minutes. Se fier au rythme plutôt qu'au nom de la fonction couperait ta
+prospection écoles. Fie-toi à `tachePrincipale`.
 
 > Filet de sécurité : même si tu oublies, le nouveau système lit les anciens
 > drapeaux (`email_envoye`, `rappel_j1_envoye`, `rappel_h1_envoye`) et les met à

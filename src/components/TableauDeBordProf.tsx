@@ -196,27 +196,14 @@ export function TableauDeBordProf({
               {(prof.matieres ?? []).join(' · ') || 'Aucune matière renseignée'}
             </p>
           </div>
+          {/* Les consoles d'administration ne vivent plus ici : elles sont
+              regroupées dans la vue Direction, qui les explique une par une. */}
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            <button onClick={seDeconnecter}
-              className="text-xs text-purple-200 hover:text-white underline">
-              Se déconnecter
-            </button>
-            {/* Tours de contrôle — réservées à l'administratrice. */}
-            {prof.role === 'admin' && (
-              <>
-                <a href="/admin/bacs-blancs"
-                  className="text-xs px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-semibold">
-                  📅 Bacs blancs
-                </a>
-                <a href="/admin/correction"
-                  className="text-xs px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-semibold">
-                  🎛️ Pilotage correction
-                </a>
-                <a href="/admin/emails"
-                  className="text-xs px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-semibold">
-                  📬 E-mails
-                </a>
-              </>
+            {prof.role !== 'admin' && (
+              <button onClick={seDeconnecter}
+                className="text-xs text-purple-200 hover:text-white underline">
+                Se déconnecter
+              </button>
             )}
           </div>
         </div>

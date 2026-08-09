@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { NavDirection } from '@/components/direction/NavDirection';
 import { authManquant, profConnecte } from '@/lib/authProf';
 import { TableauDeBordCorrection } from './TableauDeBordCorrection';
 
@@ -53,5 +54,10 @@ export default async function PilotageCorrectionPage() {
     );
   }
 
-  return <TableauDeBordCorrection />;
+  return (
+    <>
+      <NavDirection />
+      <TableauDeBordCorrection />
+    </>
+  );
 }

@@ -12,7 +12,14 @@
     "test:bareme:supabase": "node scripts/test-bareme-supabase.mjs",
     "apercu:emails": "tsx scripts/apercu-emails.ts",
     "test:hggsp": "node --test scripts/test-hggsp.mjs",
-    "test:sujets": "tsx scripts/test-sujets-eleves.ts"
+    "test:sujets": "tsx scripts/test-sujets-eleves.ts",
+    "test:brevet": "npm run test:brevet:francais && npm run test:brevet:maths && npm run test:brevet:nonregression",
+    "test:brevet:francais": "tsx scripts/test-brevet-francais.ts",
+    "test:brevet:maths": "tsx scripts/test-brevet-maths.ts",
+    "test:brevet:nonregression": "tsx scripts/test-brevet-nonregression.ts",
+    "seed:brevet": "node scripts/seed-brevet.mjs --check",
+    "brevet:sujets-zero": "tsx scripts/installer-sujets-zero.ts",
+    "brevet:verifier": "node scripts/verifier-brevet-base.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",

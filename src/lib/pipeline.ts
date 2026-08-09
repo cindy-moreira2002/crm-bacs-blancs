@@ -35,7 +35,13 @@ export function pipelineDb(): SupabaseClient {
 export type EdgeFunctionName =
   | 'transcribe-french-copy'
   | 'correct-french-copy'
-  | 'generate-dossier';
+  | 'generate-dossier'
+  // Moteurs du brevet. Ils sont appelés par le même chemin et se protègent
+  // par le même header x-pipeline-secret, mais ne corrigent QUE des copies
+  // de DNB rattachées à leur matière : le garde-fou est rejoué côté fonction
+  // et côté base (contrainte exams_brevet_coherence).
+  | 'correct-brevet-francais'
+  | 'correct-brevet-maths';
 
 /**
  * Appelle une Edge Function du pipeline.

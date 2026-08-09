@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { NavDirection } from '@/components/direction/NavDirection';
 import { authManquant, profConnecte } from '@/lib/authProf';
 import { ListeExamens } from './ListeExamens';
 
@@ -53,5 +54,10 @@ export default async function PageBaremes() {
     );
   }
 
-  return <ListeExamens />;
+  return (
+    <>
+      <NavDirection />
+      <ListeExamens />
+    </>
+  );
 }
