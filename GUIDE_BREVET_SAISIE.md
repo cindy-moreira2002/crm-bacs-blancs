@@ -1,87 +1,90 @@
-# Guide saisie du barème brevet
+# Ce qu'il reste à saisir pour que le brevet note
 
-## État du système
+## L'installation est complète
 
-✅ **Infrastructure complète**
-- SQL 42/43 appliqués (schéma brevet)
-- Edge Functions déployées (correct-brevet-francais, correct-brevet-maths)
-- Sujets zéro chargés (français, maths A/B)
-- Référentiels complets (6 compétences, 112 codes d'erreur)
+Vérifiable à tout moment : `npm run brevet:verifier` → **19 contrôles verts, 0 problème**.
 
-❌ **Blocage : barèmes vides**
-- Les barèmes v1.0 existent mais n'ont pas de corrigés
-- Impossible de lancer une correction jusqu'à saisie complète
+- SQL `42_brevet_socle.sql` et `43_brevet_referentiels.sql` : **joués** (20 tables répondent)
+- Edge Functions `correct-brevet-francais` (v1) et `correct-brevet-maths` (v2) : **déployées et ACTIVE**
+- Référentiels : 6 compétences + 67 codes d'erreur en français, 6 + 45 en maths
+- Sujets zéro 2026 installés : français, maths A, maths B
+- Le baccalauréat est intact (17 corrections, 24 compétences, 53 codes hors brevet)
 
-## Accès à l'interface admin
+**Rien n'est cassé.** Ce qui bloque n'est pas technique.
 
-1. Allez sur http://localhost:3000/admin/brevet/francais (en dev)
-2. Connectez-vous avec un compte admin
-3. Cliquez sur le sujet zéro pour voir les blocages
+## Pourquoi aucune copie ne peut être notée
 
-**OU** Supabase SQL Editor (direct en base)
-- Projet : xgdaibekjmtffvkwvcge
-- Version français : fe8a7f55-c09c-4396-aa70-1b98a88b4d0a
-- Exécutez le SQL dans `GUIDE_BREVET_SAISIE_SQL.md`
+Les sujets zéro sont **publiés par le ministère sans corrigé**. Le moteur refuse
+donc de noter, et c'est voulu : `scripts/brevet/sujets-zero.mjs` dit
+explicitement « on ne l'invente pas ».
 
-## À saisir pour francais
+État réel du barème français (version `fe8a7f55-c09c-4396-aa70-1b98a88b4d0a`) :
 
-**15 blocages à lever :**
+| Partie | Points saisis | Attendu | Ce qui manque |
+|---|---|---|---|
+| Compréhension | 32 | 32 | ✅ structure OK, mais 0 élément attendu |
+| Grammaire | 8 | 18 | les 10 pts de réécriture (0 forme listée) |
+| Dictée | 0 | 10 | les règles de retrait (texte présent) |
+| Rédaction | 0 | 40 | les critères des 2 grilles |
 
-### 1. Éléments attendus (questions 1-7)
+**Total : 40 / 100 points. 15 blocages.**
 
-Allez dans `/admin/brevet/francais/[examId]` → onglet « Barème »
+Les 12 questions ont bien leur libellé officiel et leurs points, mais leur
+champ `elements_attendus` est un tableau vide : personne n'a écrit le corrigé.
 
-Pour chaque question, remplissez `éléments attendus` :
-- Q1: Identité du narrateur et contexte personnel
-- Q2: Une figure de style (ex: personification, métaphore)
-- Q3: Le thème principal du texte
-- Q4: Le ton et l'attitude de l'auteur
-- Q5: Les formes acceptables de la réécriture
-- Q6: Points clés de la dictée (6 erreurs)
-- Q7: Consigne de la rédaction
+## Les quatre choses à saisir
 
-### 2. Règles dictée
+### 1. Les éléments attendus des 12 questions — un professeur
 
-Dictée = 10 points. Aucune règle nationale de retrait n'existe.
-**À saisir** : comment déduire les points (ex: -0.5 par erreur ortho, -1 par accord)
+C'est le corrigé. Il demande d'avoir lu le texte (Cendrars, *L'Homme foudroyé*)
+et de décider ce qui vaut les points. Exemple, question 1 (4 pts) :
+« Donnez un titre à chacune des quatre parties du texte. »
 
-- Code d'erreur `ortho` : -0.5 pts par erreur, plafond 5 pts
-- Code d'erreur `accord` : -1 pt par erreur, plafond 4 pts
+### 2. Les formes de la réécriture — mécanique, mais à vérifier
 
-### 3. Grilles rédaction (40 points)
+Consigne : remplacer « je » par « nous » dans un passage donné. Chaque forme à
+modifier vaut une fraction des 10 points. La transformation est grammaticale,
+donc dérivable — mais la répartition des points, non.
 
-Deux grilles : **imagination** (40 pts) et **réflexion** (40 pts)
+### 3. Les règles de retrait de la dictée — décision pédagogique
 
-**Grille imagination**
-- Originalité des idées : 15 pts
-- Cohérence du propos : 15 pts
-- Qualité de la langue : 10 pts
+Le texte de la dictée **est en base**. Ce qui manque : combien on retire par
+erreur, et jusqu'où. **Aucun barème national de dictée n'existe** — c'est à
+l'établissement de trancher. Sans ces règles, le moteur renvoie `score: null`
+plutôt que d'inventer une note.
 
-**Grille réflexion**
-- Argumentation : 20 pts
-- Pertinence des exemples : 15 pts
-- Nuance et profondeur : 5 pts
+### 4. Les critères des deux grilles de rédaction — décision pédagogique
 
-## Via Supabase SQL Editor
+Deux grilles distinctes de 40 points : *imagination* et *réflexion*. Leurs
+intitulés officiels sont en base, leurs critères sont à définir.
 
-Copier-coller `GUIDE_BREVET_SAISIE_SQL.md` dans le SQL Editor et exécuter.
+## Où saisir
 
-Cela peuplera un barème d'exemple prêt pour test E2E.
+**Par l'interface** (elle valide, contrôle les totaux, et refuse ce qui ne colle
+pas) :
 
-## Test de la correction
+    /admin/brevet/francais/51019c11-0385-4359-b932-9a0e5adf1c75
+    /admin/brevet/mathematiques
 
-Après saisie :
-1. Allez `/admin/brevet/francais/[examId]` → voir l'état du barème
-2. Créez une copie test via `/admin/brevet/francais/copies`
-3. Transcrivez du texte de test
-4. Lancez la correction depuis `/admin/correction`
+Accès réservé à l'administratrice (`role = 'admin'`, connexion via `/espace-prof`).
 
-## Statut avant/après
+**Pas par le SQL Editor.** Les tables ont des contraintes fines (catégories de
+dictée fermées à 16 valeurs, unicité par version, triggers de recalcul) et
+l'API `PUT /api/admin/brevet/francais/[examId]/bareme` les respecte. Écrire à la
+main en SQL, c'est se tromper de colonne — `elements_attendus` est un `jsonb`,
+pas du texte.
 
-**Avant**
-- Barème v1.0 : 40/100 points (blocages = 15)
+## L'alternative si personne n'a le corrigé du sujet zéro
 
-**Après saisie**
-- Barème v1.0 : 100/100 points (complet)
-- Status → « Prêt pour test » (ou « Verrouillé » si satisfait)
+Le sujet zéro sert de **structure de référence**, pas forcément de sujet
+d'examen. Pour un vrai brevet blanc, créer un sujet Matinées du Bac avec son
+propre corrigé (« + Nouveau brevet blanc ») est plus simple que de reconstituer
+le corrigé d'un sujet officiel qui n'en a pas.
 
+## Vérifier après saisie
+
+    npm run brevet:verifier
+
+Puis sur la page du sujet : les 15 blocages doivent disparaître et le total
+passer à 100 / 100. Tant qu'il reste un blocage, le verrouillage de la version
+est refusé — et c'est le verrouillage qui autorise la correction hors étalon.
