@@ -54,10 +54,46 @@ export type ExerciceEtat = {
   track: string;
   exercise_type: string;
   label: string;
-  grille: { id: string; version: number | null; status: string } | null;
+  /** `grille_id` : la grille rédigée désignée par cette grille de dépôt, s'il y en a une. */
+  grille: { id: string; version: number | null; status: string; moteur: string; grille_id: string | null } | null;
   gabarit: { id: string; status: string } | null;
   sujets: SujetEtat[];
   etalons: { total: number; synthetiques: number; valides: number };
+};
+
+/**
+ * Couche 3 — une grille RÉDIGÉE (HGGSP et les épreuves du même genre) :
+ * critères décrits, note analytique sur 20 convertie en note officielle,
+ * statut versionné et verrouillage en base.
+ *
+ * Ce n'est ni la grille de compétences (`rubrics`) ni le barème par sujet
+ * (`bareme_versions`) : c'est un troisième moteur, et la page de pilotage
+ * mentirait si elle le rangeait dans l'un des deux autres.
+ */
+export type GrilleRedigeeEtat = {
+  id: string;
+  exercise_type: string;
+  label: string;
+  libelle: string;
+  version: string;
+  statut: string;
+  max_analytique: number;
+  max_officiel: number;
+  criteres: number;
+  valide_par: string | null;
+  verrouille_le: string | null;
+  /** Copies d'élèves notées avec cette grille (étalons exclus). */
+  copies: number;
+  /** Copies étalons rattachées à cette grille. */
+  etalons: number;
+  /** Dont des étalons de calibration inventés, pas de vraies copies. */
+  etalons_synthetiques: number;
+  /** Corrections humaines saisies sur ces étalons — la seule vraie référence. */
+  corrections_humaines: number;
+  /** Écart moyen IA − professeurs, quand la comparaison existe. */
+  biais_moyen: number | null;
+  /** Relectures humaines encore ouvertes sur les copies de cette grille. */
+  relectures_ouvertes: number;
 };
 
 export type SessionVendue = {
@@ -79,13 +115,16 @@ export type MatiereEtat = {
   exercices: ExerciceEtat[];
   /** Les bacs blancs de la matière qui ont un barème propre. */
   examens: ExamenEtat[];
+  /** Les grilles rédigées de la matière — le 3ᵉ moteur. */
+  grilles_redigees: GrilleRedigeeEtat[];
   /**
    * D'où sort la note dans cette matière :
    *   grille_generique — la grille de compétences, comme avant ;
    *   bareme_sujet     — un barème propre au sujet, question par question ;
-   *   mixte            — les deux coexistent (migration en cours).
+   *   criteres_rediges — une grille rédigée, note analytique convertie ;
+   *   mixte            — plusieurs coexistent (migration en cours).
    */
-  moteur_note: 'grille_generique' | 'bareme_sujet' | 'mixte';
+  moteur_note: 'grille_generique' | 'bareme_sujet' | 'criteres_rediges' | 'mixte';
   totaux: {
     grilles_actives: number;
     grilles: number;
@@ -151,6 +190,21 @@ export type SnapshotPipeline = {
     copies: number;
     etalons: number;
     copies_comparees: number;
+  };
+  /** Couche 3 — les grilles rédigées, toutes matières. */
+  redigees: {
+    grilles: number;
+    en_calibration: number;
+    verrouillees: number;
+    copies: number;
+    etalons: number;
+    /** Étalons dont la correction humaine a réellement été saisie. */
+    etalons_humains: number;
+    relectures_ouvertes: number;
+    /** Bacs blancs complets (deux exercices, note finale sur 20). */
+    examens_complets: number;
+    /** Copies déposées en bac blanc complet, groupées par élève. */
+    groupes_complets: number;
   };
 };
 
@@ -256,6 +310,138 @@ export async function chargerExamens(): Promise<Map<string, ExamenEtat[]>> {
   return parMatiere;
 }
 
+/**
+ * La couche 3 : les grilles rédigées, leur statut de versionnement, et l'état
+ * réel de leur calibration.
+ *
+ * On distingue deux choses que le reste de la page confond volontiers :
+ * un étalon EXISTE (une copie de référence est en base) et un étalon est
+ * CORRIGÉ PAR UN HUMAIN (`etalon_corrections_humaines`). Seule la seconde
+ * calibre quoi que ce soit — un profil de calibration inventé ne prouve rien.
+ *
+ * Les tables peuvent manquer sur un déploiement antérieur au 7 août 2026 : on
+ * dégrade en map vide plutôt que de casser le pilotage entier.
+ */
+export async function chargerGrillesRedigees(): Promise<Map<string, GrilleRedigeeEtat[]>> {
+  const db = pipelineDb();
+  const parMatiere = new Map<string, GrilleRedigeeEtat[]>();
+
+  const { data: grilles, error } = await db
+    .from('grilles_redigees')
+    .select('id, matiere, exercise_type, version, libelle, statut, max_analytique, max_officiel, valide_par, verrouille_le')
+    .order('matiere')
+    .order('exercise_type');
+  if (error || !grilles?.length) return parMatiere;
+
+  type Grille = {
+    id: string; matiere: string; exercise_type: string; version: string; libelle: string;
+    statut: string; max_analytique: number; max_officiel: number;
+    valide_par: string | null; verrouille_le: string | null;
+  };
+  const ids = (grilles as Grille[]).map((g) => g.id);
+
+  const [criteresRes, copiesRes, etalonsRes, benchRes] = await Promise.all([
+    db.from('grille_criteres').select('id, grille_id').in('grille_id', ids),
+    db
+      .from('corrections')
+      .select('id, grille_id, human_review_required')
+      .eq('moteur', 'criteres_rediges')
+      .eq('est_etalon', false),
+    db.from('etalon_copies').select('id, grille_id, benchmark_card_id').in('grille_id', ids),
+    db.from('benchmark_cards').select('id, origin:card_json->>origin').limit(2000),
+  ]);
+
+  const criteres = (criteresRes.data ?? []) as { id: string; grille_id: string }[];
+  const copies = (copiesRes.data ?? []) as { id: string; grille_id: string | null; human_review_required: boolean | null }[];
+  const etalons = (etalonsRes.data ?? []) as { id: string; grille_id: string | null; benchmark_card_id: string | null }[];
+  const bench = new Map(((benchRes.data ?? []) as { id: string; origin: string | null }[]).map((b) => [b.id, b.origin]));
+
+  const idsEtalons = etalons.map((e) => e.id);
+  const idsCopies = copies.map((c) => c.id);
+  const [humainesRes, iasRes, relecturesRes] = await Promise.all([
+    idsEtalons.length
+      ? db.from('etalon_corrections_humaines').select('etalon_copie_id, grille_id, note_totale').in('etalon_copie_id', idsEtalons)
+      : Promise.resolve({ data: [] }),
+    idsEtalons.length
+      ? db.from('etalon_corrections_ia').select('etalon_copie_id, note_brute').in('etalon_copie_id', idsEtalons)
+      : Promise.resolve({ data: [] }),
+    idsCopies.length
+      ? db.from('relectures_humaines').select('correction_id').eq('statut', 'ouverte').in('correction_id', idsCopies)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const humaines = (humainesRes.data ?? []) as { etalon_copie_id: string; grille_id: string | null; note_totale: number }[];
+  const ias = (iasRes.data ?? []) as { etalon_copie_id: string; note_brute: number | null }[];
+  const relectures = (relecturesRes.data ?? []) as { correction_id: string }[];
+
+  for (const g of grilles as Grille[]) {
+    const mesEtalons = etalons.filter((e) => e.grille_id === g.id);
+    const mesCopies = copies.filter((c) => c.grille_id === g.id);
+    const idsMesCopies = new Set(mesCopies.map((c) => c.id));
+
+    const ecarts: number[] = [];
+    for (const e of mesEtalons) {
+      const notes = humaines.filter((h) => h.etalon_copie_id === e.id).map((h) => Number(h.note_totale));
+      const ia = ias.find((i) => i.etalon_copie_id === e.id);
+      if (!notes.length || !ia || ia.note_brute === null) continue;
+      ecarts.push(Number(ia.note_brute) - notes.reduce((a, b) => a + b, 0) / notes.length);
+    }
+
+    const ligne: GrilleRedigeeEtat = {
+      id: g.id,
+      exercise_type: g.exercise_type,
+      label: labelExercice(g.exercise_type),
+      libelle: g.libelle,
+      version: g.version,
+      statut: g.statut,
+      max_analytique: Number(g.max_analytique),
+      max_officiel: Number(g.max_officiel),
+      criteres: criteres.filter((c) => c.grille_id === g.id).length,
+      valide_par: g.valide_par,
+      verrouille_le: g.verrouille_le,
+      copies: mesCopies.length,
+      etalons: mesEtalons.length,
+      etalons_synthetiques: mesEtalons.filter((e) =>
+        (bench.get(e.benchmark_card_id ?? '') ?? '').includes('synthetic'),
+      ).length,
+      corrections_humaines: humaines.filter((h) => mesEtalons.some((e) => e.id === h.etalon_copie_id)).length,
+      biais_moyen: ecarts.length ? Math.round((ecarts.reduce((a, b) => a + b, 0) / ecarts.length) * 100) / 100 : null,
+      relectures_ouvertes: relectures.filter((r) => idsMesCopies.has(r.correction_id)).length,
+    };
+
+    const liste = parMatiere.get(g.matiere) ?? [];
+    liste.push(ligne);
+    parMatiere.set(g.matiere, liste);
+  }
+
+  return parMatiere;
+}
+
+/**
+ * Les bacs blancs COMPLETS (deux exercices, note finale sur 20) et les copies
+ * réellement déposées sous cette forme.
+ *
+ * C'est le seul chemin où la note finale d'un élève est la somme de deux notes
+ * officielles sur 10. Tant que `groupes` vaut 0, ce chemin n'a jamais servi.
+ */
+async function chargerExamensComplets(): Promise<{ examens: number; groupes: number }> {
+  const db = pipelineDb();
+  const [exosRes, vueRes] = await Promise.all([
+    db.from('exam_exercices').select('exam_id'),
+    db.from('v_notes_examen_redige').select('groupe_copie_id', { count: 'exact', head: true }),
+  ]);
+  // On compte les examens qui ont VRAIMENT plusieurs exercices, pas ceux qui
+  // portent `exam_format = 'full_exam'` : cette colonne a une valeur par défaut,
+  // et tous les bacs blancs de maths ou de physique la portent sans avoir le
+  // moindre exercice déclaré.
+  const parExamen = new Map<string, number>();
+  for (const x of (exosRes.data ?? []) as { exam_id: string }[]) {
+    parExamen.set(x.exam_id, (parExamen.get(x.exam_id) ?? 0) + 1);
+  }
+  const examens = [...parExamen.values()].filter((n) => n >= 2).length;
+  return { examens, groupes: vueRes.count ?? 0 };
+}
+
 async function compterCorrections(depuisJours: number | null): Promise<number> {
   const db = pipelineDb();
   let req = db.from('corrections').select('id', { count: 'exact', head: true });
@@ -297,9 +483,12 @@ async function chargerSessions(): Promise<Map<string, SessionVendue> | null> {
 export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
   const db = pipelineDb();
 
-  const [rubRes, sujRes, tplRes, benchRes, corrRes, retoursRes, sessions, examensParMatiere, c7, c30, cTot] =
+  const [
+    rubRes, sujRes, tplRes, benchRes, corrRes, retoursRes, sessions,
+    examensParMatiere, redigeesParMatiere, complets, c7, c30, cTot,
+  ] =
     await Promise.all([
-      db.from('rubrics').select('id, matiere, track, exercise_type, status, version'),
+      db.from('rubrics').select('id, matiere, track, exercise_type, status, version, moteur, grille_id'),
       db.from('subject_cards').select('id, matiere, track, exercise_type, status, card_json'),
       db.from('dossier_templates').select('id, matiere, track, exercise_type, audience, status'),
       db
@@ -316,6 +505,8 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
       db.from('relecture_feedback').select('*').order('created_at', { ascending: false }).limit(200),
       chargerSessions(),
       chargerExamens(),
+      chargerGrillesRedigees(),
+      chargerExamensComplets(),
       compterCorrections(7),
       compterCorrections(30),
       compterCorrections(null),
@@ -327,7 +518,7 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
   // Les retours peuvent échouer si la table n'existe pas encore : on dégrade.
   const retours = (retoursRes.error ? [] : (retoursRes.data ?? [])) as RetourProf[];
 
-  type Rub = { id: string; matiere: string | null; track: string; exercise_type: string; status: string; version: number | null };
+  type Rub = { id: string; matiere: string | null; track: string; exercise_type: string; status: string; version: number | null; moteur: string | null; grille_id: string | null };
   type Suj = { id: string; matiere: string | null; track: string; exercise_type: string; status: string; card_json: Record<string, unknown> | null };
   type Tpl = { id: string; matiere: string | null; track: string; exercise_type: string; audience: string; status: string };
   type Bench = { id: string; subject_id: string | null; track: string; exercise_type: string; validation_status: string | null; origin: string | null };
@@ -366,7 +557,13 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
     const ex = exercice(r.matiere, r.track, r.exercise_type);
     // Plusieurs versions possibles : on retient la plus récente.
     if (!ex.grille || (r.version ?? 0) > (ex.grille.version ?? 0)) {
-      ex.grille = { id: r.id, version: r.version, status: r.status };
+      ex.grille = {
+        id: r.id,
+        version: r.version,
+        status: r.status,
+        moteur: r.moteur ?? 'grille_generique',
+        grille_id: r.grille_id,
+      };
     }
   }
   for (const s of sujets) {
@@ -389,9 +586,14 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
       continue;
     }
     const e = exercice(s.matiere, s.track, s.exercise_type).etalons;
+    const synthetique = (b.origin ?? '').includes('synthetic');
     e.total += 1;
-    if ((b.origin ?? '').includes('synthetic')) e.synthetiques += 1;
-    if (b.validation_status === 'validated') e.valides += 1;
+    if (synthetique) e.synthetiques += 1;
+    // « Validé » ne veut dire quelque chose que sur une VRAIE copie : un profil
+    // de calibration inventé porte lui aussi validation_status = 'validated',
+    // parce qu'il a été posé en base tel quel. Le compter ici ferait dire à la
+    // page qu'un professeur a validé une référence que personne n'a lue.
+    if (b.validation_status === 'validated' && !synthetique) e.valides += 1;
   }
 
   // Corrections abouties et retours, par matière.
@@ -419,6 +621,10 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
   for (const matiere of examensParMatiere?.keys() ?? []) {
     if (!parMatiere.has(matiere)) parMatiere.set(matiere, []);
   }
+  // Idem pour une matiere qui n'est notee que par une grille redigee.
+  for (const matiere of redigeesParMatiere?.keys() ?? []) {
+    if (!parMatiere.has(matiere)) parMatiere.set(matiere, []);
+  }
 
   const matieres: MatiereEtat[] = [...parMatiere.entries()]
     .map(([matiere, exs]) => {
@@ -444,14 +650,24 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
       const visibilite: MatiereEtat['visibilite'] =
         actifs === 0 ? 'draft' : actifs === total ? 'active' : 'partielle';
 
-      // D'ou sort la note ici ? Un examen dont les corrections sont ouvertes
-      // note par son bareme ; les sujets encore servis par la grille generique
-      // notent par elle. Les deux peuvent coexister pendant la migration.
+      // D'ou sort la note ici ? Trois moteurs peuvent y prétendre :
+      //   - un barème propre au sujet, dès que ses corrections sont ouvertes ;
+      //   - une grille rédigée, dès qu'une grille de dépôt active la désigne ;
+      //   - la grille générique, partout ailleurs.
+      // On lit le moteur SUR LA GRILLE DE DÉPÔT (`rubrics.moteur`), parce que
+      // c'est elle que le trigger recopie sur la correction : c'est donc elle,
+      // et rien d'autre, qui décide de l'Edge Function appelée.
       const examens = examensParMatiere?.get(matiere) ?? [];
+      const grilles_redigees = redigeesParMatiere?.get(matiere) ?? [];
       const parBareme = examens.some((e) => e.statut === 'correction_open');
-      const parGrille = totaux.sujets_actifs > 0;
+      const exercicesActifs = exs.filter((e) => e.grille?.status === 'active');
+      const parRedige = exercicesActifs.some((e) => e.grille!.moteur === 'criteres_rediges');
+      const parGrille =
+        totaux.sujets_actifs > 0 && exercicesActifs.some((e) => e.grille!.moteur !== 'criteres_rediges');
+      const moteurs = [parBareme && 'bareme_sujet', parRedige && 'criteres_rediges', parGrille && 'grille_generique']
+        .filter(Boolean) as MatiereEtat['moteur_note'][];
       const moteur_note: MatiereEtat['moteur_note'] =
-        parBareme && parGrille ? 'mixte' : parBareme ? 'bareme_sujet' : 'grille_generique';
+        moteurs.length > 1 ? 'mixte' : (moteurs[0] ?? 'grille_generique');
 
       return {
         matiere,
@@ -459,6 +675,7 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
         session: sessions?.get(matiere) ?? null,
         exercices: exs,
         examens,
+        grilles_redigees,
         moteur_note,
         totaux,
         visibilite,
@@ -537,6 +754,55 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
     copies_comparees: tousExamens.reduce((n, e) => n + e.copies_comparees, 0),
   };
 
+  // --- Couche 3 : les grilles rédigées --------------------------------
+  const VERROUILLEES = ['locked', 'in_use'];
+  const toutesRedigees = matieres.flatMap((m) => m.grilles_redigees);
+  for (const g of toutesRedigees) {
+    const visible = matieres.some((m) =>
+      m.exercices.some((e) => e.grille?.grille_id === g.id && e.grille.status === 'active'),
+    );
+    if (visible && !VERROUILLEES.includes(g.statut)) {
+      alertes.push(
+        `« ${g.libelle} » corrige des copies alors que la grille est en « ${g.statut} » : chaque note est provisoire et doit être validée par un professeur.`,
+      );
+    }
+    if (g.copies > 0 && g.corrections_humaines === 0) {
+      alertes.push(
+        `« ${g.libelle} » a noté ${g.copies} copie(s) sans qu'aucun professeur n'ait corrigé une copie étalon : l'échelle n'a jamais été confrontée à un humain.`,
+      );
+    }
+    if (g.etalons > 0 && g.etalons_synthetiques === g.etalons) {
+      alertes.push(
+        `« ${g.libelle} » : ses ${g.etalons} copies étalons sont toutes des profils inventés pour caler l'échelle — aucune vraie copie notée par un professeur.`,
+      );
+    }
+    if (g.biais_moyen !== null && Math.abs(g.biais_moyen) >= 1) {
+      alertes.push(
+        `« ${g.libelle} » : écart systématique de ${g.biais_moyen > 0 ? '+' : ''}${g.biais_moyen} point(s) entre l'IA et les professeurs.`,
+      );
+    }
+    if (g.relectures_ouvertes > 0) {
+      alertes.push(`« ${g.libelle} » : ${g.relectures_ouvertes} relecture(s) humaine(s) en attente.`);
+    }
+  }
+  if (complets.examens > 0 && complets.groupes === 0) {
+    alertes.push(
+      `${complets.examens} bac(s) blanc(s) complet(s) sont préparés, mais aucune copie n'a encore été déposée en deux exercices : la note finale sur 20 n'a jamais été produite pour de vrai.`,
+    );
+  }
+
+  const redigees = {
+    grilles: toutesRedigees.length,
+    en_calibration: toutesRedigees.filter((g) => !VERROUILLEES.includes(g.statut)).length,
+    verrouillees: toutesRedigees.filter((g) => VERROUILLEES.includes(g.statut)).length,
+    copies: toutesRedigees.reduce((n, g) => n + g.copies, 0),
+    etalons: toutesRedigees.reduce((n, g) => n + g.etalons, 0),
+    etalons_humains: toutesRedigees.reduce((n, g) => n + g.corrections_humaines, 0),
+    relectures_ouvertes: toutesRedigees.reduce((n, g) => n + g.relectures_ouvertes, 0),
+    examens_complets: complets.examens,
+    groupes_complets: complets.groupes,
+  };
+
   return {
     genere_le: new Date().toISOString(),
     matieres,
@@ -552,5 +818,6 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
     etalons_orphelins: orphelins,
     sessions_disponibles: Boolean(sessions),
     baremes,
+    redigees,
   };
 }

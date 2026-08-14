@@ -98,7 +98,9 @@ function BandeauBaremes({
   b: SnapshotPipeline['baremes'];
   matieres: MatiereEtat[];
 }) {
-  const parBareme = matieres.filter((m) => m.moteur_note !== 'grille_generique');
+  // Les matières réellement notées par un barème par sujet. HGGSP n'en est pas :
+  // elle est notée par une grille rédigée, qui a son propre bandeau.
+  const parBareme = matieres.filter((m) => m.examens.some((e) => e.statut === 'correction_open'));
   const nonCalibres = matieres
     .flatMap((m) => m.examens)
     .filter((e) => e.statut === 'correction_open' && e.copies_comparees === 0);
@@ -165,6 +167,90 @@ function BandeauBaremes({
   );
 }
 
+/**
+ * La 3ᵉ couche : les grilles RÉDIGÉES (HGGSP). Ni grille de compétences, ni
+ * barème par sujet — des critères décrits, une note analytique sur 20 convertie
+ * en note officielle, et un verrouillage en base.
+ *
+ * Le bandeau existe pour dire deux choses qu'on ne voit nulle part ailleurs :
+ * une grille non verrouillée rend TOUTES ses notes provisoires, et un étalon
+ * qui n'a pas été corrigé par un humain ne calibre rien.
+ */
+function BandeauRedigees({
+  r,
+  matieres,
+}: {
+  r: SnapshotPipeline['redigees'];
+  matieres: MatiereEtat[];
+}) {
+  if (r.grilles === 0) return null;
+
+  const concernees = matieres.filter((m) => m.grilles_redigees.length > 0);
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">📝 Les épreuves rédigées : grilles à critères</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Une grille par exercice, critère par critère. La copie est notée sur une échelle
+            analytique de 20 points, convertie automatiquement en note officielle. Tant que la grille
+            n’est pas verrouillée, chaque note est <strong>provisoire</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {[
+          { valeur: String(r.grilles), legende: 'grilles rédigées' },
+          { valeur: String(r.verrouillees), legende: 'verrouillées' },
+          { valeur: String(r.copies), legende: 'copies notées' },
+          { valeur: `${r.etalons_humains}/${r.etalons}`, legende: 'étalons corrigés par un prof' },
+          { valeur: String(r.relectures_ouvertes), legende: 'relectures en attente' },
+        ].map((k) => (
+          <div key={k.legende} className="rounded-xl border border-gray-200 p-3">
+            <p className="text-xl font-bold text-gray-900">{k.valeur}</p>
+            <p className="text-[11px] text-gray-500 leading-tight mt-0.5">{k.legende}</p>
+          </div>
+        ))}
+      </div>
+
+      {r.en_calibration > 0 && (
+        <p className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          ⚠️ {r.en_calibration} grille(s) pas encore verrouillée(s) : les notes produites sont
+          affichées en fourchette à l’élève et doivent être validées par un professeur.
+        </p>
+      )}
+
+      {r.etalons_humains === 0 && r.etalons > 0 && (
+        <p className="mt-2 text-xs text-red-800 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+          ⚠️ Aucune des {r.etalons} copies étalons n’a été corrigée par un professeur. L’échelle
+          repose entièrement sur des repères inventés — c’est le seul vrai remède à une notation
+          trop sévère ou trop généreuse.
+        </p>
+      )}
+
+      {r.examens_complets > 0 && (
+        <p className={`mt-2 text-xs rounded-xl px-3 py-2 border ${
+          r.groupes_complets > 0
+            ? 'text-gray-600 bg-gray-50 border-gray-200'
+            : 'text-amber-800 bg-amber-50 border-amber-200'
+        }`}>
+          Bac blanc complet (deux exercices, note finale sur 20) : {r.examens_complets} préparé(s),{' '}
+          {r.groupes_complets} copie(s) réellement déposée(s) sous cette forme.
+          {r.groupes_complets === 0 && ' Ce chemin n’a donc jamais servi pour de vrai.'}
+        </p>
+      )}
+
+      {concernees.length > 0 && (
+        <p className="mt-3 text-[11px] text-gray-500">
+          Notées par grille rédigée : <strong>{concernees.map((m) => m.label).join(', ')}</strong>.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function CarteMatiere({
   m,
   onStatut,
@@ -184,21 +270,56 @@ function CarteMatiere({
   const ouverts = m.examens.filter((e) => e.statut === 'correction_open');
   const compares = m.examens.reduce((n, e) => n + e.copies_comparees, 0);
 
+  // La couche 3, quand c'est elle qui note ici. Une grille non verrouillée rend
+  // toutes ses notes provisoires : c'est le point qui prime sur tout le reste.
+  const VERROUILLEES = ['locked', 'in_use'];
+  const redigees = m.grilles_redigees;
+  const redigeesProvisoires = redigees.filter((g) => !VERROUILLEES.includes(g.statut)).length;
+  const etalonsHumains = redigees.reduce((n, g) => n + g.corrections_humaines, 0);
+  const relecturesRedigees = redigees.reduce((n, g) => n + g.relectures_ouvertes, 0);
+
+  // Selon le moteur, les deux premiers points de la check-list ne parlent pas
+  // de la même chose : afficher « aucun barème propre » à une matière notée par
+  // grille rédigée serait un faux reproche.
+  const pointsMoteur: { ok: boolean; texte: string }[] = redigees.length
+    ? [
+        {
+          ok: redigeesProvisoires === 0,
+          texte:
+            redigeesProvisoires === 0
+              ? `${redigees.length} grille(s) rédigée(s) verrouillée(s) — les notes sont définitives`
+              : `${redigeesProvisoires} grille(s) rédigée(s) sur ${redigees.length} pas encore verrouillée(s) : notes provisoires`,
+        },
+        {
+          ok: etalonsHumains > 0,
+          texte:
+            etalonsHumains > 0
+              ? `${etalonsHumains} copie(s) étalon corrigée(s) par un professeur`
+              : 'Aucune copie étalon corrigée par un professeur : l’échelle n’a jamais été confrontée à un humain',
+        },
+      ]
+    : [
+        {
+          ok: m.examens.length > 0,
+          texte:
+            m.examens.length > 0
+              ? `${m.examens.length} bac(s) blanc(s) avec barème propre, dont ${ouverts.length} en correction`
+              : 'Aucun barème propre au sujet — la note vient encore de la grille de compétences',
+        },
+        {
+          ok: compares > 0,
+          texte:
+            compares > 0
+              ? `${compares} copie(s) étalon comparée(s) IA / professeurs`
+              : 'Barème jamais confronté à un correcteur humain (aucune copie comparée)',
+        },
+      ];
+
   const points: { ok: boolean; texte: string }[] = [
-    {
-      ok: m.examens.length > 0,
-      texte:
-        m.examens.length > 0
-          ? `${m.examens.length} bac(s) blanc(s) avec barème propre, dont ${ouverts.length} en correction`
-          : 'Aucun barème propre au sujet — la note vient encore de la grille de compétences',
-    },
-    {
-      ok: compares > 0,
-      texte:
-        compares > 0
-          ? `${compares} copie(s) étalon comparée(s) IA / professeurs`
-          : 'Barème jamais confronté à un correcteur humain (aucune copie comparée)',
-    },
+    ...pointsMoteur,
+    ...(relecturesRedigees > 0
+      ? [{ ok: false, texte: `${relecturesRedigees} relecture(s) humaine(s) en attente sur des copies notées` }]
+      : []),
     { ok: t.grilles_actives === t.grilles && t.grilles > 0, texte: `Grilles de compétences actives (${t.grilles_actives}/${t.grilles})` },
     { ok: t.sujets_actifs > 0, texte: `Sujets visibles au dépôt (${t.sujets_actifs}/${t.sujets})` },
     { ok: t.gabarits_actifs === t.gabarits && t.gabarits > 0, texte: `Dossiers élève prêts (${t.gabarits_actifs}/${t.gabarits})` },
@@ -229,10 +350,12 @@ function CarteMatiere({
             {/* D'où sort la note ici : c'est la question la plus importante
                 de cette carte, elle se lit donc au premier coup d'œil. */}
             {m.moteur_note === 'bareme_sujet' && <Pastille ton="bleu">note : barème du sujet</Pastille>}
-            {m.moteur_note === 'mixte' && <Pastille ton="orange">note : barème + grille</Pastille>}
+            {m.moteur_note === 'criteres_rediges' && <Pastille ton="bleu">note : grille rédigée</Pastille>}
+            {m.moteur_note === 'mixte' && <Pastille ton="orange">note : plusieurs moteurs</Pastille>}
             {m.moteur_note === 'grille_generique' && m.visibilite !== 'draft' && (
               <Pastille ton="gris">note : grille de compétences</Pastille>
             )}
+            {redigeesProvisoires > 0 && <Pastille ton="orange">notes provisoires</Pastille>}
           </div>
           {m.session ? (
             <p className="text-xs text-gray-500 mt-1">
@@ -347,6 +470,56 @@ function CarteMatiere({
                     </p>
                   )}
                 </Link>
+              ))}
+            </div>
+          )}
+
+          {/* Les grilles rédigées — l'autre couche qui donne la note */}
+          {redigees.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-700">Grilles rédigées</p>
+              {redigees.map((g) => (
+                <div key={g.id} className="bg-white rounded-xl border border-gray-200 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-gray-800 min-w-0 truncate">{g.libelle}</p>
+                    {VERROUILLEES.includes(g.statut) ? (
+                      <Pastille ton="vert">{g.statut === 'in_use' ? 'en service' : 'verrouillée'}</Pastille>
+                    ) : g.statut === 'validated' ? (
+                      <Pastille ton="bleu">validée, pas verrouillée</Pastille>
+                    ) : (
+                      <Pastille ton="orange">{g.statut}</Pastille>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Version {g.version} · {g.criteres} critères · {g.max_analytique} pts analytiques →{' '}
+                    {g.max_officiel} officiels · {g.copies} copie(s) notée(s)
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Étalons : {g.etalons}
+                    {g.etalons_synthetiques > 0 && ` (dont ${g.etalons_synthetiques} inventés)`} ·{' '}
+                    {g.corrections_humaines} corrigé(s) par un prof
+                    {g.biais_moyen !== null && (
+                      <>
+                        {' '}· biais {g.biais_moyen > 0 ? '+' : ''}
+                        {g.biais_moyen}
+                      </>
+                    )}
+                  </p>
+                  {!VERROUILLEES.includes(g.statut) && (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      Grille non verrouillée : chaque note produite est provisoire et doit être
+                      validée par un professeur.
+                    </p>
+                  )}
+                  {g.valide_par && (
+                    <p className="text-[11px] text-gray-500 mt-1">Validée par {g.valide_par}.</p>
+                  )}
+                  {g.relectures_ouvertes > 0 && (
+                    <p className="text-[11px] text-red-700 mt-1">
+                      {g.relectures_ouvertes} relecture(s) humaine(s) en attente.
+                    </p>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -609,11 +782,11 @@ export function TableauDeBordCorrection() {
             <p className="text-sm text-purple-700 font-medium">Les Matinées du Bac · administration</p>
             <h1 className="text-3xl font-bold text-gray-900">Pilotage de la correction</h1>
             <p className="text-sm text-gray-600 mt-1 max-w-2xl">
-              Deux couches, à ne pas confondre. La <strong>note officielle</strong> d’un bac blanc
-              vient de son <strong>barème propre au sujet</strong>, question par question. Les{' '}
-              <strong>grilles de compétences</strong> pilotées plus bas produisent le{' '}
-              <em>diagnostic pédagogique</em> — et la note, seulement pour les matières qui n’ont pas
-              encore de barème.
+              Trois moteurs de note, à ne pas confondre. Le <strong>barème propre au sujet</strong>,
+              question par question, là où il existe. La <strong>grille rédigée</strong>, critère par
+              critère, pour les épreuves rédigées (HGGSP) : note analytique sur 20 convertie en note
+              officielle. Et la <strong>grille de compétences</strong> partout ailleurs — qui, pour
+              les deux premiers, ne produit plus que le <em>diagnostic pédagogique</em>.
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -653,6 +826,9 @@ export function TableauDeBordCorrection() {
         <>
         {/* Couche 1 — la note officielle */}
         <BandeauBaremes b={etat.baremes} matieres={etat.matieres} />
+
+        {/* Couche 3 — les épreuves rédigées */}
+        <BandeauRedigees r={etat.redigees} matieres={etat.matieres} />
 
         {/* Synthèse */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">

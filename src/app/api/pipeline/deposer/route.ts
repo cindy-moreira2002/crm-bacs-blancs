@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     const {
       path, subject_id, rubric_id, track, exercise_type,
       eleve_nom, eleve_email, prof_email, eleve_code, matiere,
+      exam_id, groupe_copie_id,
     } = body;
 
     if (!path || !subject_id || !rubric_id || !track || !exercise_type) {
@@ -51,6 +52,57 @@ export async function POST(req: NextRequest) {
     }
 
     const db = pipelineDb();
+
+    // --- Bac blanc complet ---------------------------------------------
+    // Deux copies du même élève, deux exercices, une seule note finale : la
+    // somme des notes officielles. Le lien entre les deux, c'est
+    // `groupe_copie_id` — et lui seul. On refuse de le poser au hasard :
+    // l'exercice déposé doit vraiment appartenir à l'examen annoncé, sinon la
+    // note finale additionnerait deux moitiés d'épreuves différentes.
+    let complet: { exam_id: string; exam_format: string; groupe_copie_id: string } | null = null;
+    if (exam_id) {
+      if (!groupe_copie_id) {
+        return NextResponse.json(
+          { error: 'Bac blanc complet : groupe_copie_id obligatoire (le même sur les deux copies de l’élève).' },
+          { status: 400 },
+        );
+      }
+      const { data: examen, error: examErr } = await db
+        .from('exams')
+        .select('id, exam_format')
+        .eq('id', exam_id)
+        .single();
+      if (examErr || !examen) {
+        return NextResponse.json({ error: 'Bac blanc introuvable.' }, { status: 404 });
+      }
+      const { data: exo } = await db
+        .from('exam_exercices')
+        .select('id')
+        .eq('exam_id', exam_id)
+        .eq('exercise_type', exercise_type)
+        .eq('subject_id', subject_id)
+        .maybeSingle();
+      if (!exo) {
+        return NextResponse.json(
+          { error: `Ce sujet n'est pas l'exercice « ${exercise_type} » de ce bac blanc.` },
+          { status: 409 },
+        );
+      }
+      // Deux copies du même exercice dans le même groupe feraient compter
+      // l'exercice deux fois dans la somme.
+      const { count } = await db
+        .from('corrections')
+        .select('id', { count: 'exact', head: true })
+        .eq('groupe_copie_id', groupe_copie_id)
+        .eq('exercise_type', exercise_type);
+      if (count && count > 0) {
+        return NextResponse.json(
+          { error: `Une copie de « ${exercise_type} » a déjà été déposée pour cet élève dans ce bac blanc.` },
+          { status: 409 },
+        );
+      }
+      complet = { exam_id, exam_format: examen.exam_format, groupe_copie_id };
+    }
 
     const { data: correction, error } = await db
       .from('corrections')
@@ -69,6 +121,7 @@ export async function POST(req: NextRequest) {
         teacher_email: prof_email ? String(prof_email).trim() : acces.email,
         matiere: matiere || MATIERE_PAR_DEFAUT,
         source: 'crm',
+        ...(complet ?? {}),
       })
       .select('id, status')
       .single();
@@ -93,7 +146,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ correction_id: correction.id, lance: true }, { status: 201 });
+    return NextResponse.json(
+      { correction_id: correction.id, lance: true, groupe_copie_id: complet?.groupe_copie_id ?? null },
+      { status: 201 },
+    );
   } catch (err) {
     console.error('❌ /api/pipeline/deposer', err);
     const message = err instanceof Error ? err.message : 'Erreur inconnue';

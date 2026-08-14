@@ -13,6 +13,7 @@
     "apercu:emails": "tsx scripts/apercu-emails.ts",
     "test:brevo": "tsx scripts/test-brevo.ts",
     "test:hggsp": "node --test scripts/test-hggsp.mjs",
+    "hggsp:verifier": "node scripts/verifier-hggsp-base.mjs",
     "test:sujets": "tsx scripts/test-sujets-eleves.ts",
     "test:brevet": "npm run test:brevet:francais && npm run test:brevet:maths && npm run test:brevet:nonregression",
     "test:brevet:francais": "tsx scripts/test-brevet-francais.ts",

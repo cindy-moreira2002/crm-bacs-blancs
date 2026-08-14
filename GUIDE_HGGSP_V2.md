@@ -38,6 +38,9 @@ enregistrées sont conservés et marqués `archived` / `moteur = grille_generiqu
 | Page de relecture professeur | `src/app/relecture/[matiere]/page.tsx` + `src/components/DossierRelectureHggsp.tsx` |
 | Questions posées au professeur | `src/components/FormulaireRelecture.tsx` (jeu `redige`) |
 | Tests hors ligne | `scripts/test-hggsp.mjs` — `npm run test:hggsp` |
+| Vérification de la base | `scripts/verifier-hggsp-base.mjs` — `npm run hggsp:verifier` |
+| Dépôt d'un bac blanc complet | `src/components/DepotCopiePipeline.tsx` + `/api/pipeline/sujets`, `/api/pipeline/deposer`, `/api/pipeline/groupe/[id]` |
+| Pilotage (3ᵉ couche) | `src/lib/pipelineEtat.ts` → `/admin/correction` |
 
 **Le noyau fait foi.** Le script d'installation écrit en base exactement ce
 qu'il contient, et la consigne système remise au correcteur est *construite* à
@@ -56,6 +59,22 @@ et l'élève voit sa note d'entraînement sur 20 **et** son équivalent sur 10.
 
 ### 3.2 Un bac blanc complet (dissertation + étude critique)
 
+**Depuis l'écran « Déposer une copie »** (le cas normal) : le bac blanc complet
+apparaît en haut du menu déroulant, dans son propre groupe. Le formulaire
+demande alors **une copie par exercice**, les envoie sous un même
+`groupe_copie_id` généré automatiquement, suit les deux corrections côte à côte
+et affiche la note du bac blanc — la somme des notes officielles, lue dans
+`v_notes_examen_redige`. Rien à écrire à la main.
+
+Trois refus volontaires côté serveur, parce qu'ils produiraient une note fausse
+sans prévenir : déposer un sujet qui n'appartient pas à l'examen annoncé,
+déposer deux fois le même exercice pour un élève, et proposer au dépôt un bac
+blanc dont un exercice n'a pas de sujet visible (il serait noté sur une moitié
+d'épreuve).
+
+**Créer une nouvelle session** (le SQL reste nécessaire — l'examen et ses
+exercices ne se créent pas depuis l'application) :
+
 1. Créer l'examen et ses deux exercices (déjà fait pour
    `HGGSP_BAC_BLANC_2026_01`, à dupliquer pour une nouvelle session) :
 
@@ -72,10 +91,9 @@ select id, 'hggsp_etude_critique', 'HGGSP_ETUDE_CRITIQUE_V2', 'HGGSP2027_EC_01',
 from public.exams where code = 'HGGSP_BAC_BLANC_2026_02';
 ```
 
-2. Déposer les **deux** copies du même élève avec :
-   - `exam_id` = l'examen ci-dessus ;
-   - `exam_format = 'full_exam'` ;
-   - **le même `groupe_copie_id`** (n'importe quel uuid, identique sur les deux).
+2. Déposer les **deux** copies du même élève depuis l'écran de dépôt. (Si on
+   passe par l'API à la main : `exam_id` = l'examen ci-dessus, `exam_format =
+   'full_exam'`, et **le même `groupe_copie_id`** sur les deux.)
 
 3. La note finale se lit alors dans la vue :
 
@@ -225,6 +243,37 @@ retire aucun point sur ce motif, il demande une vérification.
 
 ---
 
+## 6 bis. Vérifier que la base dit bien ce que le code dit
+
+```bash
+npm run hggsp:verifier
+```
+
+Strictement en lecture, rejouable en production. Il compare la base au **noyau**,
+qui fait foi, et s'arrête en rouge si l'un des deux a dérivé de l'autre.
+
+Ce qu'il contrôle, dans l'ordre : les 11 tables de la couche rédigée ; les deux
+grilles (échelles, critères, somme des critères = échelle, nombre de
+descripteurs) ; **la consigne système stockée, caractère par caractère, contre
+celle que le noyau construit** — c'est le contrôle qui compte, puisqu'une
+consigne qui a dérivé ferait appliquer un barème que le code ne décrit plus ; la
+taxonomie des 43 codes et sa répartition par portée ; le routage (une seule
+grille active par exercice, moteur `criteres_rediges`, v1 archivée) ; l'état réel
+de la calibration ; le bac blanc complet et ses exercices ; les relectures en
+attente.
+
+Il distingue trois niveaux : ✓ conforme, ✗ problème (sortie en code 1), et
+· remarque — un fait à savoir qui ne fait pas échouer le script (grille non
+verrouillée, étalons synthétiques, chemin jamais emprunté).
+
+Ce que le pilotage `/admin/correction` en montre : le bandeau
+« 📝 Les épreuves rédigées » donne les mêmes chiffres en continu — grilles,
+verrouillages, copies notées, **étalons corrigés par un prof sur le total**, et
+relectures en attente. HGGSP y porte la pastille « note : grille rédigée » et,
+tant que les grilles ne sont pas verrouillées, « notes provisoires ».
+
+---
+
 ## 7. Faire relire par un professeur
 
 Le lien (à ne pas publier — le jeton fait office de mot de passe) :
@@ -289,15 +338,30 @@ node scripts/deployer-edge.mjs correct-copy-redigee supabase/functions/_shared/h
 
 ## 10. Ce qui reste à faire
 
+### Ce que le logiciel ne peut pas faire à ta place
+
 1. **Remplacer les 56 étalons synthétiques** par de vraies copies notées (au
-   moins 3 par sujet, dont une copie frontière autour de 9–10 et 11–12).
-   C'est le seul vrai remède à une calibration trop sévère ou trop généreuse.
-2. **Faire relire les grilles** par des professeurs d'HGGSP, puis valider et
-   verrouiller (§5).
+   moins 3 par sujet, dont une copie frontière autour de 9–10 et 11–12), et
+   saisir la correction humaine de chacune (§4). C'est le seul vrai remède à une
+   calibration trop sévère ou trop généreuse — `npm run hggsp:verifier` reste en
+   rouge tant que ce n'est pas fait, volontairement.
+2. **Faire relire les grilles** par des professeurs d'HGGSP (§7), puis valider et
+   verrouiller (§5). Tant qu'elles sont en `calibrating`, chaque note est
+   provisoire, et la page de pilotage le dit.
 3. **Poser le plafond de dépense Anthropic** (console Anthropic, pas dans le
    code) — le solde a déjà été vidé une fois.
-4. **Déployer la page de relecture** (les changements de base et le moteur sont
-   déjà en production ; le site attend un `git push`).
-5. Le cas **bac blanc complet** est prêt et testé côté calcul, mais aucune copie
-   réelle n'a encore été déposée avec un `groupe_copie_id` : à faire une fois
-   avant la première session vendue.
+
+### Fait le 14 août 2026
+
+4. ~~Déployer la page de relecture~~ — poussée avec le reste du chantier v2.
+5. ~~Le cas bac blanc complet n'a jamais servi~~ — il est maintenant **déposable
+   depuis l'application** (§3.2) : le menu de dépôt propose le bac blanc complet,
+   demande une copie par exercice, les relie par un `groupe_copie_id` et affiche
+   la note finale sur 20. Il reste à le faire tourner **une fois sur de vraies
+   copies** avant la première session vendue : le script de vérification le
+   signale tant que `v_notes_examen_redige` est vide.
+6. ~~Le pilotage ignorait ce moteur~~ — `/admin/correction` connaît désormais les
+   trois moteurs : HGGSP y est annoncée comme notée par grille rédigée, avec le
+   statut des grilles, l'état des étalons et les relectures en attente (§6 bis).
+   Au passage, un étalon synthétique n'est plus compté comme « validé par un
+   prof » : il ne l'a jamais été.

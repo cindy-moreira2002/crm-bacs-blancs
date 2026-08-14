@@ -36,7 +36,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const { data: correction, error } = await db
       .from('corrections')
-      .select('id, status, processing_error, result_json, student_name, subject_id, exercise_type, rubric_id, created_at, updated_at')
+      .select('id, status, processing_error, result_json, student_name, subject_id, exercise_type, rubric_id, created_at, updated_at, moteur, groupe_copie_id, score_analytique, max_analytique, score_officiel, max_officiel')
       .eq('id', id)
       .single();
 
@@ -47,8 +47,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
     // Barème de l'épreuve : toutes ne sont pas sur 20 (une question
     // problématisée d'histoire-géo vaut 10 points). Sans lui, l'écran
     // afficherait « 7 / 20 » pour une copie notée 7 sur 10.
+    //
+    // Sur une épreuve rédigée, l'échelle ne vient pas de la grille de
+    // compétences mais de la grille rédigée elle-même : la copie est notée sur
+    // une échelle analytique (20) convertie en note officielle (10). Les deux
+    // sont renvoyées — additionner deux notes analytiques serait faux.
     let bareme = 20;
-    if (correction.rubric_id) {
+    if (correction.moteur === 'criteres_rediges' && correction.max_analytique) {
+      bareme = Number(correction.max_analytique);
+    } else if (correction.rubric_id) {
       const { data: grille } = await db
         .from('rubrics')
         .select('rubric_json')
@@ -79,6 +86,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
       sujet_id: correction.subject_id,
       exercise_type: correction.exercise_type,
       dossier_id: dossier?.id ?? null,
+      moteur: correction.moteur ?? null,
+      groupe_copie_id: correction.groupe_copie_id ?? null,
+      // Épreuve rédigée : la note officielle de l'exercice, celle qui s'ajoute
+      // à celle de l'autre exercice pour faire la note du bac blanc.
+      note_officielle: correction.score_officiel === null ? null : Number(correction.score_officiel),
+      max_officiel: correction.max_officiel === null ? null : Number(correction.max_officiel),
     });
   } catch (err) {
     console.error('❌ /api/pipeline/correction/[id] GET', err);
