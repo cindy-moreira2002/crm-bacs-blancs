@@ -17,6 +17,19 @@ import { useCallback, useEffect, useState } from 'react';
 
 type Salle = { id: string; nom: string; verrouille: boolean };
 
+type EleveSalle = {
+  inscription_id: string;
+  eleve: string;
+  salon_id: string | null;
+  salon_nom: string | null;
+  lien: string | null;
+  lien_depose: boolean;
+  salle_existe: boolean;
+  verrouille: boolean;
+  compte_relie: boolean;
+  acces_pose: boolean;
+};
+
 type SessionDiscord = {
   session_id: string;
   matiere: string;
@@ -27,9 +40,13 @@ type SessionDiscord = {
   nb_eleves: number;
   categorie_nom: string;
   categorie_id: string | null;
+  categorie_lien: string | null;
   salons_texte: string[];
   salles: Salle[];
   manquantes: number;
+  eleves: EleveSalle[];
+  liens_deposes: number;
+  comptes_relies: number;
 };
 
 type EtatSalons = {
@@ -57,6 +74,142 @@ const dateLisible = (iso: string) =>
     day: 'numeric',
     month: 'long',
   });
+
+/**
+ * Le détail élève par élève : qui a son lien, qui ne l'a pas.
+ *
+ * « Lien déposé » ne veut pas dire « une salle existe sur Discord » mais « cette
+ * salle est rattachée à cet élève » — c'est-à-dire qu'il la voit dans son espace
+ * et qu'il la recevra par e-mail. Une salle orpheline ne sert à personne, donc
+ * elle ne compte pas.
+ */
+function ListeElevesSalles({ eleves, deposes }: { eleves: EleveSalle[]; deposes: number }) {
+  const [ouvert, setOuvert] = useState(false);
+  const manquants = eleves.filter((e) => !e.lien_depose);
+  // Un lien déposé sans compte relié, c'est une porte fermée avec la clé sur le
+  // paillasson d'à côté : l'élève voit son bouton et n'entre pas. C'est le seul
+  // défaut qui ne se voit pas avant le matin de l'épreuve — donc on l'affiche.
+  const sansCompte = eleves.filter((e) => !e.compte_relie);
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOuvert((v) => !v)}
+        className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+      >
+        {ouvert ? '▾' : '▸'} Le détail par élève ({deposes}/{eleves.length})
+      </button>
+
+      {/* Fermé, on ne montre que ce qui manque : c'est la seule chose qui presse. */}
+      {!ouvert && manquants.length > 0 && (
+        <p className="mt-1 text-xs text-amber-800">
+          Sans lien : {manquants.map((e) => e.eleve).join(', ')}
+        </p>
+      )}
+      {!ouvert && sansCompte.length > 0 && (
+        <p className="mt-1 text-xs text-red-700">
+          Compte Discord non relié — ne pourra pas entrer :{' '}
+          {sansCompte.map((e) => e.eleve).join(', ')}
+        </p>
+      )}
+
+      {ouvert && (
+        <ul className="mt-2 space-y-1">
+          {eleves.map((e) => (
+            <li
+              key={e.inscription_id}
+              className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs"
+            >
+              <span className="w-4 text-center" title={etatLisible(e)}>
+                {e.lien_depose ? '✅' : '⚪'}
+              </span>
+              <span className="font-medium text-slate-800 min-w-[8rem]">{e.eleve}</span>
+              <span className="font-mono text-[11px] text-slate-400 flex-1 min-w-[6rem]">
+                {e.salon_nom ?? 'aucune salle'}
+                {e.verrouille && ' · fermée'}
+              </span>
+              <span
+                className={`text-[11px] font-semibold ${
+                  e.compte_relie ? 'text-slate-400' : 'text-red-700'
+                }`}
+                title={
+                  e.compte_relie
+                    ? e.acces_pose
+                      ? 'compte relié et autorisé sur sa salle'
+                      : 'compte relié — l’autorisation sera posée à la préparation des salles'
+                    : 'compte Discord non relié : l’élève verra son lien sans pouvoir entrer'
+                }
+              >
+                {e.compte_relie ? (e.acces_pose ? 'entre' : 'à autoriser') : 'non relié'}
+              </span>
+              {e.lien ? (
+                <>
+                  <a
+                    href={e.lien}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md bg-white px-2 py-0.5 font-semibold text-indigo-700 ring-1 ring-slate-200 hover:bg-indigo-50"
+                  >
+                    Ouvrir
+                  </a>
+                  <BoutonCopier valeur={e.lien} libelle="Copier" compact />
+                </>
+              ) : (
+                <span className="text-slate-400">{etatLisible(e)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Pourquoi cet élève n'a pas (encore) de lien. */
+function etatLisible(e: EleveSalle): string {
+  if (e.lien_depose) return 'lien déposé : l’élève le voit dans son espace';
+  if (e.salon_id && !e.salle_existe) return 'salle supprimée sur Discord — à recréer';
+  return 'pas encore de salle';
+}
+
+/**
+ * Copie dans le presse-papiers, avec un accusé visible : sans retour, on ne
+ * sait pas si le clic a pris, et on colle un lien vide au professeur.
+ */
+function BoutonCopier({
+  valeur,
+  libelle,
+  compact,
+}: {
+  valeur: string;
+  libelle: string;
+  compact?: boolean;
+}) {
+  const [copie, setCopie] = useState(false);
+
+  const copier = async () => {
+    try {
+      await navigator.clipboard.writeText(valeur);
+      setCopie(true);
+      setTimeout(() => setCopie(false), 2000);
+    } catch {
+      // Presse-papiers refusé (page non sécurisée, permission) : le lien reste
+      // ouvrable et sélectionnable à la main, on ne bloque personne.
+      window.prompt('Copie ce lien :', valeur);
+    }
+  };
+
+  return (
+    <button
+      onClick={copier}
+      className={`rounded-md border border-slate-300 bg-white font-semibold text-slate-600 hover:bg-slate-50 ${
+        compact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'
+      }`}
+    >
+      {copie ? '✓ copié' : libelle}
+    </button>
+  );
+}
 
 export function SallesBacsBlancs() {
   const [etat, setEtat] = useState<EtatSalons | null>(null);
@@ -216,26 +369,43 @@ export function SallesBacsBlancs() {
 
                   <p className="text-xs text-slate-500 mt-1">
                     {s.nb_eleves} élève{s.nb_eleves > 1 ? 's' : ''} inscrit{s.nb_eleves > 1 ? 's' : ''} ·{' '}
-                    {s.salles.length} salle{s.salles.length > 1 ? 's' : ''} vocale
-                    {s.salles.length > 1 ? 's' : ''}
+                    <strong
+                      className={
+                        s.liens_deposes === s.nb_eleves && s.nb_eleves > 0
+                          ? 'text-emerald-700'
+                          : 'text-amber-700'
+                      }
+                    >
+                      {s.liens_deposes}/{s.nb_eleves} lien{s.nb_eleves > 1 ? 's' : ''} déposé
+                      {s.nb_eleves > 1 ? 's' : ''} dans les espaces élèves
+                    </strong>
                     {s.salons_texte.length > 0 && ` · ${s.salons_texte.join(', ')}`}
                   </p>
 
-                  {s.salles.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {s.salles.map((salle) => (
-                        <span
-                          key={salle.id}
-                          className={`px-2 py-0.5 rounded-md text-[11px] font-mono ${
-                            salle.verrouille
-                              ? 'bg-slate-100 text-slate-400 line-through'
-                              : 'bg-emerald-50 text-emerald-800'
-                          }`}
-                        >
-                          🔊 {salle.nom}
-                        </span>
-                      ))}
+                  {/* Le lien du professeur : le bloc de l'épreuve. */}
+                  {s.categorie_lien ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <a
+                        href={s.categorie_lien}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
+                      >
+                        🎓 Lien du professeur
+                      </a>
+                      <BoutonCopier
+                        valeur={s.categorie_lien}
+                        libelle="Copier pour l’envoyer au prof"
+                      />
                     </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-400">
+                      Lien du professeur : disponible une fois les salles préparées.
+                    </p>
+                  )}
+
+                  {s.eleves.length > 0 && (
+                    <ListeElevesSalles eleves={s.eleves} deposes={s.liens_deposes} />
                   )}
 
                   <p className="text-[11px] text-slate-400 mt-2 font-mono">{s.categorie_nom}</p>

@@ -307,6 +307,62 @@ Recharge la page. Tu dois voir **six nouvelles lignes** commençant par
 
 ---
 
+## Étape H bis — Le script SQL 45 (2 min, à faire une seule fois)
+
+Sans ce script, les salles se créeront bien sur Discord, mais **aucun élève ne
+recevra son lien** : il n'y aurait nulle part où noter quelle salle appartient
+à qui.
+
+1. <https://supabase.com/dashboard> → projet **orpbfnmdlvxmkvyrpvtj**
+   (⚠️ **pas** `xgdaibekjmtffvkwvcge`, qui est celui des corrections).
+2. **SQL Editor** → **New query**.
+3. Ouvre `supabase/sql/45_discord_salons.sql`, copie tout, colle, **Run**.
+4. Le tableau de résultat doit afficher **quatre lignes** :
+   `inscriptions.discord_salon_id`, `discord_salon_nom`, `discord_salon_pose_le`
+   et `sessions_bacs_blancs.discord_categorie_id`.
+
+Le script est rejouable : le relancer n'efface rien.
+
+---
+
+## Étape H ter — Le script SQL 46 (1 min, à faire une seule fois)
+
+Le script 45 donne une salle à chaque élève. Celui-ci retient **qui est qui sur
+Discord** — sans lui, l'élève voit son lien, clique, et tombe sur une salle qui
+ne le laisse pas entrer : une salle privée n'ouvre qu'aux comptes qu'on y a
+nommément autorisés.
+
+1. Même projet **orpbfnmdlvxmkvyrpvtj**, **SQL Editor** → **New query**.
+2. Ouvre `supabase/sql/46_discord_comptes.sql`, copie tout, colle, **Run**.
+3. Le tableau de résultat doit afficher **cinq lignes** :
+   `inscriptions.discord_user_id`, `discord_relie_le`, `discord_acces_pose_le`,
+   et `professeurs.discord_user_id`, `discord_relie_le`.
+
+Rejouable, comme le précédent.
+
+---
+
+## Étape H quater — Relier son compte (chacun, une fois)
+
+Rien à faire de ton côté : le bouton apparaît tout seul dans chaque espace.
+
+- **Toi et les professeurs** : `/espace-prof` → **« Relier mon compte Discord »**.
+  Le rôle `Prof` est posé automatiquement — c'est lui qui ouvre la zone `ÉQUIPE`
+  et toutes les salles d'élèves. Personne n'attribue de rôle à la main.
+- **Les élèves** : `/espace-eleve` → même bouton. Leur compte est alors autorisé
+  sur **leur** salle, et sur aucune autre.
+
+L'ordre n'a pas d'importance : un élève qui relie son compte après la création
+des salles est autorisé aussitôt, et un élève qui l'a relié avant voit sa salle
+naître déjà ouverte.
+
+> **Le chiffre à regarder avant une épreuve** : « Préparer les salles » termine
+> par un avertissement quand des élèves n'ont pas relié leur compte. Ceux-là
+> verront leur lien sans pouvoir entrer. C'est le seul point qui casse une
+> matinée, et il se voit la veille.
+
+---
+
 ## Étape I — Ce que je vérifie ensuite (côté code)
 
 Une fois les six variables posées, je lance une vérification automatique qui
@@ -351,5 +407,6 @@ comptes restent intacts.
 3. Facultatif : Developer Portal → **General Information** → tout en bas →
    **« Delete App »**.
 
-L'ancien salon Jitsi reste disponible pendant tout ce temps : il n'est jamais
-retiré du code.
+⚠️ Jitsi a été retiré du code : Discord est désormais la seule salle. Désactiver
+l'intégration laisse donc les espaces sans salon du tout — à ne faire qu'entre
+deux sessions, jamais la veille d'un bac blanc.

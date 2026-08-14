@@ -125,6 +125,85 @@ export function urlInvitationBot(): string | null {
   );
 }
 
+// --- Liaison des comptes (OAuth2) --------------------------------------
+
+/**
+ * Les deux permissions demandées à l'élève ou au prof qui relie son compte.
+ *
+ * `identify` ne donne que l'identifiant, le pseudo et l'avatar — pas l'adresse
+ * e-mail, qu'on connaît déjà et qu'on n'a aucune raison de redemander à
+ * Discord. `guilds.join` autorise le bot à l'ajouter à NOTRE serveur, et à
+ * aucun autre : c'est ce qui évite de faire circuler un lien d'invitation, que
+ * n'importe qui pourrait transférer.
+ */
+export const SCOPES_LIAISON = 'identify guilds.join';
+
+/**
+ * L'adresse de retour, construite à partir du domaine réellement visité.
+ *
+ * Elle n'est pas figée dans une variable d'environnement parce que le site vit
+ * sous trois adresses (le domaine, l'URL Vercel, localhost) et que Discord
+ * compare cette valeur **caractère par caractère** avec la liste déclarée dans
+ * le portail : la déduire de la requête garantit qu'elles coïncident, quel que
+ * soit le chemin par lequel la personne est arrivée.
+ */
+export function urlRetourOAuth(origine: string): string {
+  return `${origine.replace(/\/+$/, '')}/api/discord/oauth/retour`;
+}
+
+/**
+ * L'écran d'autorisation Discord. `state` est une valeur signée par nous :
+ * Discord nous la rend telle quelle au retour, ce qui permet de vérifier que
+ * la réponse répond bien à une demande partie d'ici (et pas d'un lien piégé).
+ */
+export function urlAutorisation(origine: string, etat: string): string | null {
+  if (!CLIENT_ID) return null;
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: urlRetourOAuth(origine),
+    response_type: 'code',
+    scope: SCOPES_LIAISON,
+    state: etat,
+    // Redemander l'écran à chaque fois : sans cela, Discord renvoie
+    // silencieusement le compte déjà autorisé, et une personne qui a changé de
+    // compte se retrouverait reliée à l'ancien sans comprendre pourquoi.
+    prompt: 'consent',
+  });
+  return `https://discord.com/oauth2/authorize?${params.toString()}`;
+}
+
+// --- Adresses ouvrables ------------------------------------------------
+
+/**
+ * L'adresse d'un salon Discord.
+ *
+ * L'identifiant du serveur n'est pas un secret — il figure dans chacune de ces
+ * adresses, y compris celles qu'on donne aux élèves. Ce qui protège une salle,
+ * ce n'est pas l'ignorance de son adresse mais ses permissions : sans y avoir
+ * été autorisé, on clique et on ne voit rien.
+ *
+ * Renvoie `null` plutôt qu'une adresse incomplète : un lien à moitié construit
+ * mènerait l'élève sur une page d'erreur le matin de son épreuve.
+ */
+export function lienSalon(salonId: string | null | undefined): string | null {
+  const id = String(salonId ?? '').trim();
+  // L'identifiant du serveur est relu à chaque appel plutôt que figé au
+  // chargement du module : c'est ce qui permet aux tests hors ligne de poser la
+  // variable eux-mêmes, sans dépendre de l'ordre des imports.
+  const guilde = process.env.DISCORD_GUILD_ID?.trim() || GUILD_ID;
+  if (!id || !guilde) return null;
+  return `https://discord.com/channels/${guilde}/${id}`;
+}
+
+/**
+ * L'adresse de la catégorie d'un bac blanc : c'est le lien du professeur. Il
+ * ouvre le bloc de l'épreuve, d'où le prof circule d'une salle d'élève à
+ * l'autre pour surveiller.
+ */
+export function lienCategorie(categorieId: string | null | undefined): string | null {
+  return lienSalon(categorieId);
+}
+
 // --- Types de salons Discord ------------------------------------------
 
 export const TYPE_SALON = {

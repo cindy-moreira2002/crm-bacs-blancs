@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { codeCopie } from '@/lib/codeCopie';
+import { lienSalon } from '@/lib/discord/config';
 import { apresInscription } from '@/lib/emails/declencheurs';
 import { gardeApiProfDetail } from '@/lib/gardeAcces';
 import { eleveConnecte } from '@/lib/authEleve';
@@ -139,7 +140,14 @@ export async function GET(req: NextRequest) {
       return q;
     };
 
-    let { data, error } = await build('id, nom, email, matiere, date_epreuve, created_at');
+    let { data, error } = await build(
+      'id, nom, email, matiere, date_epreuve, created_at, discord_salon_id',
+    );
+    // Repli si la colonne discord_salon_id n'existe pas encore (script 45) :
+    // l'élève doit continuer à voir son espace, salon verrouillé.
+    if (error && /discord_salon_id/.test(error.message || '')) {
+      ({ data, error } = await build('id, nom, email, matiere, date_epreuve, created_at'));
+    }
     // Repli si la colonne date_epreuve n'existe pas encore
     if (error && /date_epreuve/.test(error.message || '')) {
       ({ data, error } = await build('id, nom, email, matiere, created_at'));
@@ -149,7 +157,11 @@ export async function GET(req: NextRequest) {
     // Le filtrage par matière se fait ici plutôt qu'en SQL : les libellés
     // varient (accents, casse) entre `professeurs.matieres` et `inscriptions`.
     // Les lignes écartées ne quittent jamais le serveur.
-    let lignes = (data ?? []) as unknown as { nom: string; matiere: string }[];
+    let lignes = (data ?? []) as unknown as {
+      nom: string;
+      matiere: string;
+      discord_salon_id?: string | null;
+    }[];
     if (matieresProf) {
       const permises = new Set(matieresProf);
       lignes = lignes.filter((i) => permises.has(normMatiere(i.matiere)));
@@ -157,9 +169,14 @@ export async function GET(req: NextRequest) {
 
     // Le code d'accès à la copie est signé ici, côté serveur : le navigateur ne
     // peut pas le recalculer, il ne peut que recevoir celui de ses inscriptions.
-    const inscriptions = lignes.map(i => ({
+    // L'adresse du salon est construite ici, côté serveur : le navigateur ne
+    // connaît pas l'identifiant du serveur Discord, et surtout il ne peut pas
+    // fabriquer l'adresse d'une salle qui n'est pas la sienne — il reçoit
+    // seulement celle inscrite sur SON inscription.
+    const inscriptions = lignes.map(({ discord_salon_id, ...i }) => ({
       ...i,
       code_copie: codeCopie(i.nom ?? '', i.matiere ?? ''),
+      salon_url: lienSalon(discord_salon_id),
     }));
 
     return NextResponse.json({ inscriptions });

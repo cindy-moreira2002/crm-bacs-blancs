@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import { LiaisonDiscord } from '@/components/LiaisonDiscord';
 import { SESSIONS_PLATEFORME, examenDeMatiere } from '@/lib/sessions';
 
 type Copie = {
@@ -25,6 +26,11 @@ type Inscription = {
   // pas de secret : on préfère masquer l'accès plutôt que d'exposer une adresse
   // devinable.
   code_copie?: string | null;
+  // Adresse de la salle vocale Discord de cet élève, construite par le serveur
+  // (voir /api/inscriptions). Absente tant qu'aucune salle ne lui est
+  // attribuée : dans ce cas le bouton reste verrouillé plutôt que de mener
+  // nulle part le matin de l'épreuve.
+  salon_url?: string | null;
 };
 
 const COULEURS: Record<string, string> = {
@@ -38,7 +44,10 @@ const COULEURS: Record<string, string> = {
 };
 const couleur = (m: string) => COULEURS[m] ?? '#6B7280';
 
-const salonUrl = (id: string) => `https://meet.jit.si/matineesdubac-${id}`;
+// La salle de l'élève est sa salle vocale Discord, et rien d'autre. Elle n'est
+// plus déduite de son identifiant : elle lui est attribuée en base au moment où
+// on prépare les salles du bac blanc. Pas de salle attribuée = pas de lien.
+const salonUrl = (i: Inscription) => i.salon_url ?? null;
 
 // ── Espace écriture (application « le téléphone devient le stylo ») ──────────
 // Le code d'une copie (« lea-martin-x7f3 ») est signé par le serveur et arrive
@@ -216,9 +225,12 @@ function heuresEpreuve(i: Inscription): { debut: number; fin: number; label: str
   if (m) return { debut: +m[1], fin: +m[2], label: s!.heure };
   return { debut: 9, fin: 13, label: null };
 }
-type EtatSalon = 'ouvert' | 'pas-encore' | 'sans-date';
+type EtatSalon = 'ouvert' | 'pas-encore' | 'sans-date' | 'sans-salle';
 function etatSalon(i: Inscription, now: Date): EtatSalon {
   if (!i.date_epreuve) return 'sans-date';
+  // La salle n'a pas encore été préparée : mieux vaut le dire que d'afficher un
+  // bouton qui ouvrirait une page Discord vide.
+  if (!salonUrl(i)) return 'sans-salle';
   const { debut, fin } = heuresEpreuve(i);
   const ouverture = new Date(i.date_epreuve); ouverture.setHours(debut - 1, 0, 0, 0);
   const fermeture = new Date(i.date_epreuve); fermeture.setHours(fin + 1, 0, 0, 0);
@@ -231,9 +243,10 @@ function etatSalon(i: Inscription, now: Date): EtatSalon {
 function BoutonSalon({ i, now, grand }: { i: Inscription; now: Date; grand?: boolean }) {
   const etat = etatSalon(i, now);
   const c = couleur(i.matiere);
-  if (etat === 'ouvert') {
+  const lien = salonUrl(i);
+  if (etat === 'ouvert' && lien) {
     return grand ? (
-      <a href={salonUrl(i.id)} target="_blank" rel="noreferrer"
+      <a href={lien} target="_blank" rel="noreferrer"
         style={{ background: 'rgba(255,255,255,.95)', color: c, padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(0,0,0,.15)' }}>
         <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -241,7 +254,7 @@ function BoutonSalon({ i, now, grand }: { i: Inscription; now: Date; grand?: boo
         Rejoindre mon salon
       </a>
     ) : (
-      <a href={salonUrl(i.id)} target="_blank" rel="noreferrer"
+      <a href={lien} target="_blank" rel="noreferrer"
         style={{ fontSize: '.75rem', fontWeight: 700, color: c, background: c+'15', padding: '5px 12px', borderRadius: 100, textDecoration: 'none' }}>
         Salon →
       </a>
@@ -249,7 +262,9 @@ function BoutonSalon({ i, now, grand }: { i: Inscription; now: Date; grand?: boo
   }
   const texteGrand = etat === 'sans-date'
     ? '🔒 Salon — dès que ta date est fixée'
-    : `🔒 Salon — s'ouvre à ${heuresEpreuve(i).debut - 1}h le jour J`;
+    : etat === 'sans-salle'
+      ? '🔒 Salon — en cours de préparation'
+      : `🔒 Salon — s'ouvre à ${heuresEpreuve(i).debut - 1}h le jour J`;
   return grand ? (
     <span title="Le salon ouvre 1 h avant le début de l'épreuve"
       style={{ background: 'rgba(255,255,255,.25)', color: 'rgba(255,255,255,.75)', padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', display: 'flex', alignItems: 'center', gap: 8, cursor: 'not-allowed', border: '1.5px dashed rgba(255,255,255,.5)' }}>
@@ -805,6 +820,15 @@ export function EspaceEleve() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Compte Discord ──
+            Le lien de la salle ne suffit pas : une salle privée n'ouvre qu'aux
+            comptes Discord qu'on y a autorisés. Tant que l'élève n'a pas relié
+            le sien, il verrait son bouton s'activer le matin de l'épreuve et
+            tomberait sur une salle qui ne le laisse pas entrer. */}
+      <div style={{ maxWidth: 900, margin: '20px auto 0', padding: '0 24px' }}>
+        <LiaisonDiscord pourquoi="Ta salle du jour J est privée : elle ne s’ouvre qu’aux comptes Discord autorisés. Relie le tien maintenant, pas le matin de l’épreuve." />
       </div>
 
       {/* ── FENÊTRE 1 : PROCHAIN BAC BLANC ── */}

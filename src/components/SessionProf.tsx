@@ -5,6 +5,7 @@
  *   Élèves et appels · Copies · Corrections
  */
 import { useState } from 'react';
+import { IconeDiscord, LiaisonDiscord } from '@/components/LiaisonDiscord';
 import type { EleveSession, SessionEnrichie } from '@/lib/espaceProf';
 
 type SousOnglet = 'eleves' | 'copies' | 'corrections';
@@ -65,7 +66,25 @@ export function SessionProf({
           <span className="text-gray-700"><strong>{avecCopie.length}</strong> copie{avecCopie.length > 1 ? 's' : ''} déposée{avecCopie.length > 1 ? 's' : ''}</span>
           <span className="text-gray-700"><strong>{corrigees.length}</strong> corrigée{corrigees.length > 1 ? 's' : ''}</span>
         </div>
+
+        {/* Le bloc Discord de l'épreuve : le prof y entre une fois, puis passe
+            d'une salle d'élève à l'autre sans revenir ici. */}
+        {session.categorie_url && (
+          <a
+            href={session.categorie_url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
+          >
+            <IconeDiscord />
+            Ouvrir le bloc Discord de l’épreuve
+          </a>
+        )}
       </header>
+
+      <div className="mb-5">
+        <LiaisonDiscord pourquoi="C’est ce qui t’ouvre la zone Équipe et les salles de tes élèves : sans compte relié, tu vois les liens mais tu ne peux pas entrer." />
+      </div>
 
       {/* Sous-onglets */}
       <div className="flex gap-1 mb-5 overflow-x-auto border-b border-gray-200">
@@ -101,18 +120,23 @@ export function SessionProf({
                 <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${s.classe}`}>
                   {s.texte}
                 </span>
-                <a
-                  href={`https://meet.jit.si/matineesdubac-${e.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 flex-shrink-0"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Rejoindre l’élève
-                </a>
+                {/* Pas de salle attribuée = pas de lien. Un bouton qui ouvre une
+                    page Discord vide vaut moins qu'une phrase qui dit pourquoi. */}
+                {e.salon_url ? (
+                  <a
+                    href={e.salon_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 flex-shrink-0"
+                  >
+                    <IconeDiscord />
+                    Rejoindre l’élève
+                  </a>
+                ) : (
+                  <span className="text-xs text-gray-400 flex-shrink-0" title="Les salles se créent depuis l’administration, avant l’épreuve.">
+                    Salle pas encore créée
+                  </span>
+                )}
               </div>
             );
           })}

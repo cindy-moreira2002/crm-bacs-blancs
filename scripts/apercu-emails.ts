@@ -29,7 +29,8 @@ const VARIABLES: Record<string, string> = {
   teacher_name: 'Camille Durand',
   student_space_url: 'https://crm-bacs-blancs-ihgf.vercel.app/espace-eleve',
   teacher_space_url: 'https://crm-bacs-blancs-ihgf.vercel.app/espace-prof',
-  video_room_url: 'https://meet.jit.si/matineesdubac-exemple',
+  // Forme réelle d'une adresse de salle Discord : serveur, puis salon.
+  video_room_url: 'https://discord.com/channels/000000000000000000/111111111111111111',
   inscription_url: 'https://crm-bacs-blancs-ihgf.vercel.app/inscription',
   correction_url: 'https://crm-bacs-blancs-ihgf.vercel.app/espace-eleve',
   survey_url: 'https://exemple.fr/avis',

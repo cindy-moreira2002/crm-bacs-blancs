@@ -12,6 +12,12 @@
  */
 import assert from 'node:assert/strict';
 
+// Le lien du salon d'un élève est une adresse Discord : sans identifiant de
+// serveur, il n'y a pas d'adresse à construire — et c'est bien ce que vérifie
+// le scénario 07. On en pose donc un, faux mais bien formé, pour que les autres
+// scénarios travaillent sur la situation normale.
+process.env.DISCORD_GUILD_ID ||= '1300000000000000000';
+
 import { construireEmail, MODELES } from '../src/lib/emails/modeles/index';
 import { rendreHtml, rendreTexte } from '../src/lib/emails/modeles/mise-en-page';
 import { REGLAGES_DEFAUT, fusionnerReglages, type Reglages } from '../src/lib/emails/reglages';
@@ -30,8 +36,14 @@ import {
 } from '../src/lib/emails/donnees';
 import { calculerQuota, refusDEnvoi, type Contact } from '../src/lib/emails/file';
 import { envoyerViaBrevo } from '../src/lib/emails/brevo';
-import { salonUrl } from '../src/lib/emails/config';
+import { lienSalon } from '../src/lib/discord/config';
 import { instantParis, lireHeure, formaterHeure, heureMoins } from '../src/lib/emails/temps';
+
+/** Les salles Discord des deux élèves de référence. */
+const SALLE_LEA = '1400000000000000001';
+const SALLE_TOM = '1400000000000000002';
+/** L'adresse attendue pour une salle donnée. */
+const salonUrl = (salleId: string) => lienSalon(salleId) as string;
 
 // --- Petit harnais ----------------------------------------------------
 
@@ -93,6 +105,9 @@ function inscription(sur: Partial<LigneInscription> = {}): LigneInscription {
     copie_recue: false,
     correction_publiee_le: null,
     annulee_le: null,
+    // Léa a sa salle Discord : c'est la situation normale une fois les salles
+    // préparées. Les tests qui vérifient l'absence de lien la retirent.
+    discord_salon_id: SALLE_LEA,
     ...sur,
   };
 }
@@ -243,11 +258,11 @@ async function main() {
     });
     const t = taches.find((x) => x.type === 'lien_visio')!;
     assert.ok(t, 'lien_visio absent');
-    assert.equal(t.variables.video_room_url, salonUrl('insc-lea'));
+    assert.equal(t.variables.video_room_url, salonUrl(SALLE_LEA));
     const c = construireEmail('lien_visio', t.variables);
     assert.ok(c.ok);
     if (c.ok) {
-      assert.ok(c.html.includes(salonUrl('insc-lea')));
+      assert.ok(c.html.includes(salonUrl(SALLE_LEA)));
       assert.ok(/ne le partage/i.test(c.html), 'la consigne de non-partage doit être présente');
     }
   });
@@ -364,7 +379,7 @@ async function main() {
     assert.ok(typesDe(annonce).includes('session_annulee'));
     const c = construireEmail('session_annulee', annonce[0].variables);
     assert.ok(c.ok);
-    if (c.ok) assert.ok(!c.html.includes('meet.jit.si'), 'aucun lien de salon dans une annulation');
+    if (c.ok) assert.ok(!c.html.includes('discord.com/channels'), 'aucun lien de salon dans une annulation');
   });
 
   // 11
@@ -440,7 +455,7 @@ async function main() {
     assert.ok(c.ok);
     if (c.ok) {
       assert.ok(!c.html.includes('lea@test-matineesdubac.fr'), 'aucune adresse d’élève dans un e-mail prof');
-      assert.ok(!c.html.includes('meet.jit.si'), 'aucun salon d’élève dans un e-mail prof');
+      assert.ok(!c.html.includes('discord.com/channels'), 'aucun salon d’élève dans un e-mail prof');
     }
   });
 
@@ -552,6 +567,7 @@ async function main() {
       nom: 'Tom Bernard',
       email: 'tom@test-matineesdubac.fr',
       email_parent: null,
+      discord_salon_id: SALLE_TOM,
     });
     const taches = planifier(contexte({ inscriptions: [lea, tom] }), {
       reglages: REGLAGES,
@@ -561,17 +577,17 @@ async function main() {
     for (const t of taches) {
       const lien = t.variables.video_room_url;
       if (!lien) continue;
-      const attendu = salonUrl(t.inscription_id as string);
+      const attendu = salonUrl(t.inscription_id === 'insc-tom' ? SALLE_TOM : SALLE_LEA);
       assert.equal(lien, attendu, `le lien de ${t.destinataire_email} n'est pas le sien`);
     }
 
     const liensLea = taches.filter((t) => t.destinataire_email === lea.email).map((t) => t.variables.video_room_url);
-    assert.ok(!liensLea.includes(salonUrl('insc-tom')), 'Léa ne doit jamais voir le salon de Tom');
+    assert.ok(!liensLea.includes(salonUrl(SALLE_TOM)), 'Léa ne doit jamais voir le salon de Tom');
 
     // Le parent reçoit le salon de SON enfant, et rien d'autre.
     const parent = taches.filter((t) => t.destinataire_role === 'parent');
     for (const p of parent) {
-      if (p.variables.video_room_url) assert.equal(p.variables.video_room_url, salonUrl('insc-lea'));
+      if (p.variables.video_room_url) assert.equal(p.variables.video_room_url, salonUrl(SALLE_LEA));
     }
   });
 
@@ -613,7 +629,7 @@ async function main() {
       teacher_name: 'Camille Durand',
       student_space_url: 'https://exemple.fr/espace-eleve',
       teacher_space_url: 'https://exemple.fr/espace-prof',
-      video_room_url: 'https://meet.jit.si/matineesdubac-insc-lea',
+      video_room_url: salonUrl(SALLE_LEA),
       inscription_url: 'https://exemple.fr/inscription',
       correction_url: 'https://exemple.fr/espace-eleve',
       survey_url: 'https://exemple.fr/avis',

@@ -17,8 +17,8 @@ import {
   URL_ESPACE_ELEVE,
   URL_ESPACE_PROF,
   URL_INSCRIPTION,
-  salonUrl,
 } from './config';
+import { lienSalon } from '@/lib/discord/config';
 import { dateCourte, dateLongue, formaterHeure, heureMoins } from './temps';
 import type { Variables } from './modeles';
 
@@ -45,6 +45,8 @@ export type LigneInscription = {
   copie_recue: boolean | null;
   correction_publiee_le: string | null;
   annulee_le: string | null;
+  /** La salle Discord attribuée à cet élève. Sans elle, aucun lien n'est envoyé. */
+  discord_salon_id: string | null;
 };
 
 export type LigneSession = {
@@ -105,7 +107,7 @@ export const CHAMPS_INSCRIPTION =
   'id, nom, email, email_parent, matiere, date_epreuve, session_id, created_at, ' +
   'email_envoye, rappel_j1_envoye, rappel_h1_envoye, statut_eleve, paiement_statut, ' +
   'paiement_montant, paiement_reference, paiement_confirme_le, presence, copie_recue, ' +
-  'correction_publiee_le, annulee_le';
+  'correction_publiee_le, annulee_le, discord_salon_id';
 
 export const CHAMPS_SESSION =
   'id, matiere, date_epreuve, heure_debut, heure_fin, places, statut, annulee_le, derniere_notif_empreinte';
@@ -218,8 +220,12 @@ export function variablesEleve(c: ContexteEleve): Variables {
   const fin = formaterHeure(s?.heure_fin ?? null);
   if (fin) v.end_time = fin;
 
-  // Le salon n'existe que si la session est réelle et maintenue.
-  if (date && !sessionAnnulee(s)) v.video_room_url = salonUrl(i.id);
+  // Le salon de l'élève, c'est sa salle Discord — et uniquement celle qui lui
+  // a été attribuée en base. On ne fabrique plus d'adresse à partir de son
+  // identifiant : tant que la salle n'existe pas, il n'y a pas de lien, le
+  // message part en « bloqué » et personne ne reçoit une porte fermée.
+  const salon = lienSalon(i.discord_salon_id);
+  if (date && !sessionAnnulee(s) && salon) v.video_room_url = salon;
 
   if (i.paiement_montant != null) v.amount = String(i.paiement_montant);
   else if (c.montantDefaut) v.amount = c.montantDefaut;

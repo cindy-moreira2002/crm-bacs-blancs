@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DOSSIER_CSS } from '@/lib/dossierStyle';
 import { FormCopie } from '@/components/FormCopie';
+import { IconeDiscord, LiaisonDiscord } from '@/components/LiaisonDiscord';
 import { examenDeMatiere, libelleMatiere } from '@/lib/sessions';
 
 type Copie = {
@@ -26,6 +27,12 @@ type Inscrit = {
   email: string | null;
   matiere: string;
   created_at: string;
+  /**
+   * La salle Discord de l'élève, construite par le serveur (/api/inscriptions).
+   * Absente tant qu'aucune salle ne lui est attribuée : le bouton laisse alors
+   * place à une phrase, plutôt que d'ouvrir une page Discord vide.
+   */
+  salon_url?: string | null;
 };
 
 type EnCorrection = { nom: string; email: string; matiere: string };
@@ -192,6 +199,12 @@ export function EspaceProf() {
     <div>
       <style dangerouslySetInnerHTML={{ __html: DOSSIER_CSS }} />
 
+      {/* Le compte Discord du prof : il ouvre la zone Équipe et toutes les
+          salles d'élèves d'un coup. Le bloc disparaît une fois relié. */}
+      <div className="mb-6">
+        <LiaisonDiscord pourquoi="C’est ce qui t’ouvre la zone Équipe et les salles de tes élèves : sans compte relié, tu vois les liens mais tu ne peux pas entrer." />
+      </div>
+
       {/* Correction automatique — dépôt d'une copie de bac blanc */}
       <a
         href="/espace-prof/deposer"
@@ -258,18 +271,25 @@ export function EspaceProf() {
                           className="text-purple-600 hover:underline">Voir copie</a>
                       : <span className="text-gray-300">Pas de copie</span>}
                   </div>
-                  {/* Salon visio */}
-                  <a
-                    href={`https://meet.jit.si/matineesdubac-${i.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors flex-shrink-0"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Rejoindre le salon
-                  </a>
+                  {/* Salle Discord de l'élève */}
+                  {i.salon_url ? (
+                    <a
+                      href={i.salon_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors flex-shrink-0"
+                    >
+                      <IconeDiscord />
+                      Rejoindre le salon
+                    </a>
+                  ) : (
+                    <span
+                      className="text-xs text-gray-400 flex-shrink-0"
+                      title="Les salles se créent depuis l’administration, avant l’épreuve."
+                    >
+                      Salle pas encore créée
+                    </span>
+                  )}
                   {/* Correction */}
                   {c && c.statut === 'corrigée'
                     ? <button onClick={() => setActive(c)}

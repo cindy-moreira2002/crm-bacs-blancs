@@ -43,15 +43,11 @@ export const URL_ESPACE_ELEVE = `${SITE_URL}/espace-eleve`;
 export const URL_ESPACE_PROF = `${SITE_URL}/espace-prof`;
 export const URL_INSCRIPTION = `${SITE_URL}/inscription`;
 
-/**
- * Salon visio d'un élève. Il est déterministe et dérivé de l'identifiant de
- * SON inscription : impossible de recevoir le salon d'un autre, puisque le
- * lien est recalculé à partir de la ligne que l'on est en train de traiter.
- * Même règle que src/components/EspaceEleve.tsx.
- */
-export function salonUrl(inscriptionId: string): string {
-  return `https://meet.jit.si/matineesdubac-${inscriptionId}`;
-}
+// L'adresse du salon d'un élève ne se calcule plus ici : elle est lue sur son
+// inscription (`discord_salon_id`) et construite par `lienSalon`, dans
+// src/lib/discord/config.ts. Une adresse dérivée de l'identifiant d'inscription
+// pointait vers une salle qui n'existait pas forcément — et, depuis Discord,
+// vers une salle où l'élève n'est de toute façon pas autorisé.
 
 // --- Couleurs de la marque (reprises de l'espace élève) ---------------
 
