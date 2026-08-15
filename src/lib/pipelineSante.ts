@@ -21,6 +21,7 @@ import {
   trierDiagnostics,
   verifierBaremes,
   verifierStructureMatiere,
+  type CibleDiag,
   type Diagnostic,
   type NiveauDiag,
   type StructMatiere,
@@ -393,13 +394,14 @@ export async function chargerSante(): Promise<SanteSysteme> {
     categorie: AnomalieGlobale['categorie'],
     niveau: NiveauDiag,
     texte: string,
-    options: { piste?: string; matiere?: string } = {},
+    options: { piste?: string; matiere?: string; cible?: CibleDiag } = {},
   ) =>
     anomalies.push({
       categorie,
       niveau,
       texte,
       piste: options.piste,
+      cible: options.cible,
       matiere: options.matiere,
       matiere_label: options.matiere ? LABELS_MATIERES[options.matiere] ?? options.matiere : undefined,
     });
@@ -423,6 +425,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
       ajouter('flux', 'attention', `Copie « ${c.id.slice(0, 8)}… » bloquée en « ${c.status} » depuis ${minutes >= 2880 ? Math.round(minutes / 1440) + ' jours' : minutes >= 120 ? Math.round(minutes / 60) + ' h' : minutes + ' min'} — la chaîne s’est arrêtée sans erreur enregistrée.`, {
         matiere: c.matiere ?? undefined,
         piste: 'Relancer la transcription, ou supprimer la ligne si c’était un essai.',
+        cible: { correction_id: c.id },
       });
     }
   }
@@ -430,6 +433,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
   for (const c of echecs) {
     ajouter('flux', 'bloquant', `Correction en échec (« ${c.status} ») du ${new Date(c.created_at).toLocaleDateString('fr-FR')} : ${(c.processing_error ?? 'sans message').slice(0, 140)}`, {
       matiere: c.matiere ?? undefined,
+      cible: { correction_id: c.id },
     });
   }
   const idsAvecDossier = new Set(lignesDossiers.map((d) => d.correction_id));
@@ -438,6 +442,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
     ajouter('flux', 'attention', `Copie corrigée « ${c.id.slice(0, 8)}… » sans dossier élève : l’élève n’a rien à ouvrir.`, {
       matiere: c.matiere ?? undefined,
       piste: 'Relancer generate-dossier pour cette correction.',
+      cible: { correction_id: c.id },
     });
   }
   const dossiersParCorrection = new Map<string, number>();
@@ -562,7 +567,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
       // Les échecs de flux sont déjà signalés individuellement plus haut.
       if (d.texte.includes('correction(s) en échec')) continue;
       const categorie = d.texte.includes('étalon') ? 'calibration' : 'preparation';
-      ajouter(categorie, d.niveau, d.texte, { piste: d.piste, matiere });
+      ajouter(categorie, d.niveau, d.texte, { piste: d.piste, matiere, cible: d.cible });
     }
   }
 
@@ -570,7 +575,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
   // se joue ici — ces anomalies passent donc avant celles de la grille.
   for (const [matiere, examens] of examensParMatiere.entries()) {
     for (const d of verifierBaremes(LABELS_MATIERES[matiere] ?? matiere, examens)) {
-      ajouter('bareme', d.niveau, d.texte, { piste: d.piste, matiere });
+      ajouter('bareme', d.niveau, d.texte, { piste: d.piste, matiere, cible: d.cible });
     }
   }
 

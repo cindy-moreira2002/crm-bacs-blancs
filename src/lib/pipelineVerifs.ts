@@ -8,11 +8,29 @@
 
 export type NiveauDiag = 'bloquant' | 'attention' | 'ok';
 
+/**
+ * L'objet précis dont parle un diagnostic.
+ *
+ * Le texte cite déjà un identifiant entre guillemets, mais le relire au
+ * caractère près pour fabriquer un lien est fragile : la moindre reformulation
+ * casserait le bouton « aller voir ». On transporte donc l'identifiant tel
+ * quel, à côté de la phrase.
+ */
+export type CibleDiag = {
+  correction_id?: string;
+  sujet_id?: string;
+  exam_id?: string;
+  exercise_type?: string;
+  track?: string;
+  grille_id?: string;
+};
+
 export type Diagnostic = {
   niveau: NiveauDiag;
   texte: string;
   /** Où corriger, si ce n'est pas dans la page elle-même. */
   piste?: string;
+  cible?: CibleDiag;
 };
 
 export type StructGrille = {
@@ -68,7 +86,8 @@ export function echelleExpliquee(bareme: number | null, systemPrompt: string): b
 
 export function verifierStructureMatiere(s: StructMatiere): Diagnostic[] {
   const diags: Diagnostic[] = [];
-  const diag = (niveau: NiveauDiag, texte: string, piste?: string) => diags.push({ niveau, texte, piste });
+  const diag = (niveau: NiveauDiag, texte: string, piste?: string, cible?: CibleDiag) =>
+    diags.push({ niveau, texte, piste, cible });
 
   const grilleActivePour = (x: { track: string; exercise_type: string }) =>
     s.grilles.find((g) => g.track === x.track && g.exercise_type === x.exercise_type && g.status === 'active');
@@ -88,6 +107,7 @@ export function verifierStructureMatiere(s: StructMatiere): Diagnostic[] {
         'bloquant',
         `Sujet « ${su.id} » visible au dépôt SANS barème actif : la correction échouera.`,
         'Activer la grille de cette épreuve ou repasser le sujet en brouillon.',
+        { sujet_id: su.id, track: su.track, exercise_type: su.exercise_type },
       );
     }
     const gab = gabaritElevePour(su);
@@ -96,10 +116,13 @@ export function verifierStructureMatiere(s: StructMatiere): Diagnostic[] {
         'bloquant',
         `Sujet « ${su.id} » visible au dépôt mais dossier élève ${gab ? 'en brouillon' : 'absent'} : generate-dossier refusera.`,
         'Activer le gabarit élève de cette épreuve.',
+        { sujet_id: su.id, track: su.track, exercise_type: su.exercise_type },
       );
     }
     if (su.nb_etalons === 0) {
-      diag('attention', `Sujet « ${su.id} » sans aucune copie étalon : la note sortira sans référence.`);
+      diag('attention', `Sujet « ${su.id} » sans aucune copie étalon : la note sortira sans référence.`, undefined, {
+        sujet_id: su.id, track: su.track, exercise_type: su.exercise_type,
+      });
     }
     if ((su.source_status ?? '').includes('synthetic') && su.exercise_type.includes('explication')) {
       diag('attention', `Texte du sujet « ${su.id} » à vérifier mot à mot sur une édition de référence avant activation.`);
@@ -129,7 +152,7 @@ export function verifierStructureMatiere(s: StructMatiere): Diagnostic[] {
   const typesEpreuves = [...new Set([...s.grilles, ...s.sujets].map((x) => x.exercise_type))];
   for (const ex of typesEpreuves) {
     if (!s.gabarits.some((g) => g.audience === 'eleve' && g.exercise_type === ex)) {
-      diag('bloquant', `Épreuve « ${ex} » sans gabarit de dossier élève.`);
+      diag('bloquant', `Épreuve « ${ex} » sans gabarit de dossier élève.`, undefined, { exercise_type: ex });
     }
   }
 
@@ -195,10 +218,14 @@ export type StructExamen = {
  */
 export function verifierBaremes(matiere: string, examens: StructExamen[]): Diagnostic[] {
   const diags: Diagnostic[] = [];
-  const diag = (niveau: NiveauDiag, texte: string, piste?: string) => diags.push({ niveau, texte, piste });
+  const diag = (niveau: NiveauDiag, texte: string, piste?: string, cible?: CibleDiag) =>
+    diags.push({ niveau, texte, piste, cible });
 
   for (const e of examens) {
     if (e.statut === 'archived') continue;
+    // Tout ce qui sort de ce tour de boucle parle de CE bac blanc : on stampe
+    // son identifiant à la fin plutôt que de le répéter sur chaque appel.
+    const debut = diags.length;
 
     // Le cas le plus grave : des copies notées avec deux barèmes différents.
     if (e.versions_utilisees > 1) {
@@ -264,6 +291,8 @@ export function verifierBaremes(matiere: string, examens: StructExamen[]): Diagn
         `« ${e.titre} » : barème verrouillé mais corrections pas encore ouvertes — aucune copie ne peut être déposée.`,
       );
     }
+
+    for (let i = debut; i < diags.length; i += 1) diags[i].cible = { exam_id: e.id };
   }
 
   if (examens.length === 0) {

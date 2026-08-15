@@ -256,13 +256,19 @@ function CarteMatiere({
   onStatut,
   occupe,
   onToutVoir,
+  depliee = false,
+  sujetVise = null,
 }: {
   m: MatiereEtat;
   onStatut: (corps: Record<string, string>) => void;
   occupe: boolean;
   onToutVoir: () => void;
+  /** Arrivée depuis « À faire » : la carte s'ouvre déjà dépliée. */
+  depliee?: boolean;
+  /** Le sujet exact sur lequel la tâche portait, mis en évidence. */
+  sujetVise?: string | null;
 }) {
-  const [ouverte, setOuverte] = useState(false);
+  const [ouverte, setOuverte] = useState(depliee);
   const t = m.totaux;
   const etalonsReels = t.etalons - t.etalons_synthetiques;
 
@@ -339,7 +345,12 @@ function CarteMatiere({
   const jours = m.session ? joursAvant(m.session.date_epreuve) : null;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div
+      id={`matiere-${m.matiere}`}
+      className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
+        depliee ? 'border-amber-400 ring-2 ring-amber-200' : 'border-gray-200'
+      }`}
+    >
       <div className="p-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -555,7 +566,12 @@ function CarteMatiere({
                 </div>
                 <ul className="mt-2 space-y-1">
                   {ex.sujets.map((s) => (
-                    <li key={s.id} className="flex items-center justify-between gap-2 text-xs text-gray-600">
+                    <li
+                      key={s.id}
+                      className={`flex items-center justify-between gap-2 text-xs rounded px-1 ${
+                        sujetVise === s.id ? 'bg-amber-100 text-gray-900 font-medium' : 'text-gray-600'
+                      }`}
+                    >
                       <span className="truncate" title={s.id}>
                         {s.libelle}
                       </span>
@@ -585,7 +601,18 @@ function CarteMatiere({
 
 // --- Corrections en direct -------------------------------------------
 
-function TableCorrections({ lignes }: { lignes: CorrectionLigne[] }) {
+function TableCorrections({
+  lignes,
+  copieVisee,
+  onAction,
+  occupe,
+}: {
+  lignes: CorrectionLigne[];
+  /** Copie sur laquelle la liste « À faire » a envoyé : on la met en évidence. */
+  copieVisee: string | null;
+  onAction: (id: string, action: 'relancer' | 'dossier') => void;
+  occupe: boolean;
+}) {
   if (!lignes.length) {
     return <p className="text-sm text-gray-500">Aucune copie déposée pour l’instant.</p>;
   }
@@ -600,11 +627,20 @@ function TableCorrections({ lignes }: { lignes: CorrectionLigne[] }) {
             <th className="py-2 px-3 font-medium">État</th>
             <th className="py-2 px-3 font-medium">Note</th>
             <th className="py-2 px-3 font-medium">Dossier</th>
+            <th className="py-2 px-3 font-medium">Réparer</th>
           </tr>
         </thead>
         <tbody>
           {lignes.map((c) => (
-            <tr key={c.id} className="border-b border-gray-100 hover:bg-purple-50/40 align-top">
+            <tr
+              key={c.id}
+              id={`copie-${c.id}`}
+              className={`border-b border-gray-100 align-top ${
+                copieVisee === c.id
+                  ? 'bg-amber-100 ring-2 ring-amber-400 ring-inset'
+                  : 'hover:bg-purple-50/40'
+              }`}
+            >
               <td className="py-2 px-3 whitespace-nowrap text-gray-500 text-xs">{dateCourte(c.created_at)}</td>
               <td className="py-2 px-3">
                 <span className="font-medium text-gray-800">{c.matiere ?? '—'}</span>
@@ -637,6 +673,32 @@ function TableCorrections({ lignes }: { lignes: CorrectionLigne[] }) {
                   <a href={`/dossier/${c.id}`} target="_blank" className="text-purple-700 hover:underline text-xs">
                     ouvrir ↗
                   </a>
+                ) : (
+                  <span className="text-gray-300 text-xs">—</span>
+                )}
+              </td>
+              {/* Réparer sur place : c'est ici qu'on atterrit depuis « À faire ».
+                  Les deux actions rappellent l'API Anthropic, donc elles
+                  demandent confirmation — ce ne sont pas des boutons gratuits. */}
+              <td className="py-2 px-3 whitespace-nowrap">
+                {c.status.includes('failed') || !c.status.startsWith('corrected') ? (
+                  <button
+                    type="button"
+                    disabled={occupe}
+                    onClick={() => onAction(c.id, 'relancer')}
+                    className="text-[11px] font-medium text-white bg-red-600 hover:bg-red-700 rounded-full px-2.5 py-1 disabled:opacity-40"
+                  >
+                    Relancer
+                  </button>
+                ) : c.status.startsWith('corrected') ? (
+                  <button
+                    type="button"
+                    disabled={occupe}
+                    onClick={() => onAction(c.id, 'dossier')}
+                    className="text-[11px] font-medium text-purple-700 border border-purple-200 hover:bg-purple-50 rounded-full px-2.5 py-1 disabled:opacity-40"
+                  >
+                    Refaire le dossier
+                  </button>
                 ) : (
                   <span className="text-gray-300 text-xs">—</span>
                 )}
@@ -700,6 +762,48 @@ export function TableauDeBordCorrection() {
   const [matiereOuverte, setMatiereOuverte] = useState<string | null>(null);
   const chrono = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // --- Atterrissage depuis « À faire » --------------------------------
+  // La liste des tâches envoie ici avec l'objet exact dans l'adresse
+  // (?copie=…, ?matiere=…, ?sujet=…). Sans ça, on retombe en haut d'une page
+  // de trois écrans et il faut chercher soi-même la ligne concernée.
+  const [vise, setVise] = useState<{ copie?: string; matiere?: string; sujet?: string }>({});
+  const atterri = useRef(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const p = new URLSearchParams(window.location.search);
+      const copie = p.get('copie') ?? undefined;
+      const matiere = p.get('matiere') ?? undefined;
+      const sujet = p.get('sujet') ?? undefined;
+      if (copie || matiere || sujet) setVise({ copie, matiere, sujet });
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Le défilement n'a de sens qu'une fois les données arrivées : avant, la
+  // ligne visée n'existe pas encore dans la page. Une seule fois, sinon le
+  // rafraîchissement automatique ramènerait la page en arrière toutes les 30 s.
+  useEffect(() => {
+    if (!etat || atterri.current) return;
+    const ancre = vise.copie ? `copie-${vise.copie}` : vise.matiere ? `matiere-${vise.matiere}` : null;
+    if (!ancre) return;
+
+    // Trois tentatives espacées, et pas une seule : la page continue de
+    // grandir après l'arrivée des données (l'analyse de santé s'insère
+    // au-dessus), ce qui déplace la ligne visée sous nos pieds.
+    // `behavior: 'auto'` volontairement — le défilement animé est ignoré dans
+    // certains navigateurs pilotés, et sur 3 000 pixels il est surtout pénible.
+    const minuteries = [200, 900, 2200].map((delai) =>
+      setTimeout(() => {
+        const el = document.getElementById(ancre);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'auto', block: 'center' });
+        atterri.current = true;
+      }, delai),
+    );
+    return () => minuteries.forEach(clearTimeout);
+  }, [etat, vise]);
+
   const charger = useCallback(async () => {
     try {
       const r = await fetch('/api/admin/correction/etat', { cache: 'no-store' });
@@ -734,6 +838,37 @@ export function TableauDeBordCorrection() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(corps),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error ?? `Erreur ${r.status}`);
+        await charger();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Erreur inconnue');
+      } finally {
+        setOccupe(false);
+      }
+    },
+    [charger],
+  );
+
+  /**
+   * Réparer une copie sur place : relancer la chaîne, ou refaire son dossier.
+   * Les deux rappellent l'API Anthropic — d'où la confirmation, et le rappel
+   * du coût dans la question.
+   */
+  const agirSurCopie = useCallback(
+    async (id: string, action: 'relancer' | 'dossier') => {
+      const question =
+        action === 'relancer'
+          ? 'Relancer cette copie ?\n\nLa lecture et la correction repartent de zéro. Ça rappelle l’IA, donc ça coûte (~0,20 $).'
+          : 'Refaire le dossier de cette copie ?\n\nLa note ne bouge pas, seul le dossier de l’élève est reconstruit (~0,05 $).';
+      if (!window.confirm(question)) return;
+      setOccupe(true);
+      try {
+        const r = await fetch(`/api/pipeline/correction/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error ?? `Erreur ${r.status}`);
@@ -877,6 +1012,8 @@ export function TableauDeBordCorrection() {
                 onStatut={envoyerStatut}
                 occupe={occupe}
                 onToutVoir={() => setMatiereOuverte(m.matiere)}
+                depliee={vise.matiere === m.matiere}
+                sujetVise={vise.matiere === m.matiere ? vise.sujet ?? null : null}
               />
             ))}
           </div>
@@ -889,7 +1026,12 @@ export function TableauDeBordCorrection() {
             Les 60 dernières copies déposées, de la plus récente à la plus ancienne. La note est la note interne exacte —
             l’élève, lui, voit une fourchette.
           </p>
-          <TableCorrections lignes={etat.corrections} />
+          <TableCorrections
+            lignes={etat.corrections}
+            copieVisee={vise.copie ?? null}
+            onAction={agirSurCopie}
+            occupe={occupe}
+          />
         </section>
 
         {/* Coûts */}

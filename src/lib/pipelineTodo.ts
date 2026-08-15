@@ -20,6 +20,7 @@
  * repris tel quel plutôt que masqué. Une tâche invisible ne se fait jamais.
  */
 import { chargerSante, type AnomalieGlobale } from './pipelineSante';
+import type { CibleDiag } from './pipelineVerifs';
 import { chargerEtatPipeline, LABELS_MATIERES, type MatiereEtat } from './pipelineEtat';
 
 /** Qui peut rayer la ligne. */
@@ -80,10 +81,42 @@ function citation(texte: string): string | null {
  * Chaque règle dit à quoi elle répond, pour qu'on puisse la retrouver quand le
  * texte d'origine change.
  */
+/**
+ * L'adresse exacte de l'objet concerné, dans le pilotage.
+ *
+ * Un lien vers `/admin/correction` tout court ramène en haut d'une page de
+ * trois écrans : il faut ensuite retrouver soi-même la ligne dont parlait la
+ * tâche. Les paramètres disent à la page quoi ouvrir, où défiler et quoi
+ * surligner.
+ */
+function lienPilotage(matiere: string | undefined, cible: CibleDiag | undefined): string {
+  const p = new URLSearchParams();
+  if (matiere) p.set('matiere', matiere);
+  if (cible?.correction_id) p.set('copie', cible.correction_id);
+  if (cible?.sujet_id) p.set('sujet', cible.sujet_id);
+  const q = p.toString();
+  return q ? `/admin/correction?${q}` : '/admin/correction';
+}
+
+/** La page d'un bac blanc précis, quand le diagnostic en désigne un. */
+function lienBareme(cible: CibleDiag | undefined): string {
+  return cible?.exam_id ? `/admin/bareme/${cible.exam_id}` : '/admin/bareme';
+}
+
 function traduire(a: AnomalieGlobale, i: number): Tache {
   const quoi = citation(a.texte);
   const bloquant = a.niveau === 'bloquant';
   const base = { id: `${a.matiere ?? 'general'}-${i}`, bloquant };
+  // Le libellé du bouton dit ce qu'on va trouver de l'autre côté : « Aller à
+  // la copie » sur une page qui ouvre la matière entière serait un mensonge.
+  const versPilotage = {
+    label: a.cible?.correction_id ? 'Aller à la copie' : a.cible?.sujet_id ? 'Aller au sujet' : 'Ouvrir la matière',
+    href: lienPilotage(a.matiere, a.cible),
+  };
+  const versBareme = {
+    label: a.cible?.exam_id ? 'Ouvrir ce bac blanc' : 'Ouvrir les barèmes',
+    href: lienBareme(a.cible),
+  };
 
   // « Copie corrigée « xxxxxxxx… » sans dossier élève »
   // À traiter AVANT la règle sur les sujets : les deux parlent de dossier
@@ -96,7 +129,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
       acteur: 'clic',
       comment:
         'Dans « Corrections en direct », retrouve la copie et relance-la : le dossier se refait tout seul.',
-      ou: { label: 'Pilotage de la correction', href: '/admin/correction' },
+      ou: versPilotage,
     };
   }
 
@@ -114,7 +147,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
       comment: absent
         ? "Cette épreuve n'a pas de modèle de dossier du tout : il faut l'installer (dis-le-moi, c'est du code)."
         : "Dans « Correction », ouvre la matière, puis mets l'épreuve sur « visible » : le sujet, le barème et le dossier s'ouvrent ensemble.",
-      ou: { label: 'Pilotage de la correction', href: '/admin/correction' },
+      ou: versPilotage,
     };
   }
 
@@ -127,7 +160,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
       acteur: 'clic',
       comment:
         'Le plus rapide : remettre ce sujet en « brouillon » tant que son barème n’est pas ouvert.',
-      ou: { label: 'Pilotage de la correction', href: '/admin/correction' },
+      ou: versPilotage,
     };
   }
 
@@ -173,7 +206,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
       pourquoi:
         'Le barème peut encore changer pendant que des copies sont notées : deux élèves ne seraient pas notés pareil.',
       acteur: 'clic',
-      ou: { label: 'Barèmes', href: '/admin/bareme' },
+      ou: versBareme,
     };
   }
   if (a.texte.includes("jamais été confronté à un correcteur humain") || a.texte.includes('aucune copie étalon n’ait été comparée')) {
@@ -182,7 +215,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
       titre: 'Comparer une copie étalon au barème avant d’ouvrir les corrections',
       pourquoi: 'Personne n’a encore vérifié que la note du barème ressemble à celle d’un prof.',
       acteur: 'humain',
-      ou: { label: 'Barèmes', href: '/admin/bareme' },
+      ou: versBareme,
     };
   }
   // « X » n'a aucune version de barème
@@ -193,7 +226,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
       pourquoi: 'Ce bac blanc existe mais rien ne dit combien vaut chaque question : aucune copie ne peut être notée.',
       acteur: 'humain',
       comment: 'Question par question, avec les points. Dis-le-moi si tu veux que je le prépare à partir du sujet.',
-      ou: { label: 'Barèmes', href: '/admin/bareme' },
+      ou: versBareme,
     };
   }
 
@@ -205,7 +238,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
       pourquoi:
         'Personne n’a vérifié que ce barème note comme un humain. Une seule copie corrigée des deux côtés suffit à le savoir.',
       acteur: 'humain',
-      ou: { label: 'Barèmes', href: '/admin/bareme' },
+      ou: versBareme,
     };
   }
 
@@ -220,7 +253,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
         : a.texte,
       acteur: 'humain',
       comment: 'Il manque des questions, ou des points sur des questions déjà saisies.',
-      ou: { label: 'Barèmes', href: '/admin/bareme' },
+      ou: versBareme,
     };
   }
 
@@ -234,7 +267,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
         'Ces questions sont incomplètes (points, réponse attendue ou compétence manquante). Tant qu’elles le sont, le barème ne peut pas être verrouillé.',
       acteur: 'humain',
       comment: 'La page des barèmes montre chaque question fautive, une par une.',
-      ou: { label: 'Barèmes', href: '/admin/bareme' },
+      ou: versBareme,
     };
   }
 
@@ -244,7 +277,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
       titre: 'Reprendre le barème : il note à côté des profs',
       pourquoi: a.texte,
       acteur: 'humain',
-      ou: { label: 'Barèmes', href: '/admin/bareme' },
+      ou: versBareme,
     };
   }
 
@@ -305,7 +338,7 @@ function traduire(a: AnomalieGlobale, i: number): Tache {
         'Une copie s’est arrêtée en route : l’élève n’aura rien. Le message d’erreur technique est dans le pilotage.',
       acteur: 'clic',
       comment: 'Dans « Corrections en direct », le bouton « Relancer » reprend la copie là où elle s’est arrêtée.',
-      ou: { label: 'Pilotage de la correction', href: '/admin/correction' },
+      ou: versPilotage,
     };
   }
 
@@ -422,7 +455,7 @@ export async function chargerTodo(): Promise<TodoPipeline> {
           pourquoi: `Une session est vendue le ${new Date(m.session.date_epreuve + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}, mais les profs ne peuvent pas encore déposer toutes les copies.`,
           acteur: 'clic',
           bloquant: true,
-          ou: { label: 'Pilotage de la correction', href: '/admin/correction' },
+          ou: { label: 'Ouvrir la matière', href: lienPilotage(m.matiere, undefined) },
         },
       ]);
     }
