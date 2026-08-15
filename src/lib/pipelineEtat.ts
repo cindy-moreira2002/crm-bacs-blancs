@@ -26,6 +26,9 @@ import type { StructExamen } from './pipelineVerifs';
 // les lire sans embarquer ce module, qui touche la base en service_role.
 import { LABELS_MATIERES, labelExercice } from './matieres';
 export { LABELS_MATIERES, labelExercice };
+import { moteurAttendu, type MoteurNote } from './moteurs';
+export { MOTEUR_ATTENDU, CE_QUI_SE_DEFINIT, LIBELLE_MOTEUR, moteurAttendu } from './moteurs';
+export type { MoteurNote } from './moteurs';
 
 /** « Mathématiques », « maths », « Histoire-Géographie »… → slug pipeline. */
 function slugMatiere(brut: string): string {
@@ -124,7 +127,14 @@ export type MatiereEtat = {
    *   criteres_rediges — une grille rédigée, note analytique convertie ;
    *   mixte            — plusieurs coexistent (migration en cours).
    */
-  moteur_note: 'grille_generique' | 'bareme_sujet' | 'criteres_rediges' | 'mixte';
+  moteur_note: MoteurNote | 'mixte';
+  /**
+   * Le moteur que cette matière DOIT utiliser, vu la forme de son épreuve.
+   * Ce n'est pas un objectif de migration : le français restera sur sa grille
+   * commune. Comparer les deux dit si quelque chose ne tourne pas rond ;
+   * l'absence de barème par sujet en français n'est pas un manque.
+   */
+  moteur_attendu: MoteurNote;
   totaux: {
     grilles_actives: number;
     grilles: number;
@@ -685,6 +695,7 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
       return {
         matiere,
         label: LABELS_MATIERES[matiere] ?? matiere,
+        moteur_attendu: moteurAttendu(matiere),
         session: sessions?.get(matiere) ?? null,
         exercices: exs,
         examens,

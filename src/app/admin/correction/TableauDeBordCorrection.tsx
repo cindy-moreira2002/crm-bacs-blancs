@@ -109,10 +109,12 @@ function BandeauBaremes({
     <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">🎯 La note officielle : les barèmes par sujet</h2>
+          <h2 className="text-lg font-bold text-gray-900">🎯 Les épreuves à questions : un barème par sujet</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Un barème par bac blanc, question par question, verrouillé avant la première copie. C’est
-            lui — et lui seul — qui donne la note là où il existe.
+            <strong>Seulement</strong> pour les épreuves où les points dépendent des questions posées
+            (maths, physique-chimie, brevet) : « exercice 2 question b » vaut 3 points{' '}
+            <em>dans ce sujet-là</em>, donc chaque bac blanc a son barème. Les épreuves rédigées, elles,
+            gardent une grille commune à tous les sujets — il n’y a rien à écrire pour elles ici.
           </p>
         </div>
         <Link
@@ -125,9 +127,8 @@ function BandeauBaremes({
 
       {b.examens === 0 ? (
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-          Aucun bac blanc n’a encore de barème propre. Toutes les notes viennent donc de la grille
-          générique de compétences de la matière — la même pour tous les sujets. C’est ce que le
-          chantier du 7 août 2026 remplace, matière par matière.
+          Aucun bac blanc à questions n’a encore son barème. Les matières concernées ne peuvent donc
+          pas corriger.
         </p>
       ) : (
         <>
@@ -156,9 +157,9 @@ function BandeauBaremes({
 
           {parBareme.length > 0 && (
             <p className="mt-3 text-[11px] text-gray-500">
-              Notées par barème propre :{' '}
-              <strong>{parBareme.map((m) => m.label).join(', ')}</strong>. Les autres matières restent
-              notées par leur grille de compétences.
+              Notées par un barème de sujet :{' '}
+              <strong>{parBareme.map((m) => m.label).join(', ')}</strong>. Les autres matières sont
+              notées par leur grille commune ou leur grille rédigée — c’est voulu, pas un retard.
             </p>
           )}
         </>
@@ -304,22 +305,37 @@ function CarteMatiere({
               : 'Aucune copie étalon corrigée par un professeur : l’échelle n’a jamais été confrontée à un humain',
         },
       ]
-    : [
-        {
-          ok: m.examens.length > 0,
-          texte:
-            m.examens.length > 0
-              ? `${m.examens.length} bac(s) blanc(s) avec barème propre, dont ${ouverts.length} en correction`
-              : 'Aucun barème propre au sujet — la note vient encore de la grille de compétences',
-        },
-        {
-          ok: compares > 0,
-          texte:
-            compares > 0
-              ? `${compares} copie(s) étalon comparée(s) IA / professeurs`
-              : 'Barème jamais confronté à un correcteur humain (aucune copie comparée)',
-        },
-      ];
+    : m.moteur_attendu === 'bareme_sujet'
+      ? [
+          // Épreuve à questions : le barème dépend du sujet, donc il en faut
+          // un par bac blanc. Son absence est un vrai manque.
+          {
+            ok: m.examens.length > 0,
+            texte:
+              m.examens.length > 0
+                ? `${m.examens.length} bac(s) blanc(s) avec leur barème, dont ${ouverts.length} en correction`
+                : 'Aucun bac blanc n’a encore son barème question par question',
+          },
+          {
+            ok: compares > 0,
+            texte:
+              compares > 0
+                ? `${compares} copie(s) étalon comparée(s) IA / professeurs`
+                : 'Barème jamais confronté à un correcteur humain (aucune copie comparée)',
+          },
+        ]
+      : [
+          // Épreuve rédigée : une grille commune suffit, et c'est la décision.
+          // Réclamer ici un « barème propre au sujet » serait un faux reproche :
+          // il n'y en aura jamais, et il n'en faut pas.
+          {
+            ok: t.grilles_actives > 0,
+            texte:
+              t.grilles_actives > 0
+                ? `Notée par sa grille commune — rien à écrire à chaque nouveau sujet`
+                : 'Aucune grille active : cette matière ne peut rien noter',
+          },
+        ];
 
   const points: { ok: boolean; texte: string }[] = [
     ...pointsMoteur,

@@ -10,8 +10,8 @@ import { useState } from 'react';
 const ETAPES_FLUX = [
   {
     n: '0',
-    titre: 'Avant tout : le barème',
-    texte: 'Un bac blanc ne peut pas être corrigé tant que son barème n’est pas écrit question par question, testé sur des copies étalons, validé et VERROUILLÉ. Une fois verrouillé il ne bouge plus : c’est ce qui garantit que toutes les copies du lot sont notées avec le même barème. Tout se passe dans /admin/bareme.',
+    titre: 'Avant tout : de quoi se note cette épreuve ?',
+    texte: 'Deux familles, et elles ne se mélangent pas. Une ÉPREUVE RÉDIGÉE (français, philo, histoire-géo, SES, HLP, SVT, HGGSP) se juge sur une grille écrite UNE FOIS pour l’épreuve : les critères ne changent pas d’un sujet à l’autre, donc un nouveau bac blanc ne demande que son sujet. Une ÉPREUVE À QUESTIONS (maths, physique-chimie, brevet) se note question par question : « exercice 2 question b » vaut 3 points dans ce sujet-là, donc chaque bac blanc a SON barème, à écrire dans /admin/bareme, puis à verrouiller avant la première copie.',
   },
   {
     n: '1',
@@ -37,9 +37,9 @@ const ETAPES_FLUX = [
 
 const COUCHES = [
   {
-    titre: '1 · Le barème du sujet donne la NOTE',
+    titre: '1 · Ce qui donne la NOTE, selon la forme de l’épreuve',
     texte:
-      'La note sur 20 est la somme des points attribués question par question, avec le même barème et la même version pour toutes les copies d’un bac blanc. La somme est faite par la base, pas par l’IA — elle n’a pas le droit de la remplacer par une appréciation du « niveau » de l’élève.',
+      'Épreuve à questions : la note est la somme des points attribués question par question, avec le même barème et la même version pour toutes les copies du lot. Épreuve rédigée : la note vient de la grille de l’épreuve, critère par critère, la même pour tous les sujets. Dans les deux cas la somme est faite par la base, pas par l’IA — elle n’a pas le droit de la remplacer par une appréciation du « niveau » de l’élève.',
   },
   {
     titre: '2 · La grille de compétences donne un DIAGNOSTIC',

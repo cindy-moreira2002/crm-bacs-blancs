@@ -22,6 +22,7 @@
 import { chargerSante, type AnomalieGlobale } from './pipelineSante';
 import type { CibleDiag } from './pipelineVerifs';
 import { chargerEtatPipeline, LABELS_MATIERES, type MatiereEtat } from './pipelineEtat';
+import { CE_QUI_SE_DEFINIT, LIBELLE_MOTEUR, type MoteurNote } from './moteurs';
 
 /** Qui peut rayer la ligne. */
 export type Acteur =
@@ -48,6 +49,11 @@ export type Tache = {
 export type TodoMatiere = {
   matiere: string;
   label: string;
+  /** Comment cette matière est notée — « grille commune », « barème du sujet »… */
+  moteur: MoteurNote;
+  moteur_label: string;
+  /** Ce qu'il y a à définir ici, et à quelle fréquence. */
+  a_definir: string;
   /** Date de la session vendue, s'il y en a une — ce qui donne l'urgence. */
   date_epreuve: string | null;
   /** La matière accepte-t-elle des copies aujourd'hui ? */
@@ -474,6 +480,9 @@ export async function chargerTodo(): Promise<TodoPipeline> {
       return {
         matiere: m.matiere,
         label: LABELS_MATIERES[m.matiere] ?? m.matiere,
+        moteur: m.moteur_attendu,
+        moteur_label: LIBELLE_MOTEUR[m.moteur_attendu],
+        a_definir: CE_QUI_SE_DEFINIT[m.moteur_attendu],
         date_epreuve: m.session?.date_epreuve ?? null,
         ouverte: m.visibilite === 'active',
         taches,

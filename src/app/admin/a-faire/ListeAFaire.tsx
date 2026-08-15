@@ -105,6 +105,12 @@ function BlocMatiere({ m, seulementBloquants }: { m: TodoMatiere; seulementBloqu
             {' · '}
             {m.ouverte ? 'ouverte aux profs' : 'fermée aux profs'}
           </p>
+          {/* La question qui revient toujours : « qu'est-ce que je dois écrire
+              ici, et à chaque fois ? ». La réponse dépend de la forme de
+              l'épreuve, pas d'un état d'avancement. */}
+          <p className="text-[11px] text-gray-600 mt-1.5">
+            Notée par sa <strong>{m.moteur_label}</strong>. {m.a_definir}
+          </p>
         </div>
         <span
           className={`text-xs font-medium px-2.5 py-1 rounded-full ${
@@ -135,6 +141,78 @@ function BlocMatiere({ m, seulementBloquants }: { m: TodoMatiere; seulementBloqu
             <LigneTache key={t.id} t={t} />
           ))}
         </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * « Qu'est-ce que je dois définir, au juste ? »
+ *
+ * La confusion la plus coûteuse du tableau de bord : croire qu'il faut écrire
+ * un barème pour chaque nouveau bac blanc, dans toutes les matières. C'est vrai
+ * en maths, faux en français. Ce panneau dit la règle une fois, en clair, et
+ * range chaque matière dans sa case.
+ */
+function CommentCestNote({ matieres }: { matieres: TodoMatiere[] }) {
+  const [ouvert, setOuvert] = useState(false);
+  const groupes = [
+    {
+      cle: 'grille_generique' as const,
+      titre: 'Une grille commune à tous les sujets',
+      quoi: 'La grille est écrite UNE FOIS pour l’épreuve. Un commentaire de français se juge sur la compréhension du texte, l’analyse, l’organisation et l’expression — que le texte soit de Hugo ou de Colette.',
+      chaqueFois: 'Pour un nouveau bac blanc : tu ajoutes le sujet, c’est tout. Rien à écrire de plus.',
+    },
+    {
+      cle: 'criteres_rediges' as const,
+      titre: 'Une grille rédigée, verrouillée',
+      quoi: 'Même principe, mais avec des critères entièrement rédigés et une conversion de note (dissertation /10 + étude critique /10 = 20).',
+      chaqueFois: 'Pour un nouveau bac blanc : tu ajoutes le sujet. La grille, elle, se relit et se verrouille une seule fois.',
+    },
+    {
+      cle: 'bareme_sujet' as const,
+      titre: 'Un barème par sujet, question par question',
+      quoi: 'Ici les points dépendent des questions posées : « exercice 2 question b » vaut 3 points DANS CE SUJET-LÀ. Aucune grille commune ne peut le dire, puisque les questions changent à chaque épreuve.',
+      chaqueFois: 'Pour un nouveau bac blanc : il faut écrire son barème, question par question. C’est la seule famille où c’est le cas.',
+    },
+  ];
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOuvert(!ouvert)}
+        className="w-full text-left px-4 py-3 flex items-center justify-between gap-3"
+      >
+        <span>
+          <span className="font-bold text-gray-900">Qu’est-ce que je dois définir, et quand ?</span>
+          <span className="block text-xs text-gray-500 mt-0.5">
+            Non, il ne faut pas écrire un barème pour chaque bac blanc partout. Ça dépend de la forme
+            de l’épreuve.
+          </span>
+        </span>
+        <span className="text-xs text-purple-700 whitespace-nowrap">{ouvert ? 'replier' : 'ouvrir'}</span>
+      </button>
+
+      {ouvert && (
+        <div className="px-4 pb-4 space-y-3">
+          {groupes.map((g) => {
+            const siennes = matieres.filter((m) => m.moteur === g.cle);
+            if (!siennes.length) return null;
+            return (
+              <div key={g.cle} className="rounded-xl border border-gray-200 p-3">
+                <p className="text-sm font-semibold text-gray-900">{g.titre}</p>
+                <p className="text-xs text-gray-600 mt-1">{g.quoi}</p>
+                <p className="text-xs text-gray-800 mt-1.5">
+                  <strong>{g.chaqueFois}</strong>
+                </p>
+                <p className="text-[11px] text-gray-500 mt-2">
+                  Concerne : {siennes.map((m) => m.label).join(', ')}.
+                </p>
+              </div>
+            );
+          })}
+        </div>
       )}
     </section>
   );
@@ -220,6 +298,8 @@ export function ListeAFaire() {
             </div>
           ))}
         </div>
+
+        <CommentCestNote matieres={todo.matieres} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label className="flex items-center gap-2 text-sm text-gray-700">
