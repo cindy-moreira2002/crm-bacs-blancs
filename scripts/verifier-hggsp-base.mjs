@@ -265,6 +265,16 @@ bilan(
   enDouble.map(([c, n]) => `${c} ×${n}`).join(' · '),
 );
 
+// La décision « qui note quoi » vit dans src/lib/moteurs.ts. Si la base s'en
+// écarte, les copies sont notées par un autre moteur que celui qui est écrit —
+// sans que rien ne plante, et c'est précisément ce qui rend l'écart coûteux.
+const { MOTEUR_ATTENDU } = await import('../src/lib/moteurs.ts');
+bilan(
+  MOTEUR_ATTENDU.hggsp === 'criteres_rediges',
+  'le moteur attendu pour HGGSP est bien la grille rédigée',
+  `moteurs.ts dit « ${MOTEUR_ATTENDU.hggsp} »`,
+);
+
 const gabarits = await lire('dossier_templates?select=id,status,audience&matiere=eq.hggsp&audience=eq.eleve');
 const gabActifs = (gabarits.data ?? []).filter((t) => t.status === 'active');
 bilan(gabActifs.length >= GRILLES.length, 'dossiers élève actifs', `${gabActifs.length} actif(s)`);
