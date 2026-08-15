@@ -228,7 +228,7 @@ pas grave, mais le token précédent devient invalide).
 1. Toujours dans **« OAuth2 »**, descends jusqu'à **« OAuth2 URL Generator »**.
 2. Dans **« Scopes »**, coche **uniquement** : **`bot`**.
 3. Une liste **« Bot Permissions »** apparaît en dessous. Coche **exactement
-   ces six cases**, rien d'autre :
+   ces sept cases**, rien d'autre :
 
    | Case à cocher (FR) | Nom anglais | Pourquoi |
    |---|---|---|
@@ -238,18 +238,29 @@ pas grave, mais le token précédent devient invalide).
    | Voir les salons | View Channels | Le bot ne peut pas gérer ce qu'il ne voit pas |
    | Envoyer des messages | Send Messages | Poster les consignes dans `informations` et `assistance-technique` |
    | Se connecter | Connect | Discord refuse d'accorder à un élève une permission que le bot n'a pas lui-même |
+   | Parler | Speak | Même règle : la salle donne la parole à l'élève, donc le bot doit l'avoir pour la lui donner |
 
 4. Vérifie en bas de page que le nombre affiché après `permissions=` est
-   **exactement `269487121`**. Si ce n'est pas le cas, une case est mal cochée.
+   **exactement `271584273`**. Si ce n'est pas le cas, une case est mal cochée.
 
    > **Ne coche jamais « Administrateur ».** Elle donnerait au bot le droit de
-   > supprimer ton serveur entier, alors que six permissions suffisent.
+   > supprimer ton serveur entier, alors que sept permissions suffisent.
+
+   > Si tu vois `269487121`, il manque **Parler** : c'est l'ancienne liste, et
+   > elle fait échouer la création de chaque salle d'élève en
+   > « 403 Missing Permissions » — la catégorie et les salons textuels, eux,
+   > se créent quand même, ce qui rend le défaut trompeur.
 
 5. Copie l'URL générée (bouton **« Copy »** tout en bas), colle-la dans un
    nouvel onglet du navigateur, puis **Entrée**.
 6. Dans la liste déroulante **« Ajouter à : »**, choisis
    **`Les Matinées du Bac`** → **« Continuer »**.
-7. Vérifie que les six permissions sont bien listées → **« Autoriser »**.
+7. Vérifie que les sept permissions sont bien listées → **« Autoriser »**.
+
+> **Le bot est déjà sur le serveur et il lui manque une permission ?** Refais
+> exactement les étapes 1 à 8 avec la nouvelle liste. Réinviter un bot déjà
+> présent ne le retire pas, ne casse rien et ne perd aucun salon : Discord met
+> simplement à jour les permissions de son rôle.
 8. Valide le captcha si Discord le demande.
 
 Le bot apparaît dans la liste des membres du serveur, hors ligne (c'est
@@ -369,7 +380,7 @@ Une fois les six variables posées, je lance une vérification automatique qui
 contrôle, sans rien créer de définitif :
 
 - le token est valide et le bot est bien membre du serveur ;
-- le bot possède les six permissions, ni plus ni moins ;
+- le bot possède les sept permissions, ni plus ni moins ;
 - son rôle est assez haut dans la hiérarchie ;
 - les rôles `Équipe Matinées` et `Prof` existent et leurs ID correspondent ;
 - le rôle `Prof` est bien situé sous celui du bot (sinon il ne pourra pas

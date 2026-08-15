@@ -70,12 +70,16 @@ export const PERM = {
 } as const;
 
 /**
- * Les six permissions dont le bot a besoin, et pourquoi. Cette liste est la
- * référence : elle sert au contrôle de configuration et à l'URL d'invitation.
+ * Les sept permissions dont le bot a besoin, et pourquoi. Cette liste est la
+ * référence : elle sert au contrôle de configuration ET à l'URL d'invitation,
+ * donc ajouter une ligne ici suffit à corriger les deux.
  *
- * CONNECT figure ici alors que le bot ne rejoint jamais un salon vocal :
- * Discord refuse qu'un bot ACCORDE une permission qu'il ne possède pas
- * lui-même. Sans elle, les élèves verraient leur salle sans pouvoir y entrer.
+ * CONNECT et SPEAK figurent ici alors que le bot ne rejoint jamais un salon
+ * vocal : Discord refuse qu'un bot ACCORDE une permission qu'il ne possède pas
+ * lui-même, et la salle d'un élève lui accorde les deux. Sans SPEAK, la
+ * création de chaque salle échoue en « 403 Missing Permissions » — alors que la
+ * catégorie et les salons textuels, eux, se créent sans difficulté puisqu'ils
+ * ne portent aucune permission vocale.
  */
 export const PERMISSIONS_REQUISES: { bit: bigint; nom: string; pourquoi: string }[] = [
   {
@@ -107,6 +111,12 @@ export const PERMISSIONS_REQUISES: { bit: bigint; nom: string; pourquoi: string 
     bit: PERM.CONNECT,
     nom: 'Se connecter',
     pourquoi: 'Discord refuse d’accorder à un élève une permission que le bot n’a pas.',
+  },
+  {
+    bit: PERM.SPEAK,
+    nom: 'Parler',
+    pourquoi:
+      'Même règle que « Se connecter » : la salle accorde la parole à l’élève, donc le bot doit l’avoir pour la donner.',
   },
 ];
 
