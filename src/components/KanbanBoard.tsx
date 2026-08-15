@@ -58,7 +58,12 @@ export default function KanbanBoard() {
     setLoading(false);
   }
 
-  useEffect(() => { fetchLeads(); }, []);
+  // Premier chargement, différé d'un tick : l'effet ne pose pas d'état de façon
+  // synchrone (règle react-hooks/set-state-in-effect).
+  useEffect(() => {
+    const t = setTimeout(fetchLeads, 0);
+    return () => clearTimeout(t);
+  }, []);
 
   function handleFormClose() {
     setShowForm(false);

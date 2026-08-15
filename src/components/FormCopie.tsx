@@ -145,7 +145,7 @@ export function FormCopie({
           setCopieTexte(texte);
           setMessage({ type: 'success', text: `PDF lu (${pdf.numPages} page(s)). Vérifie le texte ci-dessous.` });
         }
-      } catch (err) {
+      } catch {
         setMessage({ type: 'success', text: 'PDF chargé. Le texte sera lu à la correction.' });
       } finally {
         setPdfLoading(false);
@@ -200,7 +200,7 @@ export function FormCopie({
       } else {
         setMessage({ type: 'error', text: data.error || 'Erreur serveur' });
       }
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Erreur de connexion' });
     } finally {
       setLoading(false);
@@ -239,7 +239,7 @@ export function FormCopie({
           onChange={(e) => setProfEmail(e.target.value)} className={inputClass} required />
 
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Copie de l'élève — PDF, photo (manuscrit OK) ou texte</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Copie de l’élève — PDF, photo (manuscrit OK) ou texte</label>
           <input type="file" accept=".pdf,.txt,.jpg,.jpeg,.png" onChange={handleFile}
             className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200" />
           {pdfLoading && <p className="text-sm text-purple-600 mt-2">Lecture du PDF…</p>}

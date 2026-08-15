@@ -28,15 +28,15 @@ export default function Home() {
           {/* Inscription */}
           <div className="bg-white rounded-2xl shadow-lg border-2 border-blue-200 p-8 text-center hover:shadow-xl transition-shadow">
             <div className="text-5xl mb-4">✍️</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">M'inscrire</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">M’inscrire</h2>
             <p className="text-gray-600 mb-6">
-              Remplis le formulaire pour t'inscrire à un bac blanc en visio et reçois ton lien de salon.
+              Remplis le formulaire pour t’inscrire à un bac blanc en visio et reçois ton lien de salon.
             </p>
             <a
               href="/inscription"
               className="inline-block px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
             >
-              S'inscrire →
+              S’inscrire →
             </a>
           </div>
         </div>
@@ -62,7 +62,7 @@ export default function Home() {
         {/* Info */}
         <div className="mt-12 bg-purple-50 rounded-xl p-6 text-center">
           <p className="text-gray-700">
-            <strong>Nouveau ?</strong> Inscris-toi d'abord, puis accède à ton espace pour voir tes bacs blancs et rejoindre les appels visio.
+            <strong>Nouveau ?</strong> Inscris-toi d’abord, puis accède à ton espace pour voir tes bacs blancs et rejoindre les appels visio.
           </p>
         </div>
       </div>

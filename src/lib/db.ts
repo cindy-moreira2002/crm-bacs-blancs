@@ -15,8 +15,12 @@ const g = globalThis as unknown as {
 // --- SQLite (local dev only — dynamic require so Vercel never bundles it) ---
 function getLocalDb() {
   if (!g.sqliteDb) {
+    // Les deux `require` sont volontaires et doivent le rester : c'est ce qui
+    // empêche Vercel d'embarquer better-sqlite3 (binaire natif) dans le bundle
+    // de production, où seul Postgres sert.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Database = require("better-sqlite3");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require("path");
     const dbPath = path.join(process.cwd(), "dev.db");
     const db = new Database(dbPath);

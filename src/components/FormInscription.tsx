@@ -144,7 +144,7 @@ export function FormInscription({ examen }: { examen: Examen }) {
       } else {
         setMessage({ type: 'error', text: data.error || 'Erreur serveur' });
       }
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Erreur de connexion' });
     } finally {
       setLoading(false);

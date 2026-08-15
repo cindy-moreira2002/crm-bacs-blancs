@@ -59,9 +59,15 @@ export function EspaceProf() {
   const [filtreMatiere, setFiltreMatiere] = useState<string>('');
   const editRef = useRef<HTMLDivElement>(null);
 
+  // Le filtre choisi la dernière fois. Reposé après le premier rendu, pas
+  // pendant : l'état initial doit rester le même côté serveur et côté
+  // navigateur, sinon l'hydratation ne correspond plus.
   useEffect(() => {
-    const saved = localStorage.getItem('espaceprof_matiere');
-    if (saved) setFiltreMatiere(saved);
+    const t = setTimeout(() => {
+      const saved = localStorage.getItem('espaceprof_matiere');
+      if (saved) setFiltreMatiere(saved);
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   const changerFiltre = (m: string) => {
@@ -92,7 +98,14 @@ export function EspaceProf() {
     }
   };
 
-  useEffect(() => { charger(); /* eslint-disable-next-line */ }, []);
+  // Chargement initial, une seule fois. `charger` est volontairement absent des
+  // dépendances : il est recréé à chaque rendu (il lit `active`), et l'y mettre
+  // relancerait deux appels réseau après la moindre interaction.
+  useEffect(() => {
+    const t = setTimeout(charger, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Retrouve la copie déposée pour un inscrit (par email, sinon par nom + matière)
   const copieDe = (i: Inscrit): Copie | undefined =>
@@ -322,7 +335,7 @@ export function EspaceProf() {
                 <th className="text-left px-5 py-2 font-medium">Note /20</th>
                 <th className="text-left px-5 py-2 font-medium">Correction</th>
                 <th className="text-left px-5 py-2 font-medium">PDF</th>
-                <th className="text-left px-5 py-2 font-medium">Envoi à l'élève</th>
+                <th className="text-left px-5 py-2 font-medium">Envoi à l’élève</th>
                 <th className="px-5 py-2"></th>
               </tr>
             </thead>

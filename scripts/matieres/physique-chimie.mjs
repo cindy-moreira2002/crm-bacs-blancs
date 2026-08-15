@@ -1404,4 +1404,7 @@ SECTION 4 — VERSION AMÉLIORÉE
   },
 ];
 
-export default { matiere, libelle, session, rubrics, subject_cards, benchmark_cards, dossier_templates };
+// Nommé plutôt qu'anonyme : c'est ce nom qui apparaît dans une pile d'appels
+// quand `apply-matiere.mjs` charge la mauvaise fiche.
+const fiche = { matiere, libelle, session, rubrics, subject_cards, benchmark_cards, dossier_templates };
+export default fiche;
