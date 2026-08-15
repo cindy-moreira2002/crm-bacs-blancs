@@ -9,6 +9,8 @@ import {
 } from '@/lib/relecture';
 import { chargerRelectureHggsp } from '@/lib/relectureHggsp';
 import { pipelineManquant } from '@/lib/pipeline';
+import { estVoieTechnologique, libelleVoie } from '@/lib/matieres';
+import { moteurAttendu } from '@/lib/moteurs';
 import { FormulaireRelecture } from '@/components/FormulaireRelecture';
 import { DossierRelectureHggsp } from '@/components/DossierRelectureHggsp';
 
@@ -141,6 +143,9 @@ export default async function PageRelecture({
 
   const nomMatiere = NOMS_MATIERES[matiere] ?? matiere;
   const { grilles, taxonomie, taxonomieDiscipline, exemple, autresExemples, baremes } = donnees;
+  // Dans une matière notée à la grille commune, ces grilles SONT la note.
+  // Écrire « sert au diagnostic, pas à la note » y serait faux.
+  const grilleDonneLaNote = moteurAttendu(matiere) === 'grille_generique';
 
   const copiesComparees = baremes.reduce((n, b) => n + b.calibration.copies_comparees, 0);
   const calibrationFaite = copiesComparees > 0;
@@ -244,12 +249,30 @@ export default async function PageRelecture({
         <section className="space-y-6">
           <TitreSection
             numero={numero('competences')}
-            titre="Le diagnostic de compétences — il n’intervient pas dans la note"
+            titre={
+              grilleDonneLaNote
+                ? 'La grille de notation — c’est elle qui donne la note'
+                : 'Le diagnostic de compétences — il n’intervient pas dans la note'
+            }
           />
+          {/* Le rôle de la grille change d'une matière à l'autre : en français
+              elle EST la note, en HGGSP elle ne sert qu'au diagnostic. Écrire
+              l'un pour l'autre rend toute la page incompréhensible. */}
           <p className="text-gray-700">
-            Cette grille servait autrefois à produire la note. Elle sert désormais à décrire ce que
-            la copie montre de chaque compétence, une fois les points attribués. Elle alimente les
-            conseils donnés à l’élève, et rien d’autre.
+            {grilleDonneLaNote ? (
+              <>
+                La note de l’élève est la <b>somme des critères ci-dessous</b>, et rien d’autre :
+                chaque palier vaut de vrais points. Une grille par épreuve <b>et par voie</b> — les
+                épreuves de la voie technologique ne sont pas celles de la voie générale, et elles
+                ne se notent pas pareil.
+              </>
+            ) : (
+              <>
+                Dans cette matière, la note vient d’ailleurs (barème du sujet ou grille rédigée).
+                Cette grille sert à décrire ce que la copie montre de chaque compétence, une fois
+                les points attribués : elle alimente les conseils donnés à l’élève, et rien d’autre.
+              </>
+            )}
           </p>
           {baremes.length > 0 && baremes[0].competences.length > 0 && (
             <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
@@ -279,9 +302,34 @@ export default async function PageRelecture({
               </ul>
             </div>
           )}
-          {grilles.map((g) => (
-            <BlocGrille key={g.id} grille={g} nom={nomExercice(g.exercise_type)} />
-          ))}
+          {/* Groupées par voie : deux grilles peuvent porter le même nom
+              d'exercice sans s'appliquer aux mêmes élèves. */}
+          {(['generale', 'technologique'] as const).map((voie) => {
+            const siennes = grilles.filter((g) => estVoieTechnologique(g.track) === (voie === 'technologique'));
+            if (!siennes.length) return null;
+            return (
+              <div key={voie} className="space-y-6">
+                <h3
+                  className={`text-lg font-bold ${
+                    voie === 'technologique' ? 'text-teal-800' : 'text-indigo-800'
+                  }`}
+                >
+                  {voie === 'technologique' ? 'Voie technologique' : 'Voie générale'}
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    {siennes.length} épreuve{siennes.length > 1 ? 's' : ''}
+                  </span>
+                </h3>
+                {siennes.map((g) => (
+                  <BlocGrille
+                    key={g.id}
+                    grille={g}
+                    nom={nomExercice(g.exercise_type)}
+                    donneLaNote={grilleDonneLaNote}
+                  />
+                ))}
+              </div>
+            );
+          })}
         </section>
 
         {/* -------------------------------------------------- 3. Taxonomie */}
@@ -733,14 +781,58 @@ function BlocBareme({ bareme }: { bareme: BaremeRelecture }) {
   );
 }
 
-function BlocGrille({ grille, nom }: { grille: Grille; nom: string }) {
+/**
+ * Ce qu'un palier vaut, écrit comme un professeur le lit.
+ *
+ * La clé est presque toujours un nombre de points (« 2.5 »), mais certaines
+ * grilles utilisent une FOURCHETTE (« 0-1 », « 4-5 »). `Number('0-1')` vaut
+ * NaN : la page affichait « niveau NaN », et le tri des paliers ne triait plus
+ * rien. On lit donc la clé telle qu'elle est.
+ */
+function libellePalier(cle: string): string {
+  const fourchette = cle.match(/^\s*(-?[\d.,]+)\s*[-–à]\s*(-?[\d.,]+)\s*$/);
+  if (fourchette) {
+    const [, bas, haut] = fourchette;
+    const pluriel = Math.abs(Number(haut.replace(',', '.'))) >= 2 ? 's' : '';
+    return `${bas.replace('.', ',')} à ${haut.replace('.', ',')} point${pluriel}`;
+  }
+  const n = Number(cle.replace(',', '.'));
+  if (!Number.isFinite(n)) return cle; // clé inattendue : on la montre telle quelle
+  return `${n.toLocaleString('fr-FR')} point${Math.abs(n) >= 2 ? 's' : ''}`;
+}
+
+/** Le plancher d'un palier, pour trier « 0-1 » avant « 2-3 ». */
+function planchierPalier(cle: string): number {
+  const n = Number(String(cle).split(/[-–à]/)[0].replace(',', '.'));
+  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+}
+
+function BlocGrille({ grille, nom, donneLaNote }: { grille: Grille; nom: string; donneLaNote: boolean }) {
   const total = grille.rubric_json.criteria.reduce((s, c) => s + c.maximum_score, 0);
+  const techno = estVoieTechnologique(grille.track);
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 space-y-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="text-xl font-bold text-gray-900">{nom}</h3>
-        <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-sm">
-          référence sur {total} points — sert au diagnostic, pas à la note
+        <h3 className="text-xl font-bold text-gray-900">
+          {nom}
+          {/* La voie d'abord : deux grilles peuvent porter le même nom
+              d'exercice et ne pas s'appliquer aux mêmes élèves. */}
+          <span
+            className={`ml-3 px-2.5 py-0.5 rounded-full text-sm font-medium align-middle ${
+              techno ? 'bg-teal-100 text-teal-800' : 'bg-indigo-100 text-indigo-800'
+            }`}
+          >
+            {libelleVoie(grille.track)}
+          </span>
+        </h3>
+        <span
+          className={`px-2.5 py-0.5 rounded-full text-sm ${
+            donneLaNote ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          {donneLaNote
+            ? `la note est la somme de ces critères, sur ${total} points`
+            : `référence sur ${total} points — sert au diagnostic, pas à la note`}
         </span>
       </div>
 
@@ -754,14 +846,19 @@ function BlocGrille({ grille, nom }: { grille: Grille; nom: string }) {
           </div>
           {c.levels && (
             <div className="overflow-x-auto">
+              <p className="px-5 pt-3 text-sm text-gray-500">
+                Ce critère vaut <b>{c.maximum_score} points</b>. Le correcteur choisit UN palier —
+                celui qui décrit vraiment la copie — puis ajuste à l’intérieur. Il ne part jamais du
+                maximum pour retrancher.
+              </p>
               <table className="w-full text-sm">
                 <tbody>
                   {Object.entries(c.levels)
-                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .sort(([a], [b]) => planchierPalier(a) - planchierPalier(b))
                     .map(([niveau, description]) => (
                       <tr key={niveau} className="border-t border-gray-100">
-                        <td className="px-5 py-2 font-semibold text-gray-800 whitespace-nowrap w-24 align-top">
-                          niveau {Number(niveau).toLocaleString('fr-FR')}
+                        <td className="px-5 py-2 font-semibold text-gray-800 whitespace-nowrap w-32 align-top">
+                          {libellePalier(niveau)}
                         </td>
                         <td className="px-5 py-2 text-gray-700">{description}</td>
                       </tr>

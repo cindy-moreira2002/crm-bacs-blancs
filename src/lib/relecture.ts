@@ -46,6 +46,10 @@ export type CritereGrille = {
 export type Grille = {
   id: string;
   exercise_type: string;
+  /** 'generale' ou 'technologique'. L'essai et la contraction n'existent qu'en
+   *  technologique, la dissertation qu'en générale : sans la voie, deux grilles
+   *  au même nom d'exercice sont impossibles à distinguer. */
+  track: string;
   status: string;
   version: number | string;
   system_prompt: string | null;
@@ -226,7 +230,7 @@ export async function chargerDonneesRelecture(matiere: string): Promise<DonneesR
 
   const { data: grilles, error: errGrilles } = await db
     .from('rubrics')
-    .select('id, exercise_type, status, version, system_prompt, rubric_json')
+    .select('id, exercise_type, track, status, version, system_prompt, rubric_json')
     .eq('matiere', matiere)
     .in('status', ['active', 'draft'])
     .order('exercise_type');
