@@ -8,6 +8,7 @@
  * à l'API que pour deux actions (s'inscrire comme coach, se déconnecter).
  */
 import { useState } from 'react';
+import { LiaisonDiscord } from '@/components/LiaisonDiscord';
 import type { BlocsSessions, Revenus, SessionEnrichie } from '@/lib/espaceProf';
 import type { Professeur } from '@/lib/authProf';
 
@@ -244,6 +245,14 @@ export function TableauDeBordProf({
             )}
           </button>
         ))}
+      </div>
+
+      {/* Le compte Discord du prof — hors des onglets, donc visible quel que
+          soit celui qui est ouvert. C'est la porte de la zone Équipe et de
+          toutes les salles d'élèves : la reléguer dans un onglet reviendrait à
+          la cacher. Le bloc disparaît de lui-même une fois le compte relié. */}
+      <div className="mb-4">
+        <LiaisonDiscord pourquoi="C’est ce qui t’ouvre la zone Équipe et les salles de tes élèves : sans compte relié, tu vois les liens mais tu ne peux pas entrer." />
       </div>
 
       {erreur && (
