@@ -13,6 +13,7 @@ import type { CorrectionLigne, MatiereEtat, RetourProf, SnapshotPipeline } from 
 import { DetailMatiereVue } from './DetailMatiere';
 import { ExplicationPipeline } from './ExplicationPipeline';
 import { SanteSystemeVue } from './SanteSysteme';
+import { estSessionDeTest, LIBELLE_PREMIERE_SESSION } from '@/lib/calendrier';
 
 const RAFRAICHISSEMENT_MS = 30_000;
 
@@ -403,10 +404,22 @@ function CarteMatiere({
           </div>
           {m.session ? (
             <p className="text-xs text-gray-500 mt-1">
-              Session le{' '}
-              {new Date(m.session.date_epreuve + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
-              {jours !== null && jours >= 0 && (
-                <span className={jours <= 14 ? 'text-red-600 font-semibold' : 'text-gray-500'}> · J−{jours}</span>
+              {/* Un essai n'a pas d'échéance : pas de J−N, sinon on prépare
+                  dans l'urgence une épreuve qui n'aura pas lieu. */}
+              {estSessionDeTest(m.session.date_epreuve) ? (
+                <>
+                  Essai du{' '}
+                  {new Date(m.session.date_epreuve + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
+                  <span className="text-gray-400"> · pas une vraie session</span>
+                </>
+              ) : (
+                <>
+                  Session le{' '}
+                  {new Date(m.session.date_epreuve + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
+                  {jours !== null && jours >= 0 && (
+                    <span className={jours <= 14 ? 'text-red-600 font-semibold' : 'text-gray-500'}> · J−{jours}</span>
+                  )}
+                </>
               )}
             </p>
           ) : (
@@ -1005,6 +1018,12 @@ export function TableauDeBordCorrection() {
 
         {/* Couche 3 — les épreuves rédigées */}
         <BandeauRedigees r={etat.redigees} matieres={etat.matieres} />
+
+        <p className="text-xs text-gray-700 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          Les vrais bacs blancs commencent en <strong>{LIBELLE_PREMIERE_SESSION}</strong>. Les sessions
+          datées avant sont des essais, faits pour vérifier que la chaîne fonctionne — elles ne
+          créent aucune échéance.
+        </p>
 
         {/* Synthèse */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">

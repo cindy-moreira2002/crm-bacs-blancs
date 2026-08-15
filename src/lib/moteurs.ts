@@ -41,12 +41,24 @@ export const MOTEUR_ATTENDU: Record<string, MoteurNote> = {
   hlp: 'grille_generique',
   svt: 'grille_generique',
 
+  // DÉCISION DE CINDY, 15 août 2026 : « pour maths, physique, il n'y a pas de
+  // barème par copie ». Ces deux matières restent donc sur leur grille commune,
+  // comme les épreuves rédigées. Le moteur `bareme_sujet` n'est pas supprimé
+  // pour autant — la machinerie est en place et le brevet s'en sert — mais le
+  // bac ne le réclame plus, et l'administration ne demande plus d'écrire un
+  // barème à chaque nouveau bac blanc de maths ou de physique-chimie.
+  //
+  // C'est aussi ce que dit la base : ces deux matières n'ont aucun bac blanc
+  // avec barème, et leurs grilles de dépôt pointent sur `grille_generique`.
+  // Pour revenir en arrière : remettre 'bareme_sujet' ici, créer les examens
+  // et écrire leurs barèmes (voir GUIDE_BAREME_PAR_SUJET.md).
+  maths: 'grille_generique',
+  'physique-chimie': 'grille_generique',
+
   // Épreuve rédigée à deux exercices notés séparément, avec conversion.
   hggsp: 'criteres_rediges',
 
-  // Épreuves à questions : les points dépendent du sujet, pas de la matière.
-  maths: 'bareme_sujet',
-  'physique-chimie': 'bareme_sujet',
+  // Le brevet, lui, a de vrais barèmes question par question déjà saisis.
   brevet_francais: 'bareme_sujet',
   brevet_mathematiques: 'bareme_sujet',
 };

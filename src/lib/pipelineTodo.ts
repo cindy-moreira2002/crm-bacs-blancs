@@ -23,6 +23,7 @@ import { chargerSante, type AnomalieGlobale } from './pipelineSante';
 import type { CibleDiag } from './pipelineVerifs';
 import { chargerEtatPipeline, labelMatiere, type MatiereEtat } from './pipelineEtat';
 import { CE_QUI_SE_DEFINIT, LIBELLE_MOTEUR, type MoteurNote } from './moteurs';
+import { estSessionDeTest, LIBELLE_PREMIERE_SESSION } from './calendrier';
 
 /** Qui peut rayer la ligne. */
 export type Acteur =
@@ -49,6 +50,8 @@ export type Tache = {
 export type TodoMatiere = {
   matiere: string;
   label: string;
+  /** 'BAC' ou 'DNB' : le brevet est un autre examen, mis de côté pour l'instant. */
+  examen: 'BAC' | 'DNB';
   /** Comment cette matière est notée — « grille commune », « barème du sujet »… */
   moteur: MoteurNote;
   moteur_label: string;
@@ -56,6 +59,12 @@ export type TodoMatiere = {
   a_definir: string;
   /** Date de la session vendue, s'il y en a une — ce qui donne l'urgence. */
   date_epreuve: string | null;
+  /**
+   * Cette session est-elle un essai ? Les vraies sessions ne commencent qu'en
+   * novembre 2026 ; tout ce qui est daté avant sert à faire tourner la chaîne.
+   * Une session d'essai ne crée aucune échéance, donc aucun compte à rebours.
+   */
+  session_de_test: boolean;
   /** La matière accepte-t-elle des copies aujourd'hui ? */
   ouverte: boolean;
   taches: Tache[];
@@ -505,19 +514,26 @@ export async function chargerTodo(): Promise<TodoPipeline> {
   // Une matière ouverte au dépôt sans aucune session vendue n'est pas une
   // anomalie ; une session vendue sans matière ouverte, si.
   for (const m of etat.matieres) {
-    if (m.session && m.visibilite !== 'active') {
-      parMatiere.set(m.matiere, [
-        ...(parMatiere.get(m.matiere) ?? []),
-        {
-          id: `${m.matiere}-ouvrir`,
-          titre: 'Ouvrir la matière aux profs avant la session',
-          pourquoi: `Une session est vendue le ${new Date(m.session.date_epreuve + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}, mais les profs ne peuvent pas encore déposer toutes les copies.`,
-          acteur: 'clic',
-          bloquant: true,
-          ou: { label: 'Ouvrir la matière', href: lienPilotage(m.matiere, undefined) },
-        },
-      ]);
-    }
+    if (!m.session || m.visibilite === 'active') continue;
+    // Une session d'essai n'a pas de date limite : elle n'aura pas lieu. La
+    // seule raison d'ouvrir la matière est alors de VÉRIFIER que la chaîne
+    // marche — c'est utile, ce n'est pas urgent.
+    const essai = estSessionDeTest(m.session.date_epreuve);
+    parMatiere.set(m.matiere, [
+      ...(parMatiere.get(m.matiere) ?? []),
+      {
+        id: `${m.matiere}-ouvrir`,
+        titre: essai
+          ? 'Ouvrir la matière pour vérifier que la chaîne marche'
+          : 'Ouvrir la matière aux profs avant la session',
+        pourquoi: essai
+          ? `Aucune copie ne peut être déposée aujourd'hui, donc rien ne peut être testé de bout en bout. La session du ${new Date(m.session.date_epreuve + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} est un essai — les vraies commencent en ${LIBELLE_PREMIERE_SESSION}.`
+          : `Une session est vendue le ${new Date(m.session.date_epreuve + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}, mais les profs ne peuvent pas encore déposer toutes les copies.`,
+        acteur: 'clic',
+        bloquant: !essai,
+        ou: { label: 'Ouvrir la matière', href: lienPilotage(m.matiere, undefined) },
+      },
+    ]);
   }
 
   const matieres: TodoMatiere[] = etat.matieres
@@ -533,10 +549,12 @@ export async function chargerTodo(): Promise<TodoPipeline> {
       return {
         matiere: m.matiere,
         label: labelMatiere(m.matiere),
+        examen: m.matiere.startsWith('brevet_') ? ('DNB' as const) : ('BAC' as const),
         moteur: m.moteur_attendu,
         moteur_label: LIBELLE_MOTEUR[m.moteur_attendu],
         a_definir: CE_QUI_SE_DEFINIT[m.moteur_attendu],
         date_epreuve: m.session?.date_epreuve ?? null,
+        session_de_test: estSessionDeTest(m.session?.date_epreuve),
         ouverte: m.visibilite === 'active',
         taches,
         bloquants: taches.filter((t) => t.bloquant).length,
@@ -544,10 +562,17 @@ export async function chargerTodo(): Promise<TodoPipeline> {
     })
     // Les matières qui ont une session passent devant, par date ; puis celles
     // qui ont le plus de bloquants ; les matières finies tombent en bas.
+    // Les VRAIES sessions passent devant, par date. Une session d'essai ne donne
+    // aucune priorité : elle n'aura pas lieu. Ensuite, ce qui bloque le plus.
     .sort((a, b) => {
-      if (a.date_epreuve && b.date_epreuve) return a.date_epreuve.localeCompare(b.date_epreuve);
-      if (a.date_epreuve) return -1;
-      if (b.date_epreuve) return 1;
+      // Le brevet passe après tout le bac : c'est un autre examen, et il est
+      // mis de côté tant qu'on fait marcher le bac.
+      if (a.examen !== b.examen) return a.examen === 'BAC' ? -1 : 1;
+      const va = a.date_epreuve && !a.session_de_test ? a.date_epreuve : null;
+      const vb = b.date_epreuve && !b.session_de_test ? b.date_epreuve : null;
+      if (va && vb) return va.localeCompare(vb);
+      if (va) return -1;
+      if (vb) return 1;
       if (a.bloquants !== b.bloquants) return b.bloquants - a.bloquants;
       return b.taches.length - a.taches.length;
     });

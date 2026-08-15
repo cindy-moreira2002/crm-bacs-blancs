@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Tache, TodoMatiere, TodoPipeline } from '@/lib/pipelineTodo';
+import { LIBELLE_PREMIERE_SESSION } from '@/lib/calendrier';
 
 function joursAvant(dateIso: string): number {
   return Math.ceil((new Date(dateIso + 'T00:00:00').getTime() - Date.now()) / 86_400_000);
@@ -93,12 +94,19 @@ function BlocMatiere({ m, seulementBloquants }: { m: TodoMatiere; seulementBloqu
           <h2 className="font-bold text-gray-900">{m.label}</h2>
           <p className="text-xs text-gray-500 mt-0.5">
             {m.date_epreuve ? (
-              <>
-                Session le {dateLongue(m.date_epreuve)}
-                {jours !== null && jours >= 0 && (
-                  <span className={jours <= 14 ? 'text-red-600 font-semibold' : ''}> · dans {jours} jours</span>
-                )}
-              </>
+              m.session_de_test ? (
+                // Une session d'essai n'a pas d'échéance : afficher « dans 22
+                // jours » en ferait une urgence pour une épreuve qui n'aura
+                // pas lieu.
+                <>Bac blanc d’essai du {dateLongue(m.date_epreuve)} · sert à vérifier que la chaîne marche</>
+              ) : (
+                <>
+                  Session le {dateLongue(m.date_epreuve)}
+                  {jours !== null && jours >= 0 && (
+                    <span className={jours <= 14 ? 'text-red-600 font-semibold' : ''}> · dans {jours} jours</span>
+                  )}
+                </>
+              )
             ) : (
               'Pas de session programmée'
             )}
@@ -286,6 +294,13 @@ export function ListeAFaire() {
           </p>
         </header>
 
+        <p className="text-xs text-gray-700 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          <strong>Les vrais bacs blancs commencent en {LIBELLE_PREMIERE_SESSION}.</strong> Tout ce qui
+          est daté avant est un essai, créé pour faire tourner la chaîne de bout en bout : aucune
+          échéance, aucun élève réel. La seule question à se poser sur ces sessions-là est « est-ce
+          que ça marche ? ».
+        </p>
+
         <div className="grid grid-cols-3 gap-3">
           {[
             { valeur: String(todo.totaux.bloquants), legende: 'choses qui bloquent', ton: 'text-red-700' },
@@ -334,9 +349,26 @@ export function ListeAFaire() {
           </p>
         ) : (
           <div className="space-y-4">
-            {avecTaches.map((m) => (
-              <BlocMatiere key={m.matiere} m={m} seulementBloquants={seulementBloquants} />
-            ))}
+            {avecTaches
+              .filter((m) => m.examen === 'BAC')
+              .map((m) => (
+                <BlocMatiere key={m.matiere} m={m} seulementBloquants={seulementBloquants} />
+              ))}
+
+            {/* Le brevet est un autre examen, mis de côté le temps de faire
+                marcher le bac. On le montre quand même : une tâche qu'on
+                masque ne se fait jamais. */}
+            {avecTaches.some((m) => m.examen === 'DNB') && (
+              <p className="text-xs text-gray-500 pt-2 border-t border-gray-200">
+                Le <strong>brevet</strong> est un autre examen, mis de côté pour l’instant. Ce qui suit
+                n’a aucun effet sur le bac.
+              </p>
+            )}
+            {avecTaches
+              .filter((m) => m.examen === 'DNB')
+              .map((m) => (
+                <BlocMatiere key={m.matiere} m={m} seulementBloquants={seulementBloquants} />
+              ))}
 
             {general.length > 0 && (
               <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
