@@ -317,6 +317,18 @@ function CarteMatiere({
                 : 'Aucun bac blanc n’a encore son barème question par question',
           },
           {
+            // Le point qui manquait : ouverte au dépôt sans barème branché,
+            // les copies sont notées à la grille de compétences sans que rien
+            // ne le dise.
+            ok: m.moteur_note === 'bareme_sujet' || m.moteur_note === 'mixte',
+            texte:
+              m.moteur_note === 'bareme_sujet' || m.moteur_note === 'mixte'
+                ? 'Les copies sont bien notées par le barème du sujet'
+                : m.visibilite === 'draft'
+                  ? 'Barème pas encore branché (la matière est fermée, rien ne part de travers)'
+                  : '⚠️ Ouverte au dépôt SANS barème branché : les copies sont notées par la grille de compétences',
+          },
+          {
             ok: compares > 0,
             texte:
               compares > 0
@@ -383,6 +395,11 @@ function CarteMatiere({
               <Pastille ton="gris">note : grille de compétences</Pastille>
             )}
             {redigeesProvisoires > 0 && <Pastille ton="orange">notes provisoires</Pastille>}
+            {/* Le moteur en service n'est pas celui que la forme de l'épreuve
+                appelle : la copie est notée, mais autrement que décidé. */}
+            {m.moteur_note !== m.moteur_attendu && m.moteur_note !== 'mixte' && (
+              <Pastille ton="rouge">pas le bon moteur</Pastille>
+            )}
           </div>
           {m.session ? (
             <p className="text-xs text-gray-500 mt-1">

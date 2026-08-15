@@ -24,8 +24,8 @@ import type { StructExamen } from './pipelineVerifs';
 // --- Libellés ---------------------------------------------------------
 // Ils vivent dans matieres.ts, sans aucun import : un composant client peut
 // les lire sans embarquer ce module, qui touche la base en service_role.
-import { LABELS_MATIERES, labelExercice } from './matieres';
-export { LABELS_MATIERES, labelExercice };
+import { LABELS_MATIERES, labelExercice, labelMatiere } from './matieres';
+export { LABELS_MATIERES, labelExercice, labelMatiere };
 import { moteurAttendu, type MoteurNote } from './moteurs';
 export { MOTEUR_ATTENDU, CE_QUI_SE_DEFINIT, LIBELLE_MOTEUR, moteurAttendu } from './moteurs';
 export type { MoteurNote } from './moteurs';
@@ -694,7 +694,7 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
 
       return {
         matiere,
-        label: LABELS_MATIERES[matiere] ?? matiere,
+        label: labelMatiere(matiere),
         moteur_attendu: moteurAttendu(matiere),
         session: sessions?.get(matiere) ?? null,
         exercices: exs,

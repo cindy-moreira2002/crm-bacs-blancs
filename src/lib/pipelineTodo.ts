@@ -21,7 +21,7 @@
  */
 import { chargerSante, type AnomalieGlobale } from './pipelineSante';
 import type { CibleDiag } from './pipelineVerifs';
-import { chargerEtatPipeline, LABELS_MATIERES, type MatiereEtat } from './pipelineEtat';
+import { chargerEtatPipeline, labelMatiere, type MatiereEtat } from './pipelineEtat';
 import { CE_QUI_SE_DEFINIT, LIBELLE_MOTEUR, type MoteurNote } from './moteurs';
 
 /** Qui peut rayer la ligne. */
@@ -422,6 +422,59 @@ function tachesRedigees(m: MatiereEtat): Tache[] {
   return taches;
 }
 
+/**
+ * Le moteur RÉELLEMENT utilisé correspond-il à la forme de l'épreuve ?
+ *
+ * C'est le contrôle qui manquait, et il est silencieux par nature : tout a
+ * l'air installé, les sujets sont ouverts, les copies se corrigent — mais avec
+ * l'autre moteur. En maths, une copie déposée aujourd'hui est notée par la
+ * grille de compétences alors que l'épreuve se note question par question. Rien
+ * ne plante, la note est simplement produite autrement que décidé.
+ */
+function tachesMoteur(m: MatiereEtat): Tache[] {
+  // 'mixte' = les deux coexistent pendant une bascule : le bon moteur est là.
+  if (m.moteur_note === m.moteur_attendu || m.moteur_note === 'mixte') return [];
+
+  const ouverte = m.visibilite !== 'draft';
+
+  if (m.moteur_attendu === 'bareme_sujet') {
+    const sansExamen = m.examens.length === 0;
+    return [
+      {
+        id: `${m.matiere}-moteur`,
+        titre: sansExamen
+          ? `Créer le bac blanc de ${m.label} et écrire son barème`
+          : `Ouvrir les corrections du bac blanc de ${m.label}`,
+        pourquoi: ouverte
+          ? `Les copies déposées aujourd'hui sont notées par la grille de compétences, la même pour tous les sujets. Or cette épreuve se note question par question : ce n'est pas la note prévue.`
+          : `Cette épreuve se note question par question, mais aucun barème n'est branché. Tant que ce n'est pas fait, la matière ne peut pas ouvrir.`,
+        comment: sansExamen
+          ? 'Il faut le sujet en main pour écrire le barème, question par question. Deuxième issue possible en attendant : fermer la matière au dépôt.'
+          : 'Le barème existe : il reste à le verrouiller puis à ouvrir les corrections.',
+        acteur: 'humain',
+        bloquant: ouverte,
+        ou: { label: 'Ouvrir les barèmes', href: '/admin/bareme' },
+      },
+    ];
+  }
+
+  if (m.moteur_attendu === 'criteres_rediges') {
+    return [
+      {
+        id: `${m.matiere}-moteur`,
+        titre: `Rebrancher ${m.label} sur sa grille rédigée`,
+        pourquoi:
+          'Cette épreuve doit être notée par sa grille rédigée (note sur 20 convertie en note officielle). Elle ne l’est pas : les copies passent par un autre moteur.',
+        acteur: 'humain',
+        comment: 'C’est un réglage en base — dis-le-moi.',
+        bloquant: ouverte,
+      },
+    ];
+  }
+
+  return [];
+}
+
 /* ------------------------------------------------------------------ */
 
 export async function chargerTodo(): Promise<TodoPipeline> {
@@ -444,7 +497,7 @@ export async function chargerTodo(): Promise<TodoPipeline> {
   });
 
   for (const m of etat.matieres) {
-    const sup = tachesRedigees(m);
+    const sup = [...tachesMoteur(m), ...tachesRedigees(m)];
     if (!sup.length) continue;
     parMatiere.set(m.matiere, [...(parMatiere.get(m.matiere) ?? []), ...sup]);
   }
@@ -479,7 +532,7 @@ export async function chargerTodo(): Promise<TodoPipeline> {
       });
       return {
         matiere: m.matiere,
-        label: LABELS_MATIERES[m.matiere] ?? m.matiere,
+        label: labelMatiere(m.matiere),
         moteur: m.moteur_attendu,
         moteur_label: LIBELLE_MOTEUR[m.moteur_attendu],
         a_definir: CE_QUI_SE_DEFINIT[m.moteur_attendu],

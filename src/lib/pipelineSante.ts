@@ -15,7 +15,7 @@
  * (leçon du dépassement d'egress Supabase).
  */
 import { pipelineDb } from './pipeline';
-import { LABELS_MATIERES, chargerExamens } from './pipelineEtat';
+import { LABELS_MATIERES, labelMatiere, chargerExamens } from './pipelineEtat';
 import {
   echelleExpliquee,
   trierDiagnostics,
@@ -403,7 +403,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
       piste: options.piste,
       cible: options.cible,
       matiere: options.matiere,
-      matiere_label: options.matiere ? LABELS_MATIERES[options.matiere] ?? options.matiere : undefined,
+      matiere_label: options.matiere ? labelMatiere(options.matiere) : undefined,
     });
 
   // Couverture : une table ou un bucket inconnus = la page a un angle mort.
@@ -574,7 +574,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
   // Couche 1 : les barèmes propres aux sujets. C'est la note officielle qui
   // se joue ici — ces anomalies passent donc avant celles de la grille.
   for (const [matiere, examens] of examensParMatiere.entries()) {
-    for (const d of verifierBaremes(LABELS_MATIERES[matiere] ?? matiere, examens)) {
+    for (const d of verifierBaremes(labelMatiere(matiere), examens)) {
       ajouter('bareme', d.niveau, d.texte, { piste: d.piste, matiere, cible: d.cible });
     }
   }

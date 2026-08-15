@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { LABELS_MATIERES } from '@/lib/matieres';
+import { labelMatiere } from '@/lib/matieres';
 import { EditeurBareme } from './EditeurBareme';
 import { ModuleEtalons } from './ModuleEtalons';
 import { TableauCalibrationVue } from './TableauCalibration';
@@ -115,7 +115,7 @@ export function EcranExamen({ examId }: { examId: string }) {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{examen.titre}</h1>
               <p className="text-gray-600 mt-1">
-                {LABELS_MATIERES[examen.matiere] ?? examen.matiere}
+                {labelMatiere(examen.matiere)}
                 {examen.session && ` · session ${examen.session}`}
                 {examen.date_epreuve &&
                   ` · ${new Date(examen.date_epreuve).toLocaleDateString('fr-FR')}`}

@@ -4,6 +4,16 @@ Refonte du 7 août 2026. Ce document remplace, pour les mathématiques et la
 physique-chimie, ce que `ETAT_DES_LIEUX_CORRECTION.md` décrit du calcul de la
 note. Les autres matières continuent de fonctionner exactement comme avant.
 
+> **Ce n'est pas une migration à terminer.** Un barème par bac blanc n'a de sens
+> que là où les points dépendent des questions posées : maths, physique-chimie,
+> brevet. Une épreuve rédigée — français, philosophie, histoire-géo, SES, HLP,
+> SVT — se juge sur une grille écrite UNE FOIS pour l'épreuve : les critères
+> d'un commentaire ne changent pas selon que le texte est de Hugo ou de
+> Colette, donc un nouveau bac blanc n'y demande que son sujet. L'HGGSP a son
+> propre cas, la grille rédigée (voir `GUIDE_HGGSP_V2.md`). La répartition
+> officielle vit dans `src/lib/moteurs.ts` — c'est elle qui fait foi, et le
+> pilotage ne réclame plus de barème là où il n'en faut pas.
+
 ---
 
 ## 1. Le problème, et ce qui change
@@ -288,10 +298,11 @@ référentiel de **cette** discipline.
 ## 7. Ce qui n'a pas changé
 
 - Les grilles génériques sont toutes là, étiquetées `role =
-  'diagnostic_competences'`. Elles continuent de produire la note pour les sept
-  matières non migrées, et servent de **contexte disciplinaire** au nouveau
-  moteur (conventions de transcription, limites de la matière) — avec un
-  avertissement explicite qui leur retire toute autorité sur la note.
+  'diagnostic_competences'`. Elles produisent toujours la note dans les matières
+  dont l'épreuve est rédigée — ce n'est pas un provisoire, c'est le bon moteur
+  pour elles — et servent de **contexte disciplinaire** au barème par sujet
+  (conventions de transcription, limites de la matière), avec un avertissement
+  explicite qui leur retire toute autorité sur la note là où un barème existe.
 - Les 16 corrections déjà en base gardent leur note, marquées
   `moteur = 'grille_generique'`. Leur `score_raw` a été recopié depuis
   `result_json.note_finale`, sans retouche, pour que les écrans puissent

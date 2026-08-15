@@ -17,11 +17,26 @@ export const LABELS_MATIERES: Record<string, string> = {
   svt: 'SVT',
   hggsp: 'HGGSP',
   hlp: 'HLP',
-  // Le brevet : même pipeline, autre examen. Sans ces deux libellés, les pages
-  // d'administration affichent le nom technique de la matière.
+};
+
+/**
+ * Le libellé d'une matière, bac OU brevet.
+ *
+ * `LABELS_MATIERES` ne contient QUE le bac, et c'est voulu : un écran qui liste
+ * les matières du bac ne doit pas pouvoir proposer une matière de brevet (voir
+ * `matieresBrevet.ts`, et les contrôles 2.1/2.2 de
+ * `npm run test:brevet:nonregression`). Les pages d'administration, elles,
+ * traversent les deux examens — d'où cette fonction, qui lit les deux tables
+ * sans les mélanger.
+ */
+const LABELS_BREVET: Record<string, string> = {
   brevet_francais: 'Brevet — Français',
   brevet_mathematiques: 'Brevet — Mathématiques',
 };
+
+export function labelMatiere(matiere: string): string {
+  return LABELS_MATIERES[matiere] ?? LABELS_BREVET[matiere] ?? matiere;
+}
 
 const LABELS_EXERCICES: Record<string, string> = {
   commentaire: 'Commentaire',

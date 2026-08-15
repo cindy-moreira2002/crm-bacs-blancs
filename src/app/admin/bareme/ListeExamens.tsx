@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { LABELS_MATIERES } from '@/lib/matieres';
+import { LABELS_MATIERES, labelMatiere } from '@/lib/matieres';
 
 type Version = {
   id: string;
@@ -225,7 +225,7 @@ function Carte({ examen }: { examen: Examen }) {
         <div>
           <h2 className="text-lg font-bold text-gray-900">{examen.titre}</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            {LABELS_MATIERES[examen.matiere] ?? examen.matiere}
+            {labelMatiere(examen.matiere)}
             {examen.date_epreuve && ` · ${new Date(examen.date_epreuve).toLocaleDateString('fr-FR')}`}
             {' · '}
             <code className="text-xs">{examen.code}</code>
