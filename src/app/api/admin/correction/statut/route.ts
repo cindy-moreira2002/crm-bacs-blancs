@@ -16,6 +16,16 @@ import { pipelineDb, pipelineManquant } from '@/lib/pipeline';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Les seuls statuts qu'un interrupteur a le droit de changer.
+ *
+ * Une ligne `archived` est une VERSION PRÉCÉDENTE, remplacée exprès : la v1
+ * d'HGGSP, par exemple, note avec l'ancien moteur. La réactiver en masse
+ * donnerait deux grilles actives sur la même épreuve, et une copie serait
+ * corrigée avec l'une ou l'autre selon l'ordre de lecture.
+ */
+const ACTIVABLES = ['active', 'draft'];
+
 type Corps = {
   cible?: 'matiere' | 'exercice' | 'sujet';
   statut?: 'active' | 'draft';
@@ -53,6 +63,7 @@ export async function POST(req: NextRequest) {
         .from('subject_cards')
         .update({ status: statut })
         .eq('id', corps.sujet_id)
+        .in('status', ACTIVABLES)
         .select('id');
       if (error) throw error;
       modifie.sujets = data?.length ?? 0;
@@ -67,6 +78,7 @@ export async function POST(req: NextRequest) {
           .eq('matiere', matiere)
           .eq('track', corps.track)
           .eq('exercise_type', corps.exercise_type)
+          .in('status', ACTIVABLES)
           .select('id');
         if (error) throw error;
         modifie[table] = data?.length ?? 0;
@@ -80,6 +92,7 @@ export async function POST(req: NextRequest) {
           .from(table)
           .update({ status: statut })
           .eq('matiere', matiere)
+          .in('status', ACTIVABLES)
           .select('id');
         if (error) throw error;
         modifie[table] = data?.length ?? 0;

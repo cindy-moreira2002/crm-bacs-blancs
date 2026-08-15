@@ -17,6 +17,10 @@ export const LABELS_MATIERES: Record<string, string> = {
   svt: 'SVT',
   hggsp: 'HGGSP',
   hlp: 'HLP',
+  // Le brevet : même pipeline, autre examen. Sans ces deux libellés, les pages
+  // d'administration affichent le nom technique de la matière.
+  brevet_francais: 'Brevet — Français',
+  brevet_mathematiques: 'Brevet — Mathématiques',
 };
 
 const LABELS_EXERCICES: Record<string, string> = {

@@ -790,6 +790,14 @@ export function TableauDeBordCorrection() {
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-500">
+            {/* Cette page dit ce qui ne va pas dans les mots de la base. Quand
+                on cherche quoi FAIRE, c'est l'autre page qu'il faut. */}
+            <Link
+              href="/admin/a-faire"
+              className="font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-full px-3 py-1.5 whitespace-nowrap"
+            >
+              ✅ Qu’est-ce que je dois faire ?
+            </Link>
             <span>à jour il y a {depuis} s</span>
             <button
               type="button"

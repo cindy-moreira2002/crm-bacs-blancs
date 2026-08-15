@@ -20,6 +20,7 @@ import { usePathname } from 'next/navigation';
  */
 export const OUTILS_DIRECTION = [
   { href: '/espace-prof?vue=direction', racine: '/espace-prof', emoji: '🧭', label: 'Vue d’ensemble' },
+  { href: '/admin/a-faire', racine: '/admin/a-faire', emoji: '✅', label: 'À faire' },
   { href: '/admin/bacs-blancs', racine: '/admin/bacs-blancs', emoji: '📅', label: 'Bacs blancs & sujets' },
   { href: '/admin/correction', racine: '/admin/correction', emoji: '🎛️', label: 'Correction' },
   { href: '/admin/paiements', racine: '/admin/paiements', emoji: '💶', label: 'Paiements' },

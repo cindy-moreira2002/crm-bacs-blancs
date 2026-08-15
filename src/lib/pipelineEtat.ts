@@ -240,11 +240,23 @@ export async function chargerExamens(): Promise<Map<string, ExamenEtat[]>> {
     controles: { blocages?: unknown[] } | null;
   };
 
-  const [versionsRes, etalonsRes, corrRes] = await Promise.all([
+  const [versionsRes, etalonsRes, corrRes, exosRes] = await Promise.all([
     db.from('bareme_versions').select('id, exam_id, version, statut, total_points, max_score, cree_le, controles').order('cree_le'),
     db.from('etalon_copies').select('id, exam_id'),
     db.from('corrections').select('id, exam_id, bareme_version_id').eq('moteur', 'bareme_sujet').eq('est_etalon', false),
+    db.from('exam_exercices').select('exam_id'),
   ]);
+
+  // Un bac blanc découpé en exercices est noté par des GRILLES RÉDIGÉES, pas
+  // par une version de barème. Le laisser ici lui reprocherait éternellement de
+  // ne pas avoir de barème — alors qu'il n'en aura jamais : il a des grilles.
+  const parExercices = new Map<string, number>();
+  for (const x of (exosRes.data ?? []) as { exam_id: string }[]) {
+    parExercices.set(x.exam_id, (parExercices.get(x.exam_id) ?? 0) + 1);
+  }
+  const notesParGrilleRedigee = new Set(
+    [...parExercices.entries()].filter(([, n]) => n >= 2).map(([id]) => id),
+  );
 
   const versions = (versionsRes.data ?? []) as Version[];
   const etalons = (etalonsRes.data ?? []) as { id: string; exam_id: string }[];
@@ -262,6 +274,7 @@ export async function chargerExamens(): Promise<Map<string, ExamenEtat[]>> {
   const ias = (iasRes.data ?? []) as { etalon_copie_id: string; bareme_version_id: string; note_brute: number | null }[];
 
   for (const e of exams as Exam[]) {
+    if (notesParGrilleRedigee.has(e.id)) continue;
     const siennes = versions.filter((v) => v.exam_id === e.id);
     // La version active, sinon la plus récente : un examen en préparation n'a
     // pas encore d'active, et il faut quand même voir où en est son barème.

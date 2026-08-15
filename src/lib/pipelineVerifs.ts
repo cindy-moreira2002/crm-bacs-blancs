@@ -72,8 +72,15 @@ export function verifierStructureMatiere(s: StructMatiere): Diagnostic[] {
 
   const grilleActivePour = (x: { track: string; exercise_type: string }) =>
     s.grilles.find((g) => g.track === x.track && g.exercise_type === x.exercise_type && g.status === 'active');
-  const gabaritElevePour = (x: { track: string; exercise_type: string }) =>
-    s.gabarits.find((g) => g.audience === 'eleve' && g.track === x.track && g.exercise_type === x.exercise_type);
+  // Une épreuve peut avoir plusieurs gabarits élève : la v1 archivée ET la v2
+  // active. On cherche donc l'ACTIF d'abord — sinon la v1, rangée en premier,
+  // ferait croire que le dossier élève est en brouillon alors qu'il est prêt.
+  const gabaritElevePour = (x: { track: string; exercise_type: string }) => {
+    const siens = s.gabarits.filter(
+      (g) => g.audience === 'eleve' && g.track === x.track && g.exercise_type === x.exercise_type,
+    );
+    return siens.find((g) => g.status === 'active') ?? siens[0];
+  };
 
   for (const su of s.sujets) {
     if (su.status === 'active' && !grilleActivePour(su)) {
