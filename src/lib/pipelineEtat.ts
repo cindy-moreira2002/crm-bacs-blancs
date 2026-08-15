@@ -592,7 +592,7 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
   for (const s of sujets) {
     exercice(s.matiere, s.track, s.exercise_type).sujets.push({
       id: s.id,
-      libelle: libelleSujet(s.card_json, s.id),
+      libelle: libelleSujet(s.card_json, s.id, s.track),
       status: s.status,
     });
   }

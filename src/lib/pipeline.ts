@@ -8,6 +8,8 @@
  * C'est un projet Supabase DIFFÉRENT de celui du CRM (inscriptions/copies).
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+// matieres.ts n'importe rien : le lire ici ne tire aucun code serveur.
+import { estVoieTechnologique } from './matieres';
 
 export const BUCKET_COPIES = 'student-copies';
 
@@ -111,11 +113,21 @@ export function baremeGrille(rubricJson: unknown): number {
 }
 
 /** Libellé lisible d'un sujet à partir de sa fiche. */
-export function libelleSujet(card: Record<string, unknown> | null, id: string): string {
+export function libelleSujet(
+  card: Record<string, unknown> | null,
+  id: string,
+  track?: string | null,
+): string {
   if (!card) return id;
   const exercise = typeof card.exercise === 'string' ? card.exercise : '';
   const author = typeof card.author === 'string' ? card.author : '';
   const work = typeof card.work === 'string' ? card.work : '';
   const morceaux = [exercise, [author, work].filter(Boolean).join(' — ')].filter(Boolean);
-  return morceaux.length ? morceaux.join(' · ') : id;
+  const base = morceaux.length ? morceaux.join(' · ') : id;
+  // La VOIE, toujours. « Essai » n'existe qu'en voie technologique, « dissertation »
+  // qu'en voie générale : un titre qui ne le dit pas fait chercher en vain une
+  // épreuve dans l'autre voie. Certains titres la portent déjà à la main — on ne
+  // la répète pas dans ce cas.
+  return estVoieTechnologique(track) && !/techno/i.test(base) ? `${base} · voie techno` : base;
 }
+

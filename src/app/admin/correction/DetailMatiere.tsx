@@ -19,6 +19,8 @@ import type {
 } from '@/lib/pipelineDetail';
 import type { ExamenEtat } from '@/lib/pipelineEtat';
 import { compositionDe, expliquerEchelle } from '@/lib/epreuves';
+import { moteurAttendu } from '@/lib/moteurs';
+import { estVoieTechnologique, libelleVoie } from '@/lib/matieres';
 
 function dateCourte(iso: string) {
   return new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -168,6 +170,10 @@ function BlocBaremes({ baremes }: { baremes: ExamenEtat[] }) {
 // --- Barèmes ----------------------------------------------------------
 
 function CarteGrille({ g, matiere }: { g: GrilleDetail; matiere: string }) {
+  // Dans une matière notée à la grille commune, CETTE grille est la note.
+  // Ailleurs (barème du sujet, grille rédigée), elle n'est qu'un diagnostic —
+  // et écrire des points sans le dire rend l'écran incohérent.
+  const donneLaNote = moteurAttendu(matiere) === 'grille_generique';
   const explication = expliquerEchelle(matiere, g.exercise_type);
   const composition = compositionDe(matiere, g.exercise_type);
   const somme = g.criteres.length
@@ -178,7 +184,19 @@ function CarteGrille({ g, matiere }: { g: GrilleDetail; matiere: string }) {
     <div className="border border-gray-200 rounded-xl p-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="font-semibold text-gray-800 text-sm">
-          {g.label}
+          {g.label.replace(' · techno', '')}
+          {/* La voie d'abord : « Essai » n'existe qu'en technologique,
+              « dissertation » qu'en générale. Confondre les deux fait chercher
+              une épreuve dans la mauvaise voie. */}
+          <span
+            className={`ml-2 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+              estVoieTechnologique(g.track)
+                ? 'bg-teal-100 text-teal-800'
+                : 'bg-indigo-100 text-indigo-800'
+            }`}
+          >
+            {libelleVoie(g.track)}
+          </span>
           <span className="ml-2 text-xs font-normal text-gray-400">
             {g.id} · v{String(g.version ?? '?')}
           </span>
@@ -214,9 +232,27 @@ function CarteGrille({ g, matiere }: { g: GrilleDetail; matiere: string }) {
       {/* D'où viennent les points, sans avoir à ouvrir quoi que ce soit : c'est
           la première chose qu'on cherche en relisant une note. */}
       <div className="mt-3 space-y-1">
-        <p className="text-[11px] text-gray-500">
-          La note est la somme de ces {g.criteres.length} critères. Clique un critère pour voir à
-          quoi correspond chaque palier.
+        <p className={`text-xs rounded-lg px-3 py-2 ${
+          donneLaNote
+            ? 'text-emerald-900 bg-emerald-50 border border-emerald-200'
+            : 'text-gray-600 bg-gray-50 border border-gray-200'
+        }`}>
+          {donneLaNote ? (
+            <>
+              <strong>C’est cette grille qui donne la note.</strong> La note de l’élève est la somme
+              de ces {g.criteres.length} critères — rien d’autre n’intervient. Chaque palier vaut
+              donc de vrais points.
+            </>
+          ) : (
+            <>
+              <strong>Cette grille ne donne PAS la note</strong> dans cette matière : elle sert au
+              diagnostic pédagogique. La note vient d’ailleurs (barème du sujet ou grille rédigée).
+              Les points ci-dessous décrivent le niveau, ils ne s’ajoutent pas à la note.
+            </>
+          )}
+        </p>
+        <p className="text-[11px] text-gray-500 pt-1">
+          Clique un critère pour voir à quoi correspond chaque palier.
         </p>
         {g.criteres.map((c) => (
           <details key={c.code} className="group">
@@ -496,8 +532,16 @@ export function DetailMatiereVue({
       </Section>
 
       <Section
-        titre={`Grilles de compétences — le diagnostic (${detail.grilles.length})`}
-        sousTitre="Elles produisent le profil pédagogique de l’élève. Pour les matières sans barème propre, elles produisent encore la note. Cliquer un critère déplie ses paliers."
+        titre={
+          moteurAttendu(detail.matiere) === 'grille_generique'
+            ? `Grilles de notation — c’est ici que se joue la note (${detail.grilles.length})`
+            : `Grilles de compétences — le diagnostic (${detail.grilles.length})`
+        }
+        sousTitre={
+          moteurAttendu(detail.matiere) === 'grille_generique'
+            ? 'Une grille par épreuve ET par voie. La note de l’élève est la somme des critères de sa grille : chaque palier vaut de vrais points. Cliquer un critère déplie ses paliers.'
+            : 'Ici la note vient d’ailleurs (barème du sujet ou grille rédigée) : ces grilles ne servent qu’au profil pédagogique de l’élève. Leurs points décrivent un niveau, ils ne s’ajoutent pas à la note.'
+        }
       >
         <div className="space-y-3">
           {detail.grilles.map((g) => (

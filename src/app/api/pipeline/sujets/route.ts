@@ -99,7 +99,7 @@ export async function GET() {
         track: s.track,
         exercise_type: s.exercise_type,
         matiere: s.matiere,
-        libelle: libelleSujet(s.card_json, s.id),
+        libelle: libelleSujet(s.card_json, s.id, s.track),
         rubric_id: grillePour(s),
       }))
       .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'));

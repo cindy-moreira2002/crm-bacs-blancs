@@ -71,3 +71,17 @@ const LABELS_EXERCICES: Record<string, string> = {
 export function labelExercice(type: string): string {
   return LABELS_EXERCICES[type] ?? type.replace(/_/g, ' ');
 }
+
+/**
+ * La VOIE d'une épreuve. Elle change ce qui existe : « essai » et
+ * « contraction » n'existent qu'en voie technologique, « dissertation » qu'en
+ * voie générale. Un écran qui ne le dit pas fait chercher une épreuve dans la
+ * mauvaise voie.
+ */
+export function estVoieTechnologique(track?: string | null): boolean {
+  return (track ?? '').toLowerCase().startsWith('techno');
+}
+
+export function libelleVoie(track?: string | null): string {
+  return estVoieTechnologique(track) ? 'voie technologique' : 'voie générale';
+}

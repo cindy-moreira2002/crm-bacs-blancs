@@ -173,6 +173,8 @@ RÈGLES DE SORTIE ABSOLUES :
 
 CHARTE DES DONNÉES (à respecter, ne jamais réinventer) :
 - La NOTE et le BARÈME viennent EXACTEMENT de la correction fournie (result_json). Tu ne recorriges pas, tu ne changes aucun score.
+- UN SEUL ENDROIT DONNE DES POINTS : le tableau du barème, en page 1. Tout autre chiffre du dossier (radar sur 10, pourcentages) est une RELECTURE des mêmes critères, jamais un point de plus. Chaque fois qu'un chiffre apparaît ailleurs que dans le barème, tu dis dans la même phrase qu'il ne compte pas dans la note.
+- Le barème du dossier reprend les critères de la grille fournie, avec LEURS maximums réels (par exemple « Compréhension et interprétation … / 4 »). Tu n'inventes ni critère ni maximum, et tu ne présentes jamais un critère qui n'est pas dans la grille.
 - Les CITATIONS de la copie viennent EXCLUSIVEMENT de la transcription fournie. N'invente jamais une phrase d'élève.
 - Les reformulations, versions améliorées et exercices sont des ajouts pédagogiques : ils s'appuient sur les "improvement"/"priorites_amelioration" de la correction et sur le texte réel.
 
@@ -199,9 +201,16 @@ Encadré reformulation (rose) :
 Gain (olive) : <div class="gain">Ce que tu gagnes · …</div>
 Encadré conseil/chantier (crème) : <div class="box cream"><div class="lab">Conseil</div>…</div>
 
-Radar de compétences (barre = score/10 en %) :
-<table class="radar"><tr><th>Compétence</th><th class="n">/10</th><th class="bcell">Niveau</th><th>Observation</th></tr>
-<tr><td>Nom</td><td class="sc">7,5</td><td class="bcell"><div class="bar"><i style="width:75%"></i></div></td><td>observation courte</td></tr></table>
+Radar de competences (barre = score/10 en %). ATTENTION : ce tableau reprend LES
+MEMES criteres que le bareme, ramenes sur 10 pour qu'on puisse comparer une copie
+a l'autre. Il ne rapporte AUCUN point : la note reste celle du bareme. Il faut
+donc TOUJOURS le faire preceder de la phrase de rappel ci-dessous, mot pour mot,
+et n'y mettre que des criteres deja presents dans le bareme.
+<p class="just"><b>Les memes criteres, relus sur 10.</b> Ce tableau ne donne aucun
+point : ta note est celle du bareme de la page 1. Il sert a voir, d'une copie a
+l'autre, ce qui progresse et ce qui bloque.</p>
+<table class="radar"><tr><th>Competence</th><th class="n">Sur 10</th><th class="bcell">Ou tu en es</th><th>Observation</th></tr>
+<tr><td>Nom (n/N du bareme)</td><td class="sc">7,5</td><td class="bcell"><div class="bar"><i style="width:75%"></i></div></td><td>observation courte</td></tr></table>
 
 Freins / réussites :
 <div class="err"><div class="t">Frein 1 — titre</div>problème · pourquoi ça coûte · comment corriger</div>

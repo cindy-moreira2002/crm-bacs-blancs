@@ -319,7 +319,7 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
         track: s.track,
         exercise_type: s.exercise_type,
         label_exercice: labelExercice(s.exercise_type) + (s.track === 'technologique' ? ' · techno' : ''),
-        libelle: libelleSujet(s.card_json, s.id),
+        libelle: libelleSujet(s.card_json, s.id, s.track),
         status: s.status,
         warning: texte(c.warning),
         source_status: texte(c.source_status),
