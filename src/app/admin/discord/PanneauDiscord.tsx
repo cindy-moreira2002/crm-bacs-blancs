@@ -50,11 +50,13 @@ export function PanneauDiscord({
   guildId,
   clientId,
   urlInvitation,
+  permissionsAttendues,
 }: {
   manquants: string[];
   guildId: string;
   clientId: string;
   urlInvitation: string | null;
+  permissionsAttendues: string;
 }) {
   const [rapport, setRapport] = useState<Rapport | null>(null);
   const [occupe, setOccupe] = useState<'rapide' | 'complet' | null>(null);
@@ -159,18 +161,21 @@ export function PanneauDiscord({
         )}
 
         {/* ---------- Liens utiles ---------- */}
-        <LiensUtiles guildId={guildId} clientId={clientId} urlInvitation={urlInvitation} />
+        <LiensUtiles
+          guildId={guildId}
+          clientId={clientId}
+          urlInvitation={urlInvitation}
+          permissionsAttendues={permissionsAttendues}
+        />
 
-        {/* ---------- Ce qui arrive ensuite ---------- */}
+        {/* ---------- Où préparer, maintenant que c'est en place ---------- */}
         <section className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
           <h2 className="font-bold text-gray-900 mb-3">Préparer un bac blanc</h2>
           <p className="text-sm text-gray-600">
-            Une fois la configuration au vert, cette page accueillera la préparation des
-            salles : choisir un bac blanc, attribuer les élèves aux professeurs, créer les
-            salons, envoyer les accès, puis verrouiller et supprimer.
-          </p>
-          <p className="text-xs text-gray-500 mt-3">
-            En construction — la configuration technique se valide d’abord.
+            Cela se fait <strong>en haut de cette page</strong>, dans « Les salles des bacs
+            blancs » : un bloc par bac blanc, avec « Préparer les salles », « Fermer les
+            salles » et « Supprimer ». Les réglages ci-dessus ne servent qu’à ce que ces
+            boutons aboutissent.
           </p>
         </section>
       </div>
@@ -265,10 +270,14 @@ function LiensUtiles({
   guildId,
   clientId,
   urlInvitation,
+  permissionsAttendues,
 }: {
   guildId: string;
   clientId: string;
   urlInvitation: string | null;
+  /* Calculé sur le serveur et transmis en texte : lib/discord/config n'est
+     jamais importé côté navigateur, il lit le token du bot. */
+  permissionsAttendues: string;
 }) {
   const liens: { titre: string; sous: string; href: string; externe: boolean }[] = [
     ...(guildId
@@ -289,8 +298,11 @@ function LiensUtiles({
       : []),
     ...(urlInvitation
       ? [{
+          // Le sous-titre porte le nombre exact : c'est ce qu'on lit en bas de
+          // l'écran Discord pour vérifier qu'aucune case n'a bougé, et c'est ce
+          // qui distingue cette carte des autres liens de la grille.
           titre: '🤖 Réinviter le bot',
-          sous: 'Avec les six bonnes permissions',
+          sous: `Les 7 permissions à jour — ${permissionsAttendues}`,
           href: urlInvitation,
           externe: true,
         }]

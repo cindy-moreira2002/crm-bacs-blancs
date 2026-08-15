@@ -2,7 +2,13 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { NavDirection } from '@/components/direction/NavDirection';
 import { gardeAdminPage } from '@/lib/gardeAcces';
-import { CLIENT_ID, GUILD_ID, discordManquant, urlInvitationBot } from '@/lib/discord/config';
+import {
+  CLIENT_ID,
+  GUILD_ID,
+  PERMISSIONS_ATTENDUES,
+  discordManquant,
+  urlInvitationBot,
+} from '@/lib/discord/config';
 import { PanneauDiscord } from './PanneauDiscord';
 import { SallesBacsBlancs } from './SallesBacsBlancs';
 
@@ -66,6 +72,7 @@ export default async function PageDiscord() {
         guildId={GUILD_ID}
         clientId={CLIENT_ID}
         urlInvitation={urlInvitationBot()}
+        permissionsAttendues={PERMISSIONS_ATTENDUES.toString()}
       />
     </div>
   );
