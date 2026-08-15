@@ -22,6 +22,8 @@ export type LignePaiement = {
   email: string | null;
   matiere: string | null;
   date_epreuve: string | null;
+  /** Le bac blanc concerné, quand l'inscription y est rattachée. */
+  session_id: string | null;
   inscrit_le: string;
   jours_depuis: number;
   montant: number | null;
@@ -79,7 +81,7 @@ export async function chargerPaiements(): Promise<EtatPaiements> {
   const { data, error } = await db
     .from('inscriptions')
     .select(
-      'id, nom, email, matiere, date_epreuve, created_at, paiement_statut, paiement_montant, annulee_le',
+      'id, nom, email, matiere, date_epreuve, session_id, created_at, paiement_statut, paiement_montant, annulee_le',
     )
     .order('created_at', { ascending: false });
 
@@ -89,6 +91,7 @@ export async function chargerPaiements(): Promise<EtatPaiements> {
     email: string | null;
     matiere: string | null;
     date_epreuve: string | null;
+    session_id: string | null;
     created_at: string;
     paiement_statut: string | null;
     paiement_montant: number | null;
@@ -141,6 +144,7 @@ export async function chargerPaiements(): Promise<EtatPaiements> {
       email: l.email,
       matiere: l.matiere,
       date_epreuve: l.date_epreuve,
+      session_id: l.session_id,
       inscrit_le: l.created_at,
       jours_depuis: jours(l.created_at),
       montant: l.paiement_montant,

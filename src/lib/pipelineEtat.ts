@@ -31,7 +31,7 @@ export { MOTEUR_ATTENDU, CE_QUI_SE_DEFINIT, LIBELLE_MOTEUR, moteurAttendu } from
 export type { MoteurNote } from './moteurs';
 
 /** « Mathématiques », « maths », « Histoire-Géographie »… → slug pipeline. */
-function slugMatiere(brut: string): string {
+export function slugMatiere(brut: string): string {
   const s = brut
     .toLowerCase()
     .normalize('NFD')

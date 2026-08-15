@@ -69,6 +69,15 @@ export type TodoMatiere = {
   ouverte: boolean;
   taches: Tache[];
   bloquants: number;
+  /**
+   * De quoi dire, en Direction, si la chaîne a DÉJÀ tourné dans cette matière.
+   * `corrections_reussies` à 0 = jamais testée de bout en bout ; des étalons
+   * sans `etalons_valides` = aucun prof n'a encore relu ce que la machine note.
+   */
+  corrections_reussies: number;
+  etalons: number;
+  etalons_valides: number;
+  visibilite: 'active' | 'partielle' | 'draft';
 };
 
 export type TodoPipeline = {
@@ -558,6 +567,10 @@ export async function chargerTodo(): Promise<TodoPipeline> {
         ouverte: m.visibilite === 'active',
         taches,
         bloquants: taches.filter((t) => t.bloquant).length,
+        corrections_reussies: m.totaux.corrections_reussies,
+        etalons: m.totaux.etalons,
+        etalons_valides: m.totaux.etalons_valides,
+        visibilite: m.visibilite,
       };
     })
     // Les matières qui ont une session passent devant, par date ; puis celles

@@ -1,26 +1,41 @@
 'use client';
 
 /**
- * Vue d'ensemble Direction — un écran pour tout suivre.
+ * Vue Direction — un tableau de pilotage, pas un mode d'emploi.
  *
- * Ce n'est pas une page de plus : c'est le point de départ. Elle répond dans
- * l'ordre à quatre questions, et rien d'autre :
- *   1. Qu'est-ce que je dois faire maintenant ?         (« À faire »)
- *   2. Quels bacs blancs arrivent, et sont-ils prêts ?  (tableau des épreuves)
- *   3. Où en est la machine ?                           (correction, e-mails, Discord)
- *   4. Qui a accès à quoi ?                             (profs)
+ * Elle ne remplace aucun onglet : E-mails, Paiements, Discord, Correction,
+ * Bacs blancs et Profs restent les endroits où l'on COMPREND. Ici, on décide.
+ * Trois questions, dans cet ordre :
  *
- * Chaque outil est décrit en une phrase en français : personne ne doit deviner
- * à quoi sert « E-mails » ou « Pilotage correction ».
+ *   1. Qu'est-ce qui bloque aujourd'hui ?        → « À faire maintenant »
+ *   2. Quels bacs blancs sont prêts ?            → « Vrais bacs blancs »
+ *   3. Qu'est-ce qu'il reste à tester ?          → « Sessions de test »
+ *
+ * Règle de tri de l'information, appliquée partout dans ce fichier :
+ *   • ça explique le fonctionnement  → bloc « Comprendre », replié par défaut ;
+ *   • ça aide à décider maintenant   → visible, en libellé court ;
+ *   • ça rassure sans rien déclencher → réduit à un chiffre, ou masqué.
+ *
+ * Et la séparation essais / vraies sessions n'est pas cosmétique : un essai
+ * daté avant novembre 2026 n'aura pas lieu. Le mélanger aux vraies échéances
+ * ferait passer pour urgent un bac blanc qui n'existe pas.
  */
 import { useState } from 'react';
 import Link from 'next/link';
-import type { ResumeDirection, Tache } from '@/lib/direction';
+import type { CaseEtat, LigneBac, ResumeDirection, Tache } from '@/lib/direction';
 
 const TONS: Record<Tache['urgence'], { fond: string; texte: string; puce: string }> = {
   rouge: { fond: 'bg-red-50 border-red-200', texte: 'text-red-900', puce: '🔴' },
   orange: { fond: 'bg-amber-50 border-amber-200', texte: 'text-amber-900', puce: '🟠' },
   info: { fond: 'bg-slate-50 border-slate-200', texte: 'text-slate-700', puce: '⚪️' },
+};
+
+/** Les quatre couleurs d'une case de la grille. Une seule échelle, partout. */
+const COULEUR_CASE: Record<CaseEtat['etat'], string> = {
+  ok: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  attention: 'bg-amber-50 text-amber-900 border-amber-200',
+  bloque: 'bg-red-50 text-red-800 border-red-200',
+  neutre: 'bg-slate-50 text-slate-500 border-slate-200',
 };
 
 function dateCourte(iso: string) {
@@ -32,7 +47,7 @@ function dateCourte(iso: string) {
   };
 }
 
-/** « lun 15 août, 10 h 50 » — l'heure d'un envoi, en français lisible. */
+/** « lun 15 août · 10 h 50 » — l'heure d'un envoi, en français lisible. */
 function instantCourt(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -47,6 +62,10 @@ function compteARebours(jours: number) {
   if (jours === 1) return 'demain';
   return `dans ${jours} j`;
 }
+
+const euros = (n: number) => `${n.toLocaleString('fr-FR')} €`;
+
+// --- Briques ----------------------------------------------------------
 
 /** Un grand chiffre avec son libellé. Le vocabulaire du tableau de bord. */
 function Chiffre({
@@ -65,47 +84,78 @@ function Chiffre({
   return (
     <div>
       <p className={`text-2xl font-bold tabular-nums leading-none ${couleur}`}>{valeur}</p>
-      <p className="text-xs text-slate-500 mt-1.5">{label}</p>
-      {sous && <p className="text-[11px] text-slate-400 mt-0.5">{sous}</p>}
+      <p className="text-xs text-slate-500 mt-1.5 leading-snug">{label}</p>
+      {sous && <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{sous}</p>}
     </div>
   );
 }
 
-/** Carte d'un outil : ce qu'il fait, ses chiffres, le bouton pour l'ouvrir. */
-function CarteOutil({
+/** Une case de la grille : un état, un mot, une couleur. */
+function Pastille({ c }: { c: CaseEtat }) {
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 rounded-md border text-[11px] font-semibold whitespace-nowrap ${COULEUR_CASE[c.etat]}`}
+    >
+      {c.libelle}
+    </span>
+  );
+}
+
+/**
+ * Le bloc « comprendre » : tout ce qui explique le fonctionnement vit ici,
+ * replié. C'est le seul endroit de cette page où l'on a le droit d'être long.
+ */
+function Comprendre({ titre, children }: { titre: string; children: React.ReactNode }) {
+  return (
+    <details className="group">
+      <summary className="cursor-pointer list-none text-[11px] font-semibold text-slate-400 hover:text-slate-700 select-none">
+        <span className="group-open:hidden">▸ {titre}</span>
+        <span className="hidden group-open:inline">▾ {titre}</span>
+      </summary>
+      <div className="mt-2 text-[11px] text-slate-500 leading-relaxed space-y-2">{children}</div>
+    </details>
+  );
+}
+
+/**
+ * Une carte de « Santé des opérations » : deux ou trois chiffres, un bouton.
+ * Jamais de paragraphe — ce qui doit être expliqué l'est dans l'onglet.
+ */
+function CarteSante({
   emoji,
   titre,
-  aQuoiCaSert,
   href,
-  libelleLien,
   indisponible,
+  alerte,
   children,
 }: {
   emoji: string;
   titre: string;
-  aQuoiCaSert: string;
   href: string;
-  libelleLien: string;
   indisponible?: { raison: string; manquants: string[] };
+  /** Une ligne d'alerte courte, quand quelque chose cloche vraiment. */
+  alerte?: string;
   children?: React.ReactNode;
 }) {
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col">
-      <div className="flex items-start gap-3 mb-3">
-        <span aria-hidden className="text-2xl leading-none">{emoji}</span>
-        <div className="min-w-0">
-          <h3 className="font-bold text-slate-900">{titre}</h3>
-          <p className="text-xs text-slate-500 leading-relaxed mt-0.5">{aQuoiCaSert}</p>
-        </div>
+    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h3 className="font-bold text-slate-900 text-sm">
+          <span aria-hidden className="mr-1.5">{emoji}</span>
+          {titre}
+        </h3>
+        <Link href={href} className="text-xs font-semibold text-slate-500 hover:text-slate-900 whitespace-nowrap">
+          ouvrir →
+        </Link>
       </div>
 
       <div className="flex-1">
         {indisponible ? (
-          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-900">
             <p className="font-semibold">Pas encore branché</p>
             <p className="mt-0.5">{indisponible.raison}</p>
             {indisponible.manquants.length > 0 && (
-              <p className="mt-1 font-mono text-[11px]">{indisponible.manquants.join(' · ')}</p>
+              <p className="mt-1 font-mono">{indisponible.manquants.join(' · ')}</p>
             )}
           </div>
         ) : (
@@ -113,19 +163,108 @@ function CarteOutil({
         )}
       </div>
 
-      <Link
-        href={href}
-        className="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700"
-      >
-        {libelleLien} →
-      </Link>
+      {!indisponible && alerte && (
+        <p className="mt-3 rounded-lg bg-red-50 border border-red-200 px-2.5 py-1.5 text-[11px] font-semibold text-red-800">
+          {alerte}
+        </p>
+      )}
     </section>
   );
 }
 
+/**
+ * La grille de préparation. Une ligne par bac blanc, une colonne par pièce à
+ * poser. On lit de gauche à droite jusqu'à la première case rouge : c'est là
+ * qu'est le travail, et le bouton de droite y mène.
+ */
+function GrilleBacs({
+  lignes,
+  vide,
+}: {
+  lignes: LigneBac[];
+  vide: string;
+}) {
+  if (!lignes.length) {
+    return (
+      <p className="px-5 pb-5 text-sm text-slate-400 border border-dashed border-slate-200 rounded-xl mx-5 mb-5 p-5 text-center">
+        {vide}
+      </p>
+    );
+  }
+
+  const COLONNES: { cle: keyof LigneBac; titre: string }[] = [
+    { cle: 'sujet', titre: 'Sujet' },
+    { cle: 'prof', titre: 'Prof' },
+    { cle: 'discord', titre: 'Discord' },
+    { cle: 'emails', titre: 'E-mails' },
+    { cle: 'paiement', titre: 'Paiement' },
+    { cle: 'correction', titre: 'Correction' },
+  ];
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[1000px]">
+        <thead className="bg-slate-50 text-slate-500">
+          <tr>
+            <th className="text-left px-4 py-2.5 font-medium">Date</th>
+            <th className="text-left px-4 py-2.5 font-medium">Matière</th>
+            <th className="text-left px-3 py-2.5 font-medium">Élèves</th>
+            {COLONNES.map((c) => (
+              <th key={c.titre} className="text-left px-3 py-2.5 font-medium">
+                {c.titre}
+              </th>
+            ))}
+            <th className="text-left px-3 py-2.5 font-medium">Statut</th>
+            <th className="px-4 py-2.5"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {lignes.map((l) => {
+            const d = dateCourte(l.date_epreuve);
+            return (
+              <tr key={l.id} className="border-t border-slate-100 hover:bg-slate-50 align-middle">
+                <td className="px-4 py-2.5 whitespace-nowrap">
+                  <span className="font-semibold text-slate-900">
+                    {d.jourSemaine} {d.jour} {d.mois}
+                  </span>
+                  <span className="block text-[11px] text-slate-400">
+                    {l.test ? 'essai' : compteARebours(l.jours)}
+                    {l.heure_debut ? ` · ${l.heure_debut}` : ''}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap">{l.matiere}</td>
+                <td className="px-3 py-2.5 text-slate-600 tabular-nums">{l.nb_eleves}</td>
+                {COLONNES.map((c) => (
+                  <td key={c.titre} className="px-3 py-2.5">
+                    <Pastille c={l[c.cle] as CaseEtat} />
+                  </td>
+                ))}
+                <td className="px-3 py-2.5">
+                  <Pastille c={{ etat: l.global.etat, libelle: l.global.libelle }} />
+                </td>
+                <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                  <Link
+                    href={l.action.href}
+                    className="text-xs font-semibold text-slate-700 hover:underline"
+                  >
+                    {l.action.label} →
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// --- L'écran ----------------------------------------------------------
+
 export function CockpitDirection({ resume: initial }: { resume: ResumeDirection }) {
   const [resume, setResume] = useState(initial);
   const [chargement, setChargement] = useState(false);
+  const [toutAfficher, setToutAfficher] = useState(false);
 
   const actualiser = async () => {
     setChargement(true);
@@ -139,17 +278,18 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
 
   const { bacs, correction, paiements, emails, profs, discord, taches } = resume;
 
+  const rouges = taches.filter((t) => t.urgence === 'rouge');
+  const oranges = taches.filter((t) => t.urgence === 'orange');
+  const infos = taches.filter((t) => t.urgence === 'info');
+  const visibles = toutAfficher ? taches : [...rouges, ...oranges];
+
   return (
     <div className="space-y-6">
-      {/* --- En-tête sobre : c'est une console de pilotage, pas une pub. --- */}
+      {/* --- En-tête : ce que cet écran promet, en une ligne. --- */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Direction</p>
-          <h1 className="text-2xl font-bold text-slate-900">Tout suivre d’un seul écran</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Les épreuves à préparer, la correction, les messages qui partent, les salles Discord et
-            les accès des profs.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">Qu’est-ce qui bloque aujourd’hui ?</h1>
         </div>
         <button
           onClick={actualiser}
@@ -160,79 +300,92 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
         </button>
       </div>
 
-      {/* --- Les quatre chiffres du jour --- */}
+      {/* --- Les quatre chiffres du jour. Rien de plus. --- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <Chiffre
             valeur={bacs.disponible ? bacs.a_venir : '—'}
-            label="bacs blancs à venir"
-            sous={bacs.disponible && bacs.sans_sujet > 0 ? `${bacs.sans_sujet} sans sujet` : undefined}
-            ton={bacs.disponible && bacs.sans_sujet > 0 ? 'alerte' : 'neutre'}
+            label="vrais bacs blancs à venir"
+            sous={
+              bacs.disponible
+                ? bacs.a_venir === 0
+                  ? `les vrais commencent en ${bacs.premiere_vraie_session}`
+                  : `${bacs.tests_a_venir} essais en parallèle`
+                : undefined
+            }
           />
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <Chiffre
-            valeur={correction.disponible ? correction.en_cours : '—'}
-            label="copies en cours de correction"
-            sous={
-              correction.disponible && correction.en_erreur > 0
-                ? `${correction.en_erreur} bloquée(s)`
-                : correction.disponible
-                  ? `${correction.corrigees_7j} corrigée${correction.corrigees_7j > 1 ? 's' : ''} sur 7 j`
-                  : undefined
-            }
-            ton={correction.disponible && correction.en_erreur > 0 ? 'alerte' : 'neutre'}
+            valeur={rouges.length}
+            label="blocages rouges"
+            ton={rouges.length ? 'alerte' : 'ok'}
+            sous={rouges.length ? rouges[0].titre : 'rien ne bloque'}
+          />
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-5">
+          <Chiffre
+            valeur={taches.length}
+            label="actions à faire"
+            sous={`${oranges.length} à surveiller · ${infos.length} pour info`}
           />
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
           <Chiffre
             valeur={emails.disponible ? emails.envoyes_7j : '—'}
             label="e-mails partis sur 7 jours"
+            ton={emails.disponible && !emails.actif ? 'alerte' : 'neutre'}
             sous={
               emails.disponible && !emails.actif
                 ? 'envoi à l’arrêt'
                 : emails.disponible && emails.derniers_envois.length > 0
                   ? `dernier : ${instantCourt(emails.derniers_envois[0].quand)}`
                   : emails.disponible
-                    ? `${emails.programmes} programmés`
+                    ? 'aucun départ pour l’instant'
                     : undefined
             }
-            ton={emails.disponible && !emails.actif ? 'alerte' : 'neutre'}
-          />
-        </div>
-        <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <Chiffre
-            valeur={profs.disponible ? profs.total : '—'}
-            label="professeurs inscrits"
-            sous={
-              profs.disponible && profs.en_attente_validation > 0
-                ? `${profs.en_attente_validation} à valider`
-                : undefined
-            }
-            ton={profs.disponible && profs.en_attente_validation > 0 ? 'alerte' : 'neutre'}
           />
         </div>
       </div>
 
-      {/* --- À faire maintenant --- */}
+      {/* --- A. À faire maintenant --- */}
       <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-        <h2 className="font-bold text-slate-900 mb-1">À faire maintenant</h2>
-        <p className="text-xs text-slate-500 mb-4">
-          Tout ce qui bloque quelque chose, du plus urgent au moins urgent.
-        </p>
-        {taches.length ? (
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="font-bold text-slate-900">À faire maintenant</h2>
+          {infos.length > 0 && (
+            <button
+              onClick={() => setToutAfficher((v) => !v)}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+            >
+              {toutAfficher ? 'Masquer' : `Voir aussi ${infos.length} points pour info`}
+            </button>
+          )}
+        </div>
+
+        {visibles.length ? (
           <ul className="space-y-2">
-            {taches.map((t) => {
+            {visibles.map((t) => {
               const ton = TONS[t.urgence];
               return (
                 <li
                   key={t.cle}
-                  className={`flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border p-3.5 ${ton.fond}`}
+                  className={`flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border p-3 ${ton.fond}`}
                 >
-                  <span aria-hidden className="text-sm">{ton.puce}</span>
+                  <span aria-hidden className="text-sm leading-none pt-0.5">{ton.puce}</span>
                   <div className="flex-1 min-w-0">
+                    <p className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                        {t.domaine}
+                      </span>
+                      {t.contexte === 'test' && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 border border-slate-300 rounded px-1">
+                          essai
+                        </span>
+                      )}
+                    </p>
                     <p className={`text-sm font-semibold ${ton.texte}`}>{t.titre}</p>
-                    <p className="text-xs text-slate-600 mt-0.5">{t.detail}</p>
+                    <p className="text-xs text-slate-600">Impact : {t.impact}</p>
+                    {t.detail && <p className="text-[11px] text-slate-400 truncate">{t.detail}</p>}
                   </div>
                   <Link
                     href={t.lien}
@@ -246,18 +399,25 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           </ul>
         ) : (
           <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-400">
-            Rien ne bloque : sujets déposés, profs assignés, machine à corriger tranquille.
+            Rien ne bloque.
           </p>
         )}
       </section>
 
-      {/* --- Les prochaines épreuves, ligne par ligne --- */}
+      {/* --- B. Sessions de test --- */}
       <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-5 pb-3 flex items-center justify-between gap-3">
+        <div className="p-5 pb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-bold text-slate-900">Les prochains bacs blancs</h2>
+            <h2 className="font-bold text-slate-900">
+              🧪 Sessions de test
+              {bacs.disponible && bacs.tests.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-slate-400">
+                  {bacs.tests.length} session{bacs.tests.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Une ligne par épreuve : qui vient, qui encadre, et si le sujet est prêt à s’ouvrir.
+              Vérifier la chaîne, pas tenir une échéance.
             </p>
           </div>
           <Link
@@ -270,336 +430,310 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
 
         {!bacs.disponible ? (
           <p className="px-5 pb-5 text-sm text-amber-800">{bacs.raison}</p>
-        ) : bacs.prochains.length === 0 ? (
-          <p className="px-5 pb-5 text-sm text-slate-400">Aucune épreuve programmée pour l’instant.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[720px]">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="text-left px-5 py-2.5 font-medium">Date</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Matière</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Élèves</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Profs</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Sujet</th>
-                  <th className="px-5 py-2.5"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {bacs.prochains.map((b) => {
-                  const d = dateCourte(b.date_epreuve);
-                  return (
-                    <tr key={b.id} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-5 py-3">
-                        <span className="font-semibold text-slate-900">
-                          {d.jourSemaine} {d.jour} {d.mois}
-                        </span>
-                        <span className="block text-[11px] text-slate-400">
-                          {compteARebours(b.jours)}
-                          {b.heure_debut ? ` · ${b.heure_debut}` : ''}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 font-medium text-slate-800">{b.matiere}</td>
-                      <td className="px-5 py-3 text-slate-600 tabular-nums">{b.nb_eleves}</td>
-                      <td className="px-5 py-3">
-                        {b.nb_profs > 0 ? (
-                          <span className="text-slate-600 tabular-nums">{b.nb_profs}</span>
-                        ) : (
-                          <span className="text-red-600 font-semibold">aucun</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3">
-                        {!b.sujet_pret ? (
-                          <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
-                            à déposer
-                          </span>
-                        ) : b.publie ? (
-                          <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">
-                            ouvert aux élèves
-                          </span>
-                        ) : b.publication_auto ? (
-                          <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
-                            s’ouvre tout seul
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
-                            déposé, non publié
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-right whitespace-nowrap">
-                        <Link
-                          href="/admin/bacs-blancs"
-                          className="text-xs font-semibold text-slate-700 hover:underline"
-                        >
-                          Préparer
-                        </Link>
-                        <span className="text-slate-300 mx-2">·</span>
-                        <Link
-                          href="/admin/discord"
-                          className="text-xs font-semibold text-slate-700 hover:underline"
-                        >
-                          Salles
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <GrilleBacs
+              lignes={bacs.tests}
+              vide="Aucune session d’essai en base."
+            />
+            <div className="px-5 py-3 border-t border-slate-100">
+              <Comprendre titre="Pourquoi ces sessions sont à part">
+                <p>
+                  Les vrais bacs blancs ne commencent qu’en{' '}
+                  <strong>{bacs.premiere_vraie_session}</strong>. Tout ce qui est daté avant a été
+                  créé pour faire tourner la chaîne de bout en bout : sujet, inscription, e-mails,
+                  Discord, correction, paiement, dépôt de copie. Une session d’essai n’a pas
+                  d’échéance — la seule question qui vaut ici est « est-ce que ça marche ? ».
+                </p>
+                <p>
+                  À purger avant la mise en service, pour ne pas abîmer la réputation d’expéditeur
+                  chez Brevo.
+                </p>
+              </Comprendre>
+            </div>
+          </>
         )}
       </section>
 
-      {/* --- Les cinq outils, expliqués --- */}
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <CarteOutil
-          emoji="📅"
-          titre="Bacs blancs & sujets"
-          aQuoiCaSert="Organiser l’épreuve : assigner les profs, déposer le sujet en PDF, décider quand il s’ouvre dans l’espace élève, lire les retours des profs après coup."
-          href="/admin/bacs-blancs"
-          libelleLien="Ouvrir les bacs blancs"
-          indisponible={bacs.disponible ? undefined : { raison: bacs.raison, manquants: bacs.manquants }}
-        >
-          {bacs.disponible && (
-            <div className="grid grid-cols-3 gap-3">
-              <Chiffre valeur={bacs.a_venir} label="à venir" />
-              <Chiffre valeur={bacs.sans_sujet} label="sans sujet" ton={bacs.sans_sujet ? 'alerte' : 'ok'} />
-              <Chiffre valeur={bacs.retours_manquants} label="retours attendus" />
-            </div>
-          )}
-        </CarteOutil>
-
-        <CarteOutil
-          emoji="🎛️"
-          titre="Correction des copies"
-          aQuoiCaSert="La chaîne qui lit une copie scannée, la corrige au barème du sujet et fabrique le dossier de l’élève. Ici on voit ce qui tourne, ce qui coince et ce que ça coûte."
-          href="/admin/correction"
-          libelleLien="Ouvrir le pilotage"
-          indisponible={
-            correction.disponible ? undefined : { raison: correction.raison, manquants: correction.manquants }
-          }
-        >
-          {correction.disponible && (
-            <>
-              <div className="grid grid-cols-3 gap-3">
-                <Chiffre valeur={correction.en_cours} label="en cours" />
-                <Chiffre valeur={correction.corrigees_7j} label="corrigées 7 j" />
-                <Chiffre
-                  valeur={correction.en_erreur}
-                  label="bloquées"
-                  ton={correction.en_erreur ? 'alerte' : 'ok'}
-                />
-              </div>
-              <p className="mt-3 rounded-lg bg-slate-50 border border-slate-200 p-2.5 text-[11px] text-slate-600 leading-relaxed">
-                <strong>Le barème d’un sujet</strong> = les points question par question de CE
-                sujet-là. Il se saisit une fois, juste avant de corriger ce bac blanc, et il est
-                réutilisé si tu redonnes le même sujet. Rien à refaire tant que le sujet ne change
-                pas.{' '}
-                <Link href="/admin/bareme" className="underline font-semibold">
-                  Ouvrir les barèmes
-                </Link>
-              </p>
-            </>
-          )}
-        </CarteOutil>
-
-        <CarteOutil
-          emoji="💶"
-          titre="Paiements"
-          aQuoiCaSert="Qui a payé, qui n’a pas payé, depuis combien de temps. La comptabilité complète (encaissements, factures des profs, Urssaf) reste dans le classeur de suivi financier, qui s’ouvre d’un bouton."
-          href="/admin/paiements"
-          libelleLien="Ouvrir les paiements"
-          indisponible={
-            paiements.disponible ? undefined : { raison: paiements.raison, manquants: paiements.manquants }
-          }
-        >
-          {paiements.disponible && (
-            <>
-              <div className="grid grid-cols-3 gap-3">
-                <Chiffre valeur={paiements.payes} label="réglés" />
-                <Chiffre
-                  valeur={paiements.en_attente}
-                  label="en attente"
-                  ton={paiements.en_attente ? 'alerte' : 'ok'}
-                />
-                <Chiffre valeur={paiements.en_retard} label="+ d’une semaine" />
-              </div>
-              {!paiements.classeur && (
-                <p className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-900">
-                  Le classeur de suivi financier n’est pas encore relié : une variable à poser sur
-                  Vercel et le bouton apparaît.
-                </p>
+      {/* --- C. Vrais bacs blancs --- */}
+      <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-5 pb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-slate-900">
+              🎓 Vrais bacs blancs
+              {bacs.disponible && bacs.a_venir > 0 && (
+                <span className="ml-2 text-xs font-normal text-slate-400">
+                  {bacs.a_venir} à venir
+                </span>
               )}
-            </>
-          )}
-        </CarteOutil>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">Les sessions vendues, et ce qui leur manque.</p>
+          </div>
+          <Link
+            href="/admin/bacs-blancs"
+            className="text-xs font-semibold text-slate-700 hover:underline whitespace-nowrap"
+          >
+            Tout ouvrir →
+          </Link>
+        </div>
 
-        <CarteOutil
-          emoji="📬"
-          titre="E-mails automatiques"
-          aQuoiCaSert="L’historique de tous les messages partis tout seuls — élèves, parents, profs : confirmation d’inscription, infos pratiques la veille, dossier de correction prêt. Les relances de paiement y figurent aussi, parce que ce sont des e-mails ; l’argent, lui, se suit dans l’onglet Paiements."
-          href="/admin/emails"
-          libelleLien="Ouvrir les e-mails"
-          indisponible={emails.disponible ? undefined : { raison: emails.raison, manquants: emails.manquants }}
-        >
-          {emails.disponible && (
-            <>
-              <div className="grid grid-cols-3 gap-3">
-                <Chiffre valeur={emails.programmes} label="programmés" />
-                <Chiffre valeur={emails.envoyes_7j} label="partis 7 j" />
-                <Chiffre
-                  valeur={emails.en_erreur + emails.bloques}
-                  label="en échec"
-                  ton={emails.en_erreur + emails.bloques ? 'alerte' : 'ok'}
-                />
-              </div>
-              {emails.validation_manuelle && (
-                <p className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-900">
-                  <strong>Tu valides chaque e-mail.</strong> Rien ne part tout seul : les messages
-                  sont préparés, puis attendent ton bouton « Valider et envoyer » dans l’onglet
-                  Messages.
-                  {emails.en_attente > 0 && ` ${emails.en_attente} attendent ton feu vert.`}
-                </p>
-              )}
+        {!bacs.disponible ? (
+          <p className="px-5 pb-5 text-sm text-amber-800">{bacs.raison}</p>
+        ) : (
+          <GrilleBacs
+            lignes={bacs.vrais}
+            vide={`Aucune vraie session pour l’instant — les premières sont prévues en ${bacs.premiere_vraie_session}.`}
+          />
+        )}
+      </section>
 
-              {emails.derniers_envois.length > 0 ? (
-                <div className="mt-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Derniers messages partis
-                  </p>
-                  <ul className="mt-2 space-y-1.5">
-                    {emails.derniers_envois.map((e) => (
-                      <li
-                        key={e.id}
-                        className="flex items-baseline justify-between gap-3 border-b border-slate-100 pb-1.5 last:border-0"
-                      >
-                        <span className="min-w-0">
-                          <span className="block text-xs text-slate-800 truncate">
-                            {e.libelle}
-                            {e.test && <span className="text-slate-400"> · test</span>}
-                          </span>
-                          <span className="block text-[11px] text-slate-500 truncate">
-                            → {e.destinataire}
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-right">
-                          <span className="block text-[11px] text-slate-500 tabular-nums">
-                            {instantCourt(e.quand)}
-                          </span>
-                          <span
-                            className={`block text-[11px] ${e.delivre ? 'text-emerald-600' : 'text-slate-400'}`}
-                          >
-                            {e.delivre ? 'reçu' : 'parti'}
-                          </span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+      {/* --- D. Santé des opérations : des chiffres, un bouton, rien d'autre. --- */}
+      <section>
+        <h2 className="font-bold text-slate-900 mb-3">Santé des opérations</h2>
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <CarteSante
+            emoji="📬"
+            titre="E-mails"
+            href="/admin/emails"
+            indisponible={emails.disponible ? undefined : { raison: emails.raison, manquants: emails.manquants }}
+            alerte={
+              emails.disponible && !emails.actif
+                ? 'Envoi à l’arrêt : clé Brevo manquante.'
+                : emails.disponible && emails.reglages_bloquants.length > 0
+                  ? `Réglage vide : ${emails.reglages_bloquants.join(', ')}.`
+                  : undefined
+            }
+          >
+            {emails.disponible && (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <Chiffre
+                    valeur={emails.en_attente}
+                    label={emails.validation_manuelle ? 'attendent mon feu vert' : 'en attente'}
+                    ton={emails.en_attente ? 'alerte' : 'ok'}
+                  />
+                  <Chiffre valeur={emails.programmes} label="programmés" />
+                  <Chiffre
+                    valeur={emails.en_erreur + emails.bloques}
+                    label="en échec"
+                    ton={emails.en_erreur + emails.bloques ? 'alerte' : 'ok'}
+                  />
                 </div>
-              ) : (
-                <p className="mt-4 text-[11px] text-slate-400">
-                  Aucun message n’est encore parti. Le journal se remplit tout seul dès le premier
-                  envoi.
-                </p>
-              )}
+                <ul className="mt-3 space-y-1 text-[11px] text-slate-500">
+                  <li>
+                    Validation manuelle :{' '}
+                    <strong className={emails.validation_manuelle ? 'text-emerald-700' : 'text-amber-700'}>
+                      {emails.validation_manuelle ? 'active' : 'désactivée'}
+                    </strong>
+                  </li>
+                  {emails.inscriptions_sans_date > 0 && (
+                    <li>{emails.inscriptions_sans_date} inscriptions sans date</li>
+                  )}
+                  {emails.adresses_test > 0 && <li>{emails.adresses_test} adresses fictives</li>}
+                </ul>
+              </>
+            )}
+          </CarteSante>
 
-              {emails.prochains_envois.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Prochains départs programmés
-                  </p>
-                  <ul className="mt-2 space-y-1">
-                    {emails.prochains_envois.map((e) => (
-                      <li
-                        key={e.id}
-                        className="flex items-baseline justify-between gap-3 text-[11px] text-slate-500"
-                      >
-                        <span className="truncate">
-                          {e.libelle} → {e.destinataire}
-                        </span>
-                        <span className="shrink-0 tabular-nums">{instantCourt(e.quand)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-1.5 text-[11px] text-slate-400">
-                    {emails.programmes} messages attendent leur heure — la liste complète est dans
-                    l’onglet « Messages » de la page E-mails.
-                  </p>
+          <CarteSante
+            emoji="💶"
+            titre="Paiements"
+            href="/admin/paiements"
+            indisponible={
+              paiements.disponible ? undefined : { raison: paiements.raison, manquants: paiements.manquants }
+            }
+            alerte={
+              paiements.disponible && !paiements.instructions_pretes && paiements.en_attente > 0
+                ? 'Relances bloquées : aucune instruction de paiement.'
+                : undefined
+            }
+          >
+            {paiements.disponible && (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <Chiffre
+                    valeur={paiements.en_attente}
+                    label="en attente"
+                    ton={paiements.en_attente ? 'alerte' : 'ok'}
+                  />
+                  <Chiffre valeur={euros(paiements.attendu)} label="à encaisser" />
+                  <Chiffre valeur={paiements.en_retard} label="+ d’une semaine" />
                 </div>
-              )}
+                {!paiements.classeur && (
+                  <p className="mt-3 text-[11px] text-slate-400">Classeur financier non relié.</p>
+                )}
+              </>
+            )}
+          </CarteSante>
 
-              {!emails.actif && (
-                <p className="mt-3 rounded-lg bg-red-50 border border-red-200 p-2.5 text-[11px] text-red-800">
-                  L’envoi est à l’arrêt : la clé Brevo manque. Les messages sont préparés et rangés
-                  dans la file, mais aucun ne part.
+          <CarteSante
+            emoji="🎙️"
+            titre="Discord"
+            href="/admin/discord"
+            indisponible={
+              discord.configure
+                ? undefined
+                : { raison: 'Le serveur Discord n’est pas encore relié.', manquants: discord.manquants }
+            }
+            alerte={discord.erreur ?? undefined}
+          >
+            {discord.configure && (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <Chiffre
+                    valeur={discord.salles_a_creer}
+                    label="sessions sans salles"
+                    ton={discord.salles_a_creer ? 'alerte' : 'ok'}
+                  />
+                  <Chiffre
+                    valeur={discord.liens_manquants}
+                    label="sans liens déposés"
+                    ton={discord.liens_manquants ? 'alerte' : 'ok'}
+                  />
+                  <Chiffre valeur={discord.comptes_non_relies} label="comptes élève à relier" />
+                </div>
+                <p className="mt-3 text-[11px] text-slate-500">
+                  Serveur :{' '}
+                  <strong className="text-emerald-700">{discord.serveur ?? 'relié'}</strong>
+                  {discord.categories_orphelines > 0 && (
+                    <> · {discord.categories_orphelines} catégories à nettoyer</>
+                  )}
                 </p>
-              )}
-            </>
-          )}
-        </CarteOutil>
+              </>
+            )}
+          </CarteSante>
 
-        <CarteOutil
-          emoji="🎙️"
-          titre="Salles Discord"
-          aQuoiCaSert="Une salle vocale privée par élève pendant l’épreuve, plus les salons d’informations et d’assistance. On les prépare avant, on les ferme après, on fait le ménage."
-          href="/admin/discord"
-          libelleLien="Gérer les salles"
-          indisponible={
-            discord.configure
-              ? undefined
-              : { raison: 'Le serveur Discord n’est pas encore relié à ce site.', manquants: discord.manquants }
-          }
-        >
-          {discord.configure && (
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Le serveur est relié. Ouvre la page pour préparer les salles d’un bac blanc,
-              les verrouiller à la fin de l’épreuve ou supprimer une catégorie terminée.
-            </p>
-          )}
-        </CarteOutil>
-
-        <CarteOutil
-          emoji="👥"
-          titre="Profs & accès"
-          aQuoiCaSert="Qui peut entrer, et ce qu’il voit. Valider une candidature, renseigner ses matières, lui définir un mot de passe, entrer dans son espace pour vérifier sa vue."
-          href="/admin/profs"
-          libelleLien="Ouvrir les accès"
-          indisponible={profs.disponible ? undefined : { raison: profs.raison, manquants: profs.manquants }}
-        >
-          {profs.disponible && (
-            <>
+          <CarteSante
+            emoji="👥"
+            titre="Profs"
+            href="/admin/profs"
+            indisponible={profs.disponible ? undefined : { raison: profs.raison, manquants: profs.manquants }}
+          >
+            {profs.disponible && (
               <div className="grid grid-cols-3 gap-3">
-                <Chiffre valeur={profs.total} label="inscrits" />
                 <Chiffre
                   valeur={profs.en_attente_validation}
                   label="à valider"
                   ton={profs.en_attente_validation ? 'alerte' : 'ok'}
                 />
+                <Chiffre
+                  valeur={bacs.disponible ? bacs.sans_prof : '—'}
+                  label="bacs sans prof"
+                  ton={bacs.disponible && bacs.sans_prof ? 'alerte' : 'ok'}
+                />
                 <Chiffre valeur={profs.sans_compte} label="sans identifiant" />
               </div>
-              {profs.derniers.length > 0 && (
-                <ul className="mt-3 space-y-1">
-                  {profs.derniers.slice(0, 3).map((p) => (
-                    <li key={p.id} className="text-xs text-slate-500 truncate">
-                      <span className="text-slate-800 font-medium">{p.nom}</span>
-                      {' · '}
-                      {p.matieres.join(', ') || 'aucune matière'}
-                      {p.statut === 'en_attente' && (
-                        <span className="ml-1.5 text-amber-700 font-semibold">à valider</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </CarteOutil>
+            )}
+          </CarteSante>
 
+          <CarteSante
+            emoji="🎛️"
+            titre="Correction"
+            href="/admin/correction"
+            indisponible={
+              correction.disponible ? undefined : { raison: correction.raison, manquants: correction.manquants }
+            }
+          >
+            {correction.disponible && (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <Chiffre
+                    valeur={correction.en_erreur}
+                    label="copies bloquées"
+                    ton={correction.en_erreur ? 'alerte' : 'ok'}
+                  />
+                  <Chiffre
+                    valeur={correction.jamais_testees}
+                    label="matières jamais testées"
+                    ton={correction.jamais_testees ? 'alerte' : 'ok'}
+                  />
+                  <Chiffre valeur={correction.en_cours} label="en cours" />
+                </div>
+                {correction.matieres.length > 0 && (
+                  <ul className="mt-3 space-y-0.5 text-[11px]">
+                    {correction.matieres.slice(0, 8).map((m) => (
+                      <li key={m.matiere} className="flex items-baseline justify-between gap-2">
+                        <span className="text-slate-700 whitespace-nowrap">{m.label}</span>
+                        <span
+                          className={`truncate text-right ${
+                            m.etat === 'bloque'
+                              ? 'text-red-700 font-semibold'
+                              : m.etat === 'attention'
+                                ? 'text-amber-700'
+                                : 'text-emerald-700'
+                          }`}
+                        >
+                          {m.resume}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </CarteSante>
+
+          <CarteSante
+            emoji="📅"
+            titre="Bacs blancs & sujets"
+            href="/admin/bacs-blancs"
+            indisponible={bacs.disponible ? undefined : { raison: bacs.raison, manquants: bacs.manquants }}
+          >
+            {bacs.disponible && (
+              <div className="grid grid-cols-3 gap-3">
+                <Chiffre valeur={bacs.a_venir} label="vrais à venir" />
+                <Chiffre
+                  valeur={bacs.sans_sujet}
+                  label="sans sujet"
+                  ton={bacs.sans_sujet ? 'alerte' : 'ok'}
+                />
+                <Chiffre valeur={bacs.retours_manquants} label="retours attendus" />
+              </div>
+            )}
+          </CarteSante>
+        </div>
+      </section>
+
+      {/* --- Le mode d'emploi, replié : il ne sert pas à décider. --- */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        <Comprendre titre="À quoi sert chaque onglet">
+          <p>
+            <strong>Bacs blancs & sujets</strong> — organiser l’épreuve : assigner les profs,
+            déposer le sujet en PDF, décider quand il s’ouvre dans l’espace élève, lire les retours
+            des profs après coup.
+          </p>
+          <p>
+            <strong>Correction</strong> — la chaîne qui lit une copie scannée, la corrige au barème
+            et fabrique le dossier de l’élève. Le barème d’un sujet se saisit une fois, juste avant
+            de corriger ce sujet-là, et se réutilise si le sujet revient.{' '}
+            <Link href="/admin/bareme" className="underline font-semibold">
+              Ouvrir les barèmes
+            </Link>
+          </p>
+          <p>
+            <strong>Paiements</strong> — qui a payé, qui n’a pas payé, depuis combien de temps. La
+            comptabilité complète reste dans le classeur de suivi financier.
+          </p>
+          <p>
+            <strong>E-mails</strong> — l’historique de tous les messages partis, élèves, parents et
+            profs. Les relances de paiement y figurent aussi : ce sont des e-mails ; l’argent, lui,
+            se suit dans Paiements.
+          </p>
+          <p>
+            <strong>Discord</strong> — une salle vocale privée par élève pendant l’épreuve, plus les
+            salons d’informations et d’assistance. On les prépare avant, on les ferme après.
+          </p>
+          <p>
+            <strong>Profs & accès</strong> — qui peut entrer, et ce qu’il voit. Valider une
+            candidature, renseigner ses matières, lui définir un mot de passe, entrer dans son
+            espace pour vérifier sa vue.
+          </p>
+        </Comprendre>
       </div>
 
       <p className="text-center text-[11px] text-slate-400">
-        Chiffres arrêtés à {new Date(resume.genere_le).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.
+        Chiffres arrêtés à{' '}
+        {new Date(resume.genere_le).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.
       </p>
     </div>
   );
