@@ -13,9 +13,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { profConnecte } from '@/lib/authProf';
 import {
+  annulerBacBlanc,
   assignerProf,
   chargerEtatBacsBlancs,
+  consequencesSuppression,
   creerBacBlanc,
+  supprimerBacBlanc,
   enregistrerSujet,
   lienSujet,
   majSujet,
@@ -70,6 +73,28 @@ export async function POST(req: NextRequest) {
             : [],
         });
         return NextResponse.json({ ok: true, id, avertissements });
+      }
+
+      // Ce que la suppression emporterait — demandé AVANT de supprimer, pour
+      // que la question posée à l'écran cite de vrais nombres.
+      case 'consequences-suppression': {
+        return NextResponse.json(await consequencesSuppression(String(corps.session_id)));
+      }
+
+      // Supprimer pour de bon. Refuse tant qu'un élève est inscrit, sauf
+      // confirmation explicite prise après affichage du nombre.
+      case 'supprimer-bac-blanc': {
+        const bilan = await supprimerBacBlanc(String(corps.session_id), {
+          confirmeAvecEleves: corps.confirme_avec_eleves === true,
+        });
+        console.log(`🗑️ ${moi.email} a supprimé le bac blanc ${bilan.matiere} du ${bilan.date_epreuve}`);
+        return NextResponse.json({ ok: true, supprime: bilan });
+      }
+
+      // Annuler sans supprimer : la trace reste, la date sort du formulaire.
+      case 'annuler-bac-blanc': {
+        await annulerBacBlanc(String(corps.session_id), corps.annuler !== false);
+        return NextResponse.json({ ok: true });
       }
 
       case 'assigner-prof': {

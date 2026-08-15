@@ -484,6 +484,98 @@ function CarteRetour({ retour, nom }: { retour: RetourSession; nom: string }) {
 
 // --- Une carte par bac blanc -----------------------------------------
 
+/**
+ * Annuler ou supprimer une épreuve.
+ *
+ * Deux gestes, volontairement distincts, parce qu'ils ne coûtent pas la même
+ * chose :
+ *
+ *   • ANNULER garde la ligne. L'épreuve sort des dates proposées aux familles,
+ *     mais les inscrits, les profs et les sujets restent consultables.
+ *   • SUPPRIMER efface l'épreuve. Le serveur refuse tant qu'un élève est
+ *     inscrit ; on redemande alors en citant le nombre exact, et l'inscription
+ *     de l'élève est détachée plutôt qu'effacée — il reste dans la liste des
+ *     inscriptions même si son épreuve n'existe plus.
+ */
+function BlocDangers({
+  bac,
+  agir,
+  occupe,
+}: {
+  bac: BacBlanc;
+  agir: (corps: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
+  occupe: boolean;
+}) {
+  const [travail, setTravail] = useState(false);
+  const annulee = (bac.statut ?? '').toLowerCase() === 'annulee';
+
+  const supprimer = async () => {
+    setTravail(true);
+    try {
+      const bilan = (await agir({ action: 'consequences-suppression', session_id: bac.id })) as
+        | { eleves?: number; profs?: number; sujets?: number }
+        | null;
+      if (!bilan) return;
+
+      const details = [
+        bilan.eleves ? `${bilan.eleves} inscription(s) d’élève` : null,
+        bilan.profs ? `${bilan.profs} prof(s) assigné(s)` : null,
+        bilan.sujets ? `${bilan.sujets} sujet(s) déposé(s)` : null,
+      ].filter(Boolean);
+
+      const question =
+        `Supprimer le bac blanc de ${bac.matiere} du ${dateLongue(bac.date_epreuve)} ?\n\n` +
+        (details.length ? `Il emporte : ${details.join(', ')}.\n\n` : 'Rien n’y est rattaché.\n\n') +
+        (bilan.eleves
+          ? `Les ${bilan.eleves} élève(s) resteront dans la liste des inscriptions, mais ne seront plus rattachés à aucune épreuve.\n\n`
+          : '') +
+        'Cette action est définitive.';
+      if (!window.confirm(question)) return;
+
+      // Second passage : le serveur refuse la suppression avec des élèves tant
+      // qu'on ne l'a pas vu écrit. Ici on l'a vu.
+      await agir({
+        action: 'supprimer-bac-blanc',
+        session_id: bac.id,
+        confirme_avec_eleves: true,
+      });
+    } finally {
+      setTravail(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
+      <button
+        type="button"
+        disabled={occupe || travail}
+        onClick={() => {
+          const q = annulee
+            ? `Rouvrir le bac blanc de ${bac.matiere} du ${dateLongue(bac.date_epreuve)} ? Il réapparaîtra dans les dates proposées aux familles.`
+            : `Annuler le bac blanc de ${bac.matiere} du ${dateLongue(bac.date_epreuve)} ?\n\nIl disparaît des dates proposées aux familles. Rien n’est effacé : les inscrits, les profs et les sujets restent consultables.`;
+          if (window.confirm(q)) agir({ action: 'annuler-bac-blanc', session_id: bac.id, annuler: !annulee });
+        }}
+        className="px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-40"
+      >
+        {annulee ? 'Rouvrir l’épreuve' : 'Annuler l’épreuve'}
+      </button>
+
+      <button
+        type="button"
+        disabled={occupe || travail}
+        onClick={supprimer}
+        className="px-3 py-1.5 rounded-lg border border-red-300 bg-red-50 text-red-700 text-xs font-medium hover:bg-red-100 disabled:opacity-40"
+      >
+        {travail ? 'Suppression…' : 'Supprimer définitivement'}
+      </button>
+
+      <span className="text-[11px] text-gray-500">
+        Annuler retire la date du formulaire sans rien effacer. Supprimer est définitif.
+      </span>
+    </div>
+  );
+}
+
 function CarteBacBlanc({
   bac,
   profs,
@@ -530,6 +622,7 @@ function CarteBacBlanc({
           {bac.passe && bac.retours_attendus > 0 && (
             <Pastille ton="orange">{bac.retours_attendus} retour(s) attendu(s)</Pastille>
           )}
+          {(bac.statut ?? '').toLowerCase() === 'annulee' && <Pastille ton="rouge">annulée</Pastille>}
         </span>
       </button>
 
@@ -554,6 +647,8 @@ function CarteBacBlanc({
               </div>
             </div>
           )}
+
+          <BlocDangers bac={bac} agir={agir} occupe={occupe} />
         </div>
       )}
     </section>

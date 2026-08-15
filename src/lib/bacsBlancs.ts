@@ -476,6 +476,122 @@ export async function creerBacBlanc(
   return { id, avertissements };
 }
 
+/**
+ * Ce qu'un bac blanc emmènerait avec lui s'il était supprimé.
+ *
+ * Sert à poser la question avant, pas à s'en apercevoir après : une épreuve
+ * supprimée par erreur emporte les inscriptions des élèves, et rien en base ne
+ * permet de les retrouver.
+ */
+export type ConsequencesSuppression = {
+  matiere: string;
+  date_epreuve: string;
+  eleves: number;
+  profs: number;
+  sujets: number;
+  /** true si la suppression détruirait des inscriptions d'élèves. */
+  a_des_eleves: boolean;
+};
+
+export async function consequencesSuppression(sessionId: string): Promise<ConsequencesSuppression> {
+  const db = crmAdmin();
+  const { data: session, error } = await db
+    .from('sessions_bacs_blancs')
+    .select('id, matiere, date_epreuve')
+    .eq('id', sessionId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!session) throw new Error('Bac blanc introuvable.');
+
+  const [eleves, profs, sujets] = await Promise.all([
+    db.from('inscriptions').select('id', { count: 'exact', head: true }).eq('session_id', sessionId),
+    db.from('session_coachs').select('id', { count: 'exact', head: true }).eq('session_id', sessionId),
+    db.from('session_sujets').select('id', { count: 'exact', head: true }).eq('session_id', sessionId),
+  ]);
+
+  const n = (r: { count: number | null }) => r.count ?? 0;
+  return {
+    matiere: String((session as { matiere: string }).matiere),
+    date_epreuve: String((session as { date_epreuve: string }).date_epreuve),
+    eleves: n(eleves),
+    profs: n(profs),
+    sujets: n(sujets),
+    a_des_eleves: n(eleves) > 0,
+  };
+}
+
+/**
+ * Supprimer un bac blanc, pour de bon.
+ *
+ * REFUS PAR DÉFAUT DÈS QU'UN ÉLÈVE EST INSCRIT. Supprimer l'épreuve efface
+ * aussi son inscription : l'élève n'apparaît plus nulle part, et personne ne
+ * sait qu'il attendait quelque chose. Dans ce cas l'appelant doit confirmer
+ * explicitement (`confirmeAvecEleves`), après avoir vu le nombre — ou passer
+ * par `annulerBacBlanc`, qui garde la trace.
+ *
+ * Les dépendances partent dans l'ordre, à la main plutôt qu'en cascade : les
+ * fichiers de sujet vivent dans le Storage, et une cascade SQL les laisserait
+ * derrière elle sans que rien ne les référence.
+ */
+export async function supprimerBacBlanc(
+  sessionId: string,
+  options: { confirmeAvecEleves?: boolean } = {},
+): Promise<ConsequencesSuppression> {
+  const db = crmAdmin();
+  const bilan = await consequencesSuppression(sessionId);
+
+  if (bilan.a_des_eleves && !options.confirmeAvecEleves) {
+    throw new Error(
+      `${bilan.eleves} élève(s) sont inscrits à ce bac blanc. Les supprimer effacerait aussi leur inscription. ` +
+        'Annule plutôt l’épreuve — elle disparaît des dates proposées et les inscrits restent visibles.',
+    );
+  }
+
+  // 1. Les sujets, fichier compris.
+  const { data: sujets } = await db.from('session_sujets').select('id').eq('session_id', sessionId);
+  for (const s of (sujets ?? []) as { id: string }[]) {
+    await supprimerSujet(s.id);
+  }
+
+  // 2. Les retours des profs, puis leurs assignations.
+  await db.from('session_retours').delete().eq('session_id', sessionId);
+  await db.from('session_coachs').delete().eq('session_id', sessionId);
+
+  // 3. Les inscriptions ne sont pas effacées : on les détache. Un élève qui
+  //    s'est inscrit a existé, même si l'épreuve n'a plus lieu — et son
+  //    e-mail, son nom et sa date restent lisibles dans la liste des
+  //    inscriptions.
+  await db.from('inscriptions').update({ session_id: null }).eq('session_id', sessionId);
+
+  const { error } = await db.from('sessions_bacs_blancs').delete().eq('id', sessionId);
+  if (error) throw error;
+  return bilan;
+}
+
+/**
+ * Annuler un bac blanc sans le supprimer.
+ *
+ * La ligne reste : elle sort des dates proposées aux familles (`/api/sessions`
+ * ne sert que les sessions `ouverte` et non annulées), mais les inscrits, les
+ * profs assignés et les sujets déposés restent consultables. C'est le geste à
+ * préférer dès qu'une personne réelle est concernée.
+ */
+export async function annulerBacBlanc(sessionId: string, annuler: boolean): Promise<void> {
+  const db = crmAdmin();
+  const champs: Record<string, unknown> = {
+    statut: annuler ? 'annulee' : 'ouverte',
+    annulee_le: annuler ? new Date().toISOString() : null,
+  };
+  let { error } = await db.from('sessions_bacs_blancs').update(champs).eq('id', sessionId);
+  // `annulee_le` vient du SQL des e-mails (28_). S'il n'a pas été joué sur ce
+  // projet, le statut seul suffit à retirer la session des dates proposées.
+  if (error && /annulee_le/.test(error.message ?? '')) {
+    delete champs.annulee_le;
+    ({ error } = await db.from('sessions_bacs_blancs').update(champs).eq('id', sessionId));
+  }
+  if (error) throw error;
+}
+
 export async function assignerProf(sessionId: string, professeurId: string): Promise<void> {
   const db = crmAdmin();
   const { data: existant } = await db
