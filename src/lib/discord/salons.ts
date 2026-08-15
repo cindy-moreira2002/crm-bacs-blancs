@@ -455,10 +455,18 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
       motifAudit: 'Accès du bot à la catégorie qu’il administre',
     });
     if (!reparation.ok) {
+      // « Missing Access » plutôt que « Missing Permissions » : le bot ne voit
+      // même pas la catégorie, donc aucune route de salon ne lui est ouverte —
+      // il ne peut pas s'en sortir tout seul. Une catégorie fermée avant que ce
+      // correctif existe ne se répare donc que depuis Discord, à la main.
       return {
         ok: false,
-        message: `Le bot ne peut pas se rendre l’accès à « ${nomCategorie} » : ${reparation.erreur}`,
-        details,
+        message: `« ${nomCategorie} » a été créée avant le correctif : le bot n’y a pas accès et ne peut pas se le rendre.`,
+        details: [
+          ...details,
+          'Le plus simple : supprimer cette catégorie dans Discord (clic droit → Supprimer la catégorie), puis relancer « Préparer les salles ». Elle sera recréée correctement, avec ses salons.',
+          'Autre voie, si tu préfères la garder : clic droit sur la catégorie → Modifier la catégorie → Permissions → Ajouter un membre → choisis le bot, et active « Voir les salons », « Se connecter » et « Parler ».',
+        ],
       };
     }
     details.push('Accès du bot rétabli sur la catégorie.');
