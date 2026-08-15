@@ -88,6 +88,15 @@ function Interrupteur({
 // --- Check-list par matière ------------------------------------------
 
 /**
+ * Un point de la jauge « X/Y prêts ».
+ *
+ * `texte` dit ce qui EST. `action` dit ce qu'il faut FAIRE quand ce n'est pas
+ * coché — sans lui, « 7/8 » laisse deviner lequel des huit manque et par quel
+ * bout le prendre.
+ */
+type PointPreparation = { ok: boolean; texte: string; action?: string };
+
+/**
  * La couche qui produit la NOTE : un bac blanc = un barème propre au sujet,
  * verrouillé avant la première copie. Ce bandeau dit en un coup d'œil combien
  * sont prêts, et surtout combien corrigent SANS avoir été calibrés.
@@ -289,7 +298,10 @@ function CarteMatiere({
   // Selon le moteur, les deux premiers points de la check-list ne parlent pas
   // de la même chose : afficher « aucun barème propre » à une matière notée par
   // grille rédigée serait un faux reproche.
-  const pointsMoteur: { ok: boolean; texte: string }[] = redigees.length
+  // Chaque point de la jauge dit ce qui EST, et — quand il manque — ce qu'il
+  // faut faire pour le cocher. Un « 7/8 » sans mode d'emploi ne sert à rien :
+  // c'est le reproche qui a fait naître le champ `action`.
+  const pointsMoteur: PointPreparation[] = redigees.length
     ? [
         {
           ok: redigeesProvisoires === 0,
@@ -297,6 +309,8 @@ function CarteMatiere({
             redigeesProvisoires === 0
               ? `${redigees.length} grille(s) rédigée(s) verrouillée(s) — les notes sont définitives`
               : `${redigeesProvisoires} grille(s) rédigée(s) sur ${redigees.length} pas encore verrouillée(s) : notes provisoires`,
+          action:
+            'Ouvre « 🔎 tout voir » puis la grille rédigée, relis-la et passe-la en « verrouillée ». Tant qu\u2019elle ne l\u2019est pas, les notes affichées aux élèves restent provisoires.',
         },
         {
           ok: etalonsHumains > 0,
@@ -304,6 +318,8 @@ function CarteMatiere({
             etalonsHumains > 0
               ? `${etalonsHumains} copie(s) étalon corrigée(s) par un professeur`
               : 'Aucune copie étalon corrigée par un professeur : l’échelle n’a jamais été confrontée à un humain',
+          action:
+            'Fais corriger UNE copie par un professeur, dépose-la comme copie étalon, et compare sa note à celle de l’IA. C’est ce qui prouve que la notation est juste.',
         },
       ]
     : m.moteur_attendu === 'bareme_sujet'
@@ -316,6 +332,7 @@ function CarteMatiere({
               m.examens.length > 0
                 ? `${m.examens.length} bac(s) blanc(s) avec leur barème, dont ${ouverts.length} en correction`
                 : 'Aucun bac blanc n’a encore son barème question par question',
+            action: 'Va dans « Barèmes par sujet », choisis le bac blanc, et saisis les points question par question.',
           },
           {
             // Le point qui manquait : ouverte au dépôt sans barème branché,
@@ -328,6 +345,10 @@ function CarteMatiere({
                 : m.visibilite === 'draft'
                   ? 'Barème pas encore branché (la matière est fermée, rien ne part de travers)'
                   : '⚠️ Ouverte au dépôt SANS barème branché : les copies sont notées par la grille de compétences',
+            action:
+              m.visibilite === 'draft'
+                ? 'Rien d’urgent tant que la matière est fermée. Branche le barème du sujet avant de l’ouvrir au dépôt.'
+                : 'URGENT : ouvre « Barèmes par sujet » et branche le barème, ou repasse la matière en brouillon avec l’interrupteur ci-dessus. Les élèves reçoivent des notes qui ne viennent pas du barème prévu.',
           },
           {
             ok: compares > 0,
@@ -335,6 +356,7 @@ function CarteMatiere({
               compares > 0
                 ? `${compares} copie(s) étalon comparée(s) IA / professeurs`
                 : 'Barème jamais confronté à un correcteur humain (aucune copie comparée)',
+            action: 'Dans « Barèmes par sujet » → Calibration, compare au moins une copie corrigée par un prof avec la note de l’IA.',
           },
         ]
       : [
@@ -347,29 +369,72 @@ function CarteMatiere({
               t.grilles_actives > 0
                 ? `Notée par sa grille commune — rien à écrire à chaque nouveau sujet`
                 : 'Aucune grille active : cette matière ne peut rien noter',
+            action: 'Ouvre « 🔎 tout voir » et active la grille de compétences de la matière : sans elle, aucune copie ne peut être notée.',
           },
         ];
 
-  const points: { ok: boolean; texte: string }[] = [
+  const points: PointPreparation[] = [
     ...pointsMoteur,
     ...(relecturesRedigees > 0
-      ? [{ ok: false, texte: `${relecturesRedigees} relecture(s) humaine(s) en attente sur des copies notées` }]
+      ? [
+          {
+            ok: false,
+            texte: `${relecturesRedigees} relecture(s) humaine(s) en attente sur des copies notées`,
+            action: 'Un prof a demandé une relecture : ouvre la copie concernée et tranche, sinon la note reste en suspens.',
+          },
+        ]
       : []),
-    { ok: t.grilles_actives === t.grilles && t.grilles > 0, texte: `Grilles de compétences actives (${t.grilles_actives}/${t.grilles})` },
-    { ok: t.sujets_actifs > 0, texte: `Sujets visibles au dépôt (${t.sujets_actifs}/${t.sujets})` },
-    { ok: t.gabarits_actifs === t.gabarits && t.gabarits > 0, texte: `Dossiers élève prêts (${t.gabarits_actifs}/${t.gabarits})` },
+    {
+      ok: t.grilles_actives === t.grilles && t.grilles > 0,
+      texte: `Grilles de compétences actives (${t.grilles_actives}/${t.grilles})`,
+      action:
+        t.grilles === 0
+          ? 'Aucune grille n’existe pour cette matière : il faut en créer une avant toute correction.'
+          : `Il y a ${t.grilles} grille(s), dont ${t.grilles - t.grilles_actives} encore en brouillon. Ouvre « 🔎 tout voir » et active celles qui manquent.`,
+    },
+    {
+      ok: t.sujets_actifs > 0,
+      texte: `Sujets visibles au dépôt (${t.sujets_actifs}/${t.sujets})`,
+      action:
+        t.sujets === 0
+          ? 'Aucun sujet n’est encore déposé pour cette matière : dépose-le depuis « Bacs blancs & sujets ».'
+          : 'Des sujets existent mais aucun n’est visible : rends-en un visible, sinon les profs n’ont rien à choisir au dépôt.',
+    },
+    {
+      ok: t.gabarits_actifs === t.gabarits && t.gabarits > 0,
+      texte: `Dossiers élève prêts (${t.gabarits_actifs}/${t.gabarits})`,
+      action:
+        t.gabarits === 0
+          ? 'Aucun gabarit de dossier élève : la correction marchera, mais l’élève ne recevra pas son dossier PDF.'
+          : `${t.gabarits - t.gabarits_actifs} gabarit(s) encore inactif(s) : active-les dans « 🔎 tout voir ».`,
+    },
     {
       ok: etalonsReels > 0,
       texte:
         etalonsReels > 0
           ? `${etalonsReels} copies étalons réelles (+ ${t.etalons_synthetiques} synthétiques)`
           : `Copies étalons 100 % synthétiques (${t.etalons}) — inventées pour caler l’échelle, note approximative`,
+      action:
+        'Dépose une VRAIE copie d’élève déjà corrigée par un prof et marque-la comme étalon. Les étalons synthétiques sont inventés : ils calent l’échelle grossièrement, la note reste approximative.',
     },
-    { ok: t.etalons_valides > 0, texte: t.etalons_valides > 0 ? `${t.etalons_valides} étalons validés par un prof` : 'Aucun étalon validé par un prof' },
-    { ok: t.corrections_reussies > 0, texte: t.corrections_reussies > 0 ? `${t.corrections_reussies} copie(s) corrigée(s) récemment` : 'Aucune copie corrigée pour l’instant' },
-    { ok: t.retours_profs > 0, texte: t.retours_profs > 0 ? `${t.retours_profs} retour(s) de prof relecteur` : 'Pas encore de retour de prof relecteur' },
+    {
+      ok: t.etalons_valides > 0,
+      texte: t.etalons_valides > 0 ? `${t.etalons_valides} étalons validés par un prof` : 'Aucun étalon validé par un prof',
+      action: 'Un prof doit relire la note d’un étalon et la valider. Sans cette validation, personne n’a jamais confirmé que l’échelle est bonne.',
+    },
+    {
+      ok: t.corrections_reussies > 0,
+      texte: t.corrections_reussies > 0 ? `${t.corrections_reussies} copie(s) corrigée(s) récemment` : 'Aucune copie corrigée pour l’instant',
+      action: 'Dépose une copie de bout en bout et lance la correction : c’est le seul moyen de vérifier que la chaîne complète fonctionne pour cette matière.',
+    },
+    {
+      ok: t.retours_profs > 0,
+      texte: t.retours_profs > 0 ? `${t.retours_profs} retour(s) de prof relecteur` : 'Pas encore de retour de prof relecteur',
+      action: 'Demande à un prof de relire un dossier corrigé et de donner son avis. C’est facultatif pour que ça marche, mais c’est ce qui fait progresser la correction.',
+    },
   ];
   const prets = points.filter((p) => p.ok).length;
+  const manquants = points.filter((p) => !p.ok);
 
   const jours = m.session ? joursAvant(m.session.date_epreuve) : null;
 
@@ -451,7 +516,9 @@ function CarteMatiere({
               style={{ width: `${(prets / points.length) * 100}%` }}
             />
           </div>
-          <span className="text-xs text-gray-500 whitespace-nowrap">{prets}/{points.length} prêts</span>
+          <span className="text-xs text-gray-500 whitespace-nowrap">
+            {prets}/{points.length} prêts
+          </span>
           <button type="button" onClick={() => setOuverte(!ouverte)} className="text-xs text-purple-700 hover:underline whitespace-nowrap">
             {ouverte ? 'replier' : 'détail'}
           </button>
@@ -464,6 +531,34 @@ function CarteMatiere({
             🔎 tout voir
           </button>
         </div>
+
+        {/* Ce qui manque, écrit noir sur blanc et sans avoir à déplier quoi que
+            ce soit : la jauge seule ne dit pas quoi faire. */}
+        {manquants.length > 0 && (
+          <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+            <p className="text-xs font-semibold text-amber-900">
+              {manquants.length === 1
+                ? 'Il reste une chose à faire pour que cette matière soit complète :'
+                : `Il reste ${manquants.length} choses à faire pour que cette matière soit complète :`}
+            </p>
+            <ol className="mt-1.5 space-y-1.5">
+              {manquants.map((p, i) => (
+                <li key={p.texte} className="text-xs text-amber-900 flex gap-2">
+                  <span className="font-semibold shrink-0">{i + 1}.</span>
+                  <span>
+                    <span className="font-medium">{p.action ?? p.texte}</span>
+                    {p.action && <span className="block text-amber-700/80 mt-0.5">Aujourd’hui : {p.texte}</span>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+        {manquants.length === 0 && (
+          <p className="mt-2 text-xs text-emerald-700">
+            ✅ Rien ne manque : {m.label} est complète et prête à corriger.
+          </p>
+        )}
       </div>
 
       {ouverte && (
@@ -472,7 +567,12 @@ function CarteMatiere({
             {points.map((p) => (
               <li key={p.texte} className={`text-xs flex items-start gap-1.5 ${p.ok ? 'text-gray-600' : 'text-amber-700'}`}>
                 <span>{p.ok ? '✅' : '⚠️'}</span>
-                <span>{p.texte}</span>
+                <span>
+                  {p.texte}
+                  {!p.ok && p.action && (
+                    <span className="block text-amber-800 font-medium mt-0.5">→ {p.action}</span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>
