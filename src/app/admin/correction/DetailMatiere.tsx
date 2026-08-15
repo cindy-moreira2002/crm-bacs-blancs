@@ -18,6 +18,7 @@ import type {
   SujetDetail,
 } from '@/lib/pipelineDetail';
 import type { ExamenEtat } from '@/lib/pipelineEtat';
+import { compositionDe, expliquerEchelle } from '@/lib/epreuves';
 
 function dateCourte(iso: string) {
   return new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -166,7 +167,13 @@ function BlocBaremes({ baremes }: { baremes: ExamenEtat[] }) {
 
 // --- Barèmes ----------------------------------------------------------
 
-function CarteGrille({ g }: { g: GrilleDetail }) {
+function CarteGrille({ g, matiere }: { g: GrilleDetail; matiere: string }) {
+  const explication = expliquerEchelle(matiere, g.exercise_type);
+  const composition = compositionDe(matiere, g.exercise_type);
+  const somme = g.criteres.length
+    ? Math.round(g.criteres.reduce((n, c) => n + (c.maximum_score ?? 0), 0) * 100) / 100
+    : null;
+
   return (
     <div className="border border-gray-200 rounded-xl p-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -194,15 +201,38 @@ function CarteGrille({ g }: { g: GrilleDetail }) {
 
       {g.principle && <p className="text-xs text-gray-500 italic mt-2">{g.principle}</p>}
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      {/* Pourquoi cette grille n'est pas sur 20 : la question revient à chaque
+          fois qu'on ouvre une partie d'épreuve composée. La réponse doit être
+          là, pas à chercher. */}
+      {explication && (
+        <p className="mt-2 text-xs text-sky-900 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+          {explication}
+          {composition?.note && <span className="block mt-1 text-sky-800">{composition.note}</span>}
+        </p>
+      )}
+
+      {/* D'où viennent les points, sans avoir à ouvrir quoi que ce soit : c'est
+          la première chose qu'on cherche en relisant une note. */}
+      <div className="mt-3 space-y-1">
+        <p className="text-[11px] text-gray-500">
+          La note est la somme de ces {g.criteres.length} critères. Clique un critère pour voir à
+          quoi correspond chaque palier.
+        </p>
         {g.criteres.map((c) => (
           <details key={c.code} className="group">
-            <summary className="cursor-pointer list-none inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 hover:bg-purple-100 text-xs text-gray-700">
-              <b>{c.code}</b> {c.name}
-              {c.maximum_score != null && <span className="text-gray-400">/{c.maximum_score}</span>}
+            <summary className="cursor-pointer list-none flex items-baseline gap-2 px-2 py-1 rounded-lg hover:bg-purple-50 text-xs text-gray-700">
+              <span className="text-gray-400 group-open:rotate-90 transition-transform">▸</span>
+              <span className="flex-1">{c.name}</span>
+              {c.maximum_score != null && (
+                <b className="text-gray-900 whitespace-nowrap">{c.maximum_score} pts</b>
+              )}
             </summary>
             {c.levels && (
-              <div className="mt-1 mb-2 ml-2 border-l-2 border-purple-200 pl-3 space-y-1">
+              <div className="mt-1 mb-2 ml-6 border-l-2 border-purple-200 pl-3 space-y-1">
+                <p className="text-[11px] text-gray-500 italic">
+                  Le correcteur choisit UN palier, celui qui décrit vraiment la copie, puis ajuste à
+                  l’intérieur. Il ne part jamais du maximum pour retrancher.
+                </p>
                 {Object.entries(c.levels)
                   .sort((a, b) => Number(a[0]) - Number(b[0]))
                   .map(([palier, description]) => (
@@ -214,6 +244,14 @@ function CarteGrille({ g }: { g: GrilleDetail }) {
             )}
           </details>
         ))}
+        {somme != null && (
+          <p className="text-[11px] text-gray-500 pl-2 pt-1 border-t border-gray-100">
+            Total : {somme} points
+            {g.bareme_total != null && Math.abs(somme - g.bareme_total) > 0.001 && (
+              <span className="text-red-600 font-semibold"> — mais la grille annonce {g.bareme_total}</span>
+            )}
+          </p>
+        )}
       </div>
 
       <div className="mt-3 text-[11px] text-gray-500 flex flex-wrap gap-x-4 gap-y-1">
@@ -463,7 +501,7 @@ export function DetailMatiereVue({
       >
         <div className="space-y-3">
           {detail.grilles.map((g) => (
-            <CarteGrille key={g.id} g={g} />
+            <CarteGrille key={g.id} g={g} matiere={detail.matiere} />
           ))}
           {detail.grilles.length === 0 && <p className="text-sm text-red-600">Aucun barème en base pour cette matière.</p>}
         </div>

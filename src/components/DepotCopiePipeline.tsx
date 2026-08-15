@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // Les libellés d'épreuve vivent dans matieres.ts, sans aucun import serveur :
 // un composant client peut les lire tels quels.
 import { labelExercice } from '@/lib/matieres';
+import { expliquerEchelle } from '@/lib/epreuves';
 
 type Sujet = {
   id: string;
@@ -354,6 +355,9 @@ export function DepotCopiePipeline() {
   if (suivis.length > 0) {
     const complet = suivis.length > 1;
     const eleve = suivis.map((s) => statuts[s.id]?.eleve).find(Boolean) ?? null;
+    // La matière du lot suivi : elle sert à expliquer une note qui n'est pas
+    // sur 20 (partie d'épreuve composée en SES, exercice d'HGGSP…).
+    const matiereDuSuivi = examen?.matiere ?? sujet?.matiere ?? '';
     // Le dossier affiché en bas : celui de la première copie prête. Sur un bac
     // blanc complet, chaque exercice a le sien.
     const dossierAffiche = suivis.find((s) => statuts[s.id]?.dossier_id) ?? null;
@@ -372,6 +376,7 @@ export function DepotCopiePipeline() {
           <div className={complet ? 'mt-6 grid sm:grid-cols-2 gap-6' : 'mt-6'}>
             {suivis.map((s) => {
               const st = statuts[s.id] ?? null;
+              const echelle = expliquerEchelle(matiereDuSuivi, s.exercise_type);
               const dossierPret = Boolean(st?.dossier_id);
               const courant = indexEtape(st?.statut ?? 'uploaded', dossierPret);
               const echec = Boolean(st?.echec);
@@ -420,6 +425,10 @@ export function DepotCopiePipeline() {
                           note officielle de l’exercice : {st.note_officielle} / {st.max_officiel ?? 10}
                         </span>
                       )}
+                      {/* Une note qui n'est pas sur 20 se lit comme une erreur
+                          tant qu'on n'a pas dit de quelle partie d'épreuve elle
+                          vient. */}
+                      {echelle && <span className="text-xs text-amber-900 max-w-md">{echelle}</span>}
                     </div>
                   )}
 
