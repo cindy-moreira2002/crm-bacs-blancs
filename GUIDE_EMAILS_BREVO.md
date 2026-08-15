@@ -139,37 +139,87 @@ Ce script est rejouable : le relancer ne casse rien et n'efface rien.
 > cliqué, adresse qui rebondit — et l'enregistrement automatique des
 > désinscriptions faites depuis un e-mail.
 
-1. Brevo → en haut à droite, clique sur **le nom de ton compte** → **Settings**
-   → entrée **Webhooks** → créer un **webhook SORTANT** (*outbound*).
-   Choisis bien la catégorie **Transactional email** (les webhooks
-   « Marketing » sont un autre écran et ne servent pas ici).
+> ⚠️ **Procédure vérifiée le 15/08/2026 sur la NOUVELLE interface Brevo.**
+> L'ancien chemin « Settings → Webhooks » n'existe plus : c'est maintenant
+> **Integrations → Webhooks**, et la création se fait en trois écrans
+> (nom → URL → événements). Source : [aide Brevo, « Create outbound
+> webhooks »](https://help.brevo.com/hc/en-us/articles/27824932835474-Create-outbound-webhooks-to-send-real-time-data-from-Brevo-to-an-external-app).
 
-   ⚠️ **Sortant, pas entrant.** Les deux noms sont donnés du point de vue de
-   Brevo : *sortant* = Brevo envoie l'information vers notre site (« délivré »,
-   « ouvert », « a rebondi ») — c'est ce dont on a besoin, et c'est inclus dans
-   l'offre gratuite. *Entrant* = un autre outil écrit dans Brevo ; on ne s'en
-   sert pas, et il est réservé aux forfaits supérieurs.
-2. URL à coller (remplace `TON_SECRET` par la valeur de `EMAILS_WEBHOOK_SECRET`) :
+**Avant de commencer**, récupère la valeur de `EMAILS_WEBHOOK_SECRET` :
+Vercel → projet **espaces-matineesdubac** → **Settings** → **Environment
+Variables** → ligne `EMAILS_WEBHOOK_SECRET` → menu `···` → **Edit** : la valeur
+s'affiche. Si elle est remplacée par des points avec la mention qu'elle ne peut
+pas être lue, c'est une variable « Sensitive » : personne ne peut la relire,
+même pas Vercel. Dans ce cas, fabrique-en une neuve —
+
+```bash
+openssl rand -hex 32
+```
+
+— colle-la dans le champ **Value**, **Save**, puis onglet **Deployments** → sur
+le dernier déploiement, menu `···` → **Redeploy**. C'est cette nouvelle valeur
+que tu utiliseras à l'étape 3 ci-dessous. **Hexadécimal obligatoire** : ce
+secret voyage dans une URL, et un `+` y serait lu comme un espace.
+
+1. **Ouvrir l'écran des webhooks.** Va sur <https://app.brevo.com> → clique sur
+   **le nom de ton compte** en haut à droite → **Integrations** → **Webhooks**.
+2. **Créer.** Bouton **Add webhook** → choisis **Outbound webhook** → de nouveau
+   **Add webhook**.
+
+   ⚠️ **Outbound (sortant), pas Inbound (entrant).** Les deux noms sont donnés
+   du point de vue de Brevo : *outbound* = Brevo envoie l'information vers notre
+   site (« délivré », « ouvert », « a rebondi ») — c'est ce dont on a besoin, et
+   c'est inclus dans l'offre gratuite. *Inbound* = un autre outil écrit dans
+   Brevo ; on ne s'en sert pas.
+3. **Nom** : `CRM Matinées du Bac` → **Continue**.
+4. **URL** — colle ceci en remplaçant `TON_SECRET` par la valeur récupérée
+   plus haut (aucun espace, aucun retour à la ligne) :
 
    ```
    https://crm-bacs-blancs-ihgf.vercel.app/api/emails/webhook-brevo?jeton=TON_SECRET
    ```
 
-3. Coche les événements : **Delivered, Opened, Clicked, Soft bounce, Hard
-   bounce, Spam, Unsubscribed, Blocked**.
-4. Enregistre.
+5. **Authentication** : laisse **No authentication** (le secret est déjà dans
+   l'URL). N'ajoute aucun header.
+6. **Sending strategy** : choisis **Send one at a time** (temps réel). Le mode
+   « batch » retarderait l'affichage des statuts. → **Continue**.
+7. **Événements** : sélectionne la catégorie **Transactional email**. Par défaut
+   tous les événements de la catégorie sont activés — **laisse-les tous**. Le
+   site sait traiter `delivered`, `opened`, `clicked`, `soft_bounce`,
+   `hard_bounce`, `spam`, `unsubscribed`, `blocked`, et ignore poliment le reste.
+8. **Tester avant d'activer** (facultatif mais rassurant) : clique les trois
+   points `⋯` à côté d'un événement → **Send test request**. Notre route répond
+   `200` ; une réponse `401` signifie que le jeton collé dans l'URL ne
+   correspond pas à `EMAILS_WEBHOOK_SECRET`.
+9. Clique **Activate webhook**.
+
+**Comment savoir que ça marche** : au prochain e-mail parti, la ligne passe de
+« parti » à « reçu » dans le tableau de bord Direction, et de `sent` à
+`delivered` dans `/admin/emails` → onglet **Messages**.
 
 ### Étape 7 — Arrêter l'ancien système Gmail (1 min, IMPORTANT)
 
 Sans cette étape, certains élèves recevraient **deux** confirmations (une de
 Gmail, une de Brevo).
 
+**De quoi on parle.** Avant Brevo, les e-mails du CRM partaient de **ta boîte
+Gmail** : un petit programme hébergé chez Google (Google Apps Script) se
+réveillait toutes les 5 minutes, lisait la table `inscriptions` dans Supabase et
+envoyait lui-même les confirmations et les rappels avec `MailApp.sendEmail`. Le
+code est encore dans le dépôt, à titre d'archive : `GOOGLE_APPS_SCRIPT.js`
+(fonctions `tachePrincipale`, `envoyerRappelsJ1`, `envoyerRappelsH1`). Ce qui le
+fait tourner, ce n'est pas le code mais un **déclencheur** (*trigger*) posé sur
+ton compte Google. C'est ce déclencheur qu'on supprime.
+
 Tu as plusieurs projets Apps Script, et le repère n'est **pas** le nom du projet
 mais **le nom de la fonction : `tachePrincipale`**.
 
-1. Va sur [script.google.com](https://script.google.com) → menu de gauche →
-   **Mes déclencheurs**. Cette page liste TOUS les déclencheurs, tous projets
-   confondus, avec la fonction exécutée.
+1. Va sur <https://script.google.com/home/triggers> (lien direct vers la page
+   « Mes déclencheurs » ; sinon <https://script.google.com> → menu de gauche →
+   **Mes déclencheurs**). Cette page liste TOUS les déclencheurs, tous projets
+   confondus, avec la fonction exécutée. **Si aucune ligne ne porte la fonction
+   `tachePrincipale`, il n'y a rien à faire** : l'ancien système est déjà à
+   l'arrêt, passe à la suite.
 2. Repère la ligne dont la fonction est **`tachePrincipale`** (toutes les 5 min).
 3. `⋮` → **Supprimer le déclencheur**. Supprime **le déclencheur, pas le
    projet** : le code reste, il ne se lance simplement plus tout seul.
@@ -222,6 +272,26 @@ Tu y trouves :
 - l'onglet **Paiements à confirmer** : c'est là que tu marques « payé » après un
   virement Revolut ;
 - l'onglet **Réglages** : tous les délais.
+
+### Tu valides chaque e-mail avant qu'il parte (depuis le 15/08/2026)
+
+Réglage **« Je valide chaque e-mail avant qu'il parte »**, sur **`oui`** par
+défaut. Tant qu'il est sur `oui` :
+
+- le planificateur continue de tout préparer (rien n'est perdu) ;
+- le moteur automatique, lui, n'envoie **plus rien** — il se contente de
+  simuler et de le dire dans son compte rendu ;
+- chaque message attend le bouton **« Valider et envoyer »**, dans
+  `/admin/emails` → onglet **Messages**, ligne par ligne. Le bouton **« Voir »**
+  juste à côté affiche l'e-mail exact avant décision ;
+- un bandeau orange rappelle combien de messages attendent ton feu vert, sur
+  `/admin/emails` comme sur le tableau de bord Direction.
+
+Pour revenir à l'envoi automatique un jour : onglet **Réglages**, passe
+« Je valide chaque e-mail avant qu'il parte » sur **`non`**.
+
+⚠️ **À ne pas confondre avec « Envoi réel actif = non »**, qui gèle *tout*, y
+compris le bouton « Valider et envoyer ».
 
 ### La répétition générale (rien ne part)
 

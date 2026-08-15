@@ -62,10 +62,15 @@ export function libelleMatiere(matiere: string): string {
 
 // Matières qui ont au moins une session à venir (pour le menu déroulant).
 // `examen` restreint à un univers ; sans argument, on renvoie tout.
-export function matieresDisponibles(examen?: Examen, ref: Date = new Date()): string[] {
+// `liste` : les sessions réellement en base quand on les a chargées.
+export function matieresDisponibles(
+  examen?: Examen,
+  ref: Date = new Date(),
+  liste: Session[] = SESSIONS_PLATEFORME,
+): string[] {
   const today = new Date(ref); today.setHours(0, 0, 0, 0);
   const set = new Set<string>();
-  for (const s of SESSIONS_PLATEFORME) {
+  for (const s of liste) {
     if (new Date(s.date) < today) continue;
     if (examen && examenDeMatiere(s.matiere) !== examen) continue;
     set.add(s.matiere);
@@ -74,11 +79,34 @@ export function matieresDisponibles(examen?: Examen, ref: Date = new Date()): st
 }
 
 // Sessions à venir d'une matière, triées par date croissante.
-export function sessionsPourMatiere(matiere: string, ref: Date = new Date()): Session[] {
+export function sessionsPourMatiere(
+  matiere: string,
+  ref: Date = new Date(),
+  liste: Session[] = SESSIONS_PLATEFORME,
+): Session[] {
   const today = new Date(ref); today.setHours(0, 0, 0, 0);
-  return SESSIONS_PLATEFORME
+  return liste
     .filter(s => s.matiere === matiere && new Date(s.date) >= today)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
+/**
+ * Les sessions telles qu'elles sont EN BASE, pour un composant client.
+ *
+ * `SESSIONS_PLATEFORME` reste le filet de secours : si l'appel échoue (Supabase
+ * indisponible), le formulaire d'inscription propose encore des dates plutôt
+ * qu'un menu vide. La vérité, elle, est dans `sessions_bacs_blancs` : c'est là
+ * qu'écrit /admin/bacs-blancs, et c'est ce que lit `/api/sessions`.
+ */
+export async function chargerSessionsPubliques(): Promise<Session[]> {
+  try {
+    const r = await fetch('/api/sessions', { cache: 'no-store' });
+    if (!r.ok) return SESSIONS_PLATEFORME;
+    const d = (await r.json()) as { sessions?: Session[] };
+    return Array.isArray(d.sessions) && d.sessions.length ? d.sessions : SESSIONS_PLATEFORME;
+  } catch {
+    return SESSIONS_PLATEFORME;
+  }
 }
 
 // Libellé lisible d'une date de session : "sam. 6 sept. · 9h — 13h · 8 places"

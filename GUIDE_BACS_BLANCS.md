@@ -8,6 +8,43 @@ corriger, ici on organise l'épreuve elle-même.
 
 ---
 
+## Créer un bac blanc
+
+Bouton **« ＋ Nouveau bac blanc »**, en haut à droite de la page. La fenêtre
+demande, dans l'ordre : la matière, la date, l'heure de début et de fin, le
+nombre de places, le nombre de professeurs prévus — puis **la liste complète des
+professeurs de la base**, à cocher. Ceux qui déclarent la matière choisie
+remontent en tête avec une pastille verte. Un professeur oublié se rattrape
+depuis la carte de l'épreuve : le menu « Choisir un professeur… » est le même.
+
+Deux refus au moment de créer, plutôt qu'une mauvaise surprise plus tard :
+
+- **une heure de début illisible** (« le matin », « 9 heures ») — toute la
+  publication automatique du sujet se calcule depuis elle ;
+- **un doublon** matière + date, que la base refuserait avec un message
+  incompréhensible.
+
+La liste des professeurs, elle, se gère sur **`/admin/profs`** (onglet
+👥 Profs & accès) : valider une candidature, définir un mot de passe, suspendre
+un compte. Tout professeur qui y figure et n'est pas suspendu apparaît dans la
+fenêtre de création.
+
+**Une session créée ici est immédiatement proposée aux familles** sur la page
+d'inscription : elles lisent `/api/sessions`, donc la base. Le tableau
+`SESSIONS_PLATEFORME` de `src/lib/sessions.ts` ne sert plus que de secours si
+Supabase ne répond pas.
+
+Si des dates ne figurent que dans ce fichier (c'était le cas des six brevets
+blancs), une commande les recopie en base et rattache au passage les
+inscriptions restées orphelines :
+
+```bash
+npm run sessions:verifier       # rapport, n'écrit rien
+npm run sessions:synchroniser   # écrit
+```
+
+---
+
 ## Ce que la page montre, par bac blanc
 
 | | |

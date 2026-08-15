@@ -32,6 +32,15 @@ function dateCourte(iso: string) {
   };
 }
 
+/** « lun 15 août, 10 h 50 » — l'heure d'un envoi, en français lisible. */
+function instantCourt(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const jour = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+  const heure = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return `${jour.replace(/\./g, '')} · ${heure.replace(':', ' h ')}`;
+}
+
 function compteARebours(jours: number) {
   if (jours < 0) return 'passé';
   if (jours === 0) return 'aujourd’hui';
@@ -182,9 +191,11 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
             sous={
               emails.disponible && !emails.actif
                 ? 'envoi à l’arrêt'
-                : emails.disponible
-                  ? `${emails.programmes} programmés`
-                  : undefined
+                : emails.disponible && emails.derniers_envois.length > 0
+                  ? `dernier : ${instantCourt(emails.derniers_envois[0].quand)}`
+                  : emails.disponible
+                    ? `${emails.programmes} programmés`
+                    : undefined
             }
             ton={emails.disponible && !emails.actif ? 'alerte' : 'neutre'}
           />
@@ -443,6 +454,81 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
                   ton={emails.en_erreur + emails.bloques ? 'alerte' : 'ok'}
                 />
               </div>
+              {emails.validation_manuelle && (
+                <p className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-900">
+                  <strong>Tu valides chaque e-mail.</strong> Rien ne part tout seul : les messages
+                  sont préparés, puis attendent ton bouton « Valider et envoyer » dans l’onglet
+                  Messages.
+                  {emails.en_attente > 0 && ` ${emails.en_attente} attendent ton feu vert.`}
+                </p>
+              )}
+
+              {emails.derniers_envois.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Derniers messages partis
+                  </p>
+                  <ul className="mt-2 space-y-1.5">
+                    {emails.derniers_envois.map((e) => (
+                      <li
+                        key={e.id}
+                        className="flex items-baseline justify-between gap-3 border-b border-slate-100 pb-1.5 last:border-0"
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-xs text-slate-800 truncate">
+                            {e.libelle}
+                            {e.test && <span className="text-slate-400"> · test</span>}
+                          </span>
+                          <span className="block text-[11px] text-slate-500 truncate">
+                            → {e.destinataire}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-[11px] text-slate-500 tabular-nums">
+                            {instantCourt(e.quand)}
+                          </span>
+                          <span
+                            className={`block text-[11px] ${e.delivre ? 'text-emerald-600' : 'text-slate-400'}`}
+                          >
+                            {e.delivre ? 'reçu' : 'parti'}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="mt-4 text-[11px] text-slate-400">
+                  Aucun message n’est encore parti. Le journal se remplit tout seul dès le premier
+                  envoi.
+                </p>
+              )}
+
+              {emails.prochains_envois.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Prochains départs programmés
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {emails.prochains_envois.map((e) => (
+                      <li
+                        key={e.id}
+                        className="flex items-baseline justify-between gap-3 text-[11px] text-slate-500"
+                      >
+                        <span className="truncate">
+                          {e.libelle} → {e.destinataire}
+                        </span>
+                        <span className="shrink-0 tabular-nums">{instantCourt(e.quand)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5 text-[11px] text-slate-400">
+                    {emails.programmes} messages attendent leur heure — la liste complète est dans
+                    l’onglet « Messages » de la page E-mails.
+                  </p>
+                </div>
+              )}
+
               {!emails.actif && (
                 <p className="mt-3 rounded-lg bg-red-50 border border-red-200 p-2.5 text-[11px] text-red-800">
                   L’envoi est à l’arrêt : la clé Brevo manque. Les messages sont préparés et rangés

@@ -174,6 +174,26 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
     }
   }
 
+  /** Le feu vert du mode « je relis avant que ça parte » : un message à la fois. */
+  async function valider(m: MessageAdmin) {
+    const ok = confirm(
+      `VALIDER ET ENVOYER\n\n` +
+        `Destinataire : ${m.destinataire}\n` +
+        `Modèle : ${m.type_libelle}\n` +
+        `Élève : ${m.eleve ?? '—'}\n` +
+        `Matière : ${m.matiere ?? '—'}\n` +
+        `Session : ${m.session_date ?? '—'}\n\n` +
+        `Relis-le avec « Voir » si tu as un doute.\n` +
+        `Ce message part maintenant, pour de vrai. Confirmer ?`,
+    );
+    if (!ok) return;
+    const data = await agir({ action: 'valider', id: m.id, confirme: true }, `valider-${m.id}`);
+    if (data) {
+      setJournal(String(data.message ?? 'Message envoyé.'));
+      charger();
+    }
+  }
+
   async function lancerMoteur(simulation: boolean) {
     if (
       !simulation &&
@@ -501,6 +521,15 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
                           <Bouton onClick={() => envoyerTest(m)} occupe={occupe === `test-${m.id}`}>
                             Test
                           </Bouton>
+                          {['pending', 'scheduled'].includes(m.statut) && (
+                            <Bouton
+                              onClick={() => valider(m)}
+                              occupe={occupe === `valider-${m.id}`}
+                              principal
+                            >
+                              Valider et envoyer
+                            </Bouton>
+                          )}
                           {['pending', 'scheduled', 'bloque', 'failed'].includes(m.statut) && (
                             <Bouton onClick={() => annulerMessage(m)} occupe={occupe === `annuler-${m.id}`}>
                               Annuler

@@ -15,6 +15,7 @@ import { profConnecte } from '@/lib/authProf';
 import {
   assignerProf,
   chargerEtatBacsBlancs,
+  creerBacBlanc,
   enregistrerSujet,
   lienSujet,
   majSujet,
@@ -54,6 +55,23 @@ export async function POST(req: NextRequest) {
     const action = String(corps.action ?? '');
 
     switch (action) {
+      // Créer l'épreuve, avec ses professeurs s'ils sont déjà choisis.
+      case 'creer-bac-blanc': {
+        const { id, avertissements } = await creerBacBlanc({
+          matiere: String(corps.matiere ?? ''),
+          date_epreuve: String(corps.date_epreuve ?? ''),
+          heure_debut: corps.heure_debut ? String(corps.heure_debut) : null,
+          heure_fin: corps.heure_fin ? String(corps.heure_fin) : null,
+          places: corps.places !== undefined ? Number(corps.places) : null,
+          coachs_recherches:
+            corps.coachs_recherches !== undefined ? Number(corps.coachs_recherches) : null,
+          professeur_ids: Array.isArray(corps.professeur_ids)
+            ? corps.professeur_ids.map((v: unknown) => String(v))
+            : [],
+        });
+        return NextResponse.json({ ok: true, id, avertissements });
+      }
+
       case 'assigner-prof': {
         await assignerProf(String(corps.session_id), String(corps.professeur_id));
         return NextResponse.json({ ok: true });

@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { BacBlanc, EtatBacsBlancs, ProfLite, RetourSession, SujetSession } from '@/lib/bacsBlancs';
+import { ModaleNouveauBacBlanc } from './ModaleNouveauBacBlanc';
 
 const TYPES_SUJET = [
   { cle: 'sujet', label: 'Sujet' },
@@ -566,6 +567,7 @@ export function TableauBacsBlancs() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
   const [voirPasses, setVoirPasses] = useState(false);
+  const [creation, setCreation] = useState(false);
   const premierChargement = useRef(true);
 
   const charger = useCallback(async () => {
@@ -635,18 +637,41 @@ export function TableauBacsBlancs() {
           <Link href="/espace-prof" className="text-sm text-purple-700 hover:underline">
             ← Mon espace
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mt-2">Bacs blancs</h1>
+          <div className="flex flex-wrap items-center gap-3 mt-2">
+            <h1 className="text-3xl font-bold text-gray-900">Bacs blancs</h1>
+            <button
+              type="button"
+              onClick={() => setCreation(true)}
+              className="ml-auto px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold hover:bg-black"
+            >
+              ＋ Nouveau bac blanc
+            </button>
+          </div>
           <p className="text-gray-600 mt-1">
             Chaque épreuve à venir : qui l’encadre, quel sujet, combien d’élèves. Et, une fois
             passée, ce que les professeurs en ont dit.
           </p>
           <p className="text-xs text-gray-400 mt-2">
             {aVenir.length} à venir · {passes.length} passé{passes.length > 1 ? 's' : ''} ·{' '}
+            {etat.profs.length} professeur{etat.profs.length > 1 ? 's' : ''} en base (
+            <Link href="/admin/profs" className="text-purple-700 hover:underline">
+              gérer
+            </Link>
+            ) ·{' '}
             <Link href="/admin/correction" className="text-purple-700 hover:underline">
               pilotage de la correction
             </Link>
           </p>
         </header>
+
+        {creation && (
+          <ModaleNouveauBacBlanc
+            profs={etat.profs}
+            agir={agir}
+            occupe={occupe}
+            onFerme={() => setCreation(false)}
+          />
+        )}
 
         {erreur && (
           <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-800">{erreur}</div>

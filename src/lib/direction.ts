@@ -18,7 +18,8 @@
 import { crmAdmin, CHAMPS_PROF, type Professeur } from '@/lib/authProf';
 import { chargerEtatBacsBlancs, type BacBlanc } from '@/lib/bacsBlancs';
 import { discordManquant } from '@/lib/discord/config';
-import { emailsManquant } from '@/lib/emails/config';
+import { emailsManquant, estTypeEmail, LIBELLE_TYPE } from '@/lib/emails/config';
+import { chargerReglages, validationManuelle } from '@/lib/emails/reglages';
 import { chargerPaiements } from '@/lib/paiements';
 import { pipelineDb, pipelineManquant, STATUTS_CORRIGE, STATUTS_ECHEC } from '@/lib/pipeline';
 
@@ -62,6 +63,22 @@ export type ResumeCorrection = {
   cout_30j_usd: number;
 };
 
+/** Une ligne du journal des départs : « ce mail-là est parti, à telle heure ». */
+export type EnvoiRecent = {
+  id: string;
+  /** Libellé lisible du type de message (« Prof — affectation à une session »). */
+  libelle: string;
+  /** À qui : le nom quand on l'a, sinon l'adresse. */
+  destinataire: string;
+  email: string;
+  role: string;
+  /** ISO : l'heure de départ réelle pour un envoi fait, prévue pour un envoi à venir. */
+  quand: string;
+  /** `true` quand Brevo a confirmé la remise (webhook branché). */
+  delivre: boolean;
+  test: boolean;
+};
+
 export type ResumeEmails = {
   en_attente: number;
   programmes: number;
@@ -70,6 +87,12 @@ export type ResumeEmails = {
   bloques: number;
   /** Brevo répond-il ? Sans clé, la file s'empile sans jamais partir. */
   actif: boolean;
+  /** `true` quand chaque message attend le feu vert de l'administratrice. */
+  validation_manuelle: boolean;
+  /** Les derniers messages réellement partis, du plus récent au plus ancien. */
+  derniers_envois: EnvoiRecent[];
+  /** Les prochains départs programmés, du plus proche au plus lointain. */
+  prochains_envois: EnvoiRecent[];
 };
 
 export type ResumeProfs = {
@@ -220,21 +243,52 @@ async function resumePaiements(): Promise<Bloc<ResumePaiements>> {
 async function resumeEmails(): Promise<Bloc<ResumeEmails>> {
   const manquants = emailsManquant();
   const db = crmAdmin();
+  const reglages = await chargerReglages();
 
-  const { data, error } = await db.from('emails').select('statut, planifie_le, envoye_le').limit(5000);
+  const { data, error } = await db
+    .from('emails')
+    .select(
+      'id, type, statut, planifie_le, envoye_le, destinataire_email, destinataire_nom, destinataire_role, test',
+    )
+    .limit(5000);
   if (error) {
     return indispo('La file d’e-mails n’est pas encore installée dans Supabase.', manquants);
   }
 
-  const lignes = (data ?? []) as { statut: string; planifie_le: string | null; envoye_le: string | null }[];
+  type LigneEmail = {
+    id: string;
+    type: string;
+    statut: string;
+    planifie_le: string | null;
+    envoye_le: string | null;
+    destinataire_email: string;
+    destinataire_nom: string | null;
+    destinataire_role: string;
+    test: boolean | null;
+  };
+  const lignes = (data ?? []) as LigneEmail[];
   const maintenant = Date.now();
   const seuil7j = maintenant - 7 * 86_400_000;
+
+  /** Une ligne de la file racontée en français, pour le journal du tableau de bord. */
+  const raconter = (l: LigneEmail, quand: string): EnvoiRecent => ({
+    id: l.id,
+    libelle: estTypeEmail(l.type) ? LIBELLE_TYPE[l.type] : l.type,
+    destinataire: (l.destinataire_nom ?? '').trim() || l.destinataire_email,
+    email: l.destinataire_email,
+    role: l.destinataire_role,
+    quand,
+    delivre: l.statut === 'delivered',
+    test: l.test === true,
+  });
 
   let en_attente = 0;
   let programmes = 0;
   let envoyes_7j = 0;
   let en_erreur = 0;
   let bloques = 0;
+  const partis: EnvoiRecent[] = [];
+  const aVenir: EnvoiRecent[] = [];
 
   for (const l of lignes) {
     // « En attente » = son heure est passée, il devrait déjà être parti.
@@ -242,13 +296,21 @@ async function resumeEmails(): Promise<Bloc<ResumeEmails>> {
     if (l.statut === 'pending' || l.statut === 'scheduled' || l.statut === 'processing') {
       if (du <= maintenant) en_attente += 1;
       else programmes += 1;
+      if (l.planifie_le) aVenir.push(raconter(l, l.planifie_le));
     }
     if (l.statut === 'sent' || l.statut === 'delivered') {
       if (l.envoye_le && new Date(l.envoye_le).getTime() >= seuil7j) envoyes_7j += 1;
+      if (l.envoye_le) partis.push(raconter(l, l.envoye_le));
     }
     if (l.statut === 'failed') en_erreur += 1;
     if (l.statut === 'bloque') bloques += 1;
   }
+
+  // Les plus récents d'abord pour ce qui est parti, les plus proches d'abord
+  // pour ce qui va partir : dans les deux cas, le haut de liste est ce qui
+  // compte maintenant.
+  partis.sort((a, b) => b.quand.localeCompare(a.quand));
+  aVenir.sort((a, b) => a.quand.localeCompare(b.quand));
 
   return {
     disponible: true,
@@ -258,6 +320,9 @@ async function resumeEmails(): Promise<Bloc<ResumeEmails>> {
     en_erreur,
     bloques,
     actif: manquants.length === 0,
+    validation_manuelle: validationManuelle(reglages),
+    derniers_envois: partis.slice(0, 8),
+    prochains_envois: aVenir.slice(0, 5),
   };
 }
 

@@ -23,6 +23,12 @@ export type Reglages = {
   paiement_instructions: string;
   paiement_montant_defaut: string;
   envoi_actif: string;
+  /**
+   * « oui » = rien ne part sans un clic de l'administratrice. Le planificateur
+   * continue de tout préparer, le moteur automatique n'envoie plus rien, et
+   * chaque message attend le bouton « Valider et envoyer ».
+   */
+  validation_manuelle: string;
   actif_depuis: string;
 };
 
@@ -44,5 +50,6 @@ export const LIBELLE_REGLAGE: Record<keyof Reglages, string> = {
   paiement_instructions: 'Instructions de virement (IBAN, référence…)',
   paiement_montant_defaut: 'Montant par défaut d’un bac blanc (€)',
   envoi_actif: 'Envoi réel actif ? (oui / non)',
+  validation_manuelle: 'Je valide chaque e-mail avant qu’il parte ? (oui / non)',
   actif_depuis: 'Système actif depuis (rien d’antérieur n’est envoyé)',
 };

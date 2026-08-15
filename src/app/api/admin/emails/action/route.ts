@@ -114,6 +114,35 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(res);
       }
 
+      // --- Valider un message en attente et l'envoyer tout de suite ---
+      //
+      // C'est la porte de sortie du mode « je relis avant que ça parte » : le
+      // moteur automatique ne fait plus rien tant que ce bouton n'a pas été
+      // cliqué, message par message.
+      case 'valider': {
+        if (corps.confirme !== true) {
+          return NextResponse.json({ error: 'Confirmation manquante.' }, { status: 400 });
+        }
+        const ligne = await lireEmail(id);
+        if (!ligne) return NextResponse.json({ error: 'Message introuvable' }, { status: 404 });
+
+        if (ligne.statut === 'sent' || ligne.statut === 'delivered') {
+          return NextResponse.json(
+            { error: 'Ce message est déjà parti. Le renvoyer créerait un doublon côté destinataire.' },
+            { status: 409 },
+          );
+        }
+        if (ligne.statut === 'cancelled') {
+          return NextResponse.json(
+            { error: 'Ce message a été annulé. Utilise « Renvoyer » si tu veux vraiment le faire partir.' },
+            { status: 409 },
+          );
+        }
+
+        const res = await envoyerMaintenant(ligne);
+        return NextResponse.json(res);
+      }
+
       // --- Modifier un réglage (délais, quota, textes) ---
       case 'reglage': {
         const cle = String(corps.cle ?? '');

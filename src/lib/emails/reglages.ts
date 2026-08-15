@@ -33,6 +33,10 @@ export const REGLAGES_DEFAUT: Reglages = {
   paiement_instructions: '',
   paiement_montant_defaut: '29',
   envoi_actif: 'oui',
+  // Par défaut : « oui ». Tant que Cindy n'a pas décidé le contraire, aucun
+  // message ne part sans son feu vert — c'est la règle depuis le 15/08/2026,
+  // après qu'une session de test a envoyé une vraie affectation à un vrai prof.
+  validation_manuelle: 'oui',
   // Par défaut : « maintenant ». Tant que la ligne n'existe pas en base, le
   // planificateur ne remonte donc pas dans le passé.
   actif_depuis: new Date().toISOString(),
@@ -104,4 +108,16 @@ export async function enregistrerReglage(cle: keyof Reglages, valeur: string): P
 /** Le mode « rien ne part » demandé depuis l'administration. */
 export function envoiDesactive(r: Reglages): boolean {
   return String(r.envoi_actif).trim().toLowerCase() !== 'oui';
+}
+
+/**
+ * Le mode « je relis avant que ça parte ».
+ *
+ * Différence avec `envoiDesactive` : ici l'envoi manuel reste possible. Le
+ * moteur automatique se contente de préparer les messages et de les laisser
+ * en file ; c'est le bouton « Valider et envoyer » de l'administration qui
+ * les fait partir, un par un, après relecture.
+ */
+export function validationManuelle(r: Reglages): boolean {
+  return String(r.validation_manuelle).trim().toLowerCase() === 'oui';
 }

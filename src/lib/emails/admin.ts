@@ -9,7 +9,7 @@
  * en attente de paiement.
  */
 import { emailsDb } from './client';
-import { chargerReglages, type Reglages } from './reglages';
+import { chargerReglages, validationManuelle, type Reglages } from './reglages';
 import { etatQuota, type EtatQuota, type LigneEmail } from './file';
 import { verifierCompteBrevo } from './brevo';
 import {
@@ -220,6 +220,12 @@ export async function chargerSnapshotEmails(f: FiltresEmails = {}): Promise<Snap
 
   const alertes: string[] = [];
   if (quota.alerte) alertes.push(quota.alerte);
+  if (validationManuelle(reglages)) {
+    const enAttente = (compteurs.pending ?? 0) + (compteurs.scheduled ?? 0);
+    alertes.push(
+      `Validation manuelle active : rien ne part tout seul. ${enAttente} message(s) attendent que tu cliques « Valider et envoyer ». Pour revenir à l’envoi automatique, passe le réglage « Je valide chaque e-mail avant qu’il parte » sur « non ».`,
+    );
+  }
   if (compteurs.bloque) {
     alertes.push(
       `${compteurs.bloque} message(s) bloqués : il leur manque une donnée (date, lien, adresse). Filtre sur « bloqué » pour voir laquelle.`,

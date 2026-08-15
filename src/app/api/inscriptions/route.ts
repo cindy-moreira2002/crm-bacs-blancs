@@ -16,6 +16,25 @@ const supabase = createClient(
 
 const GMAIL_WEBAPP = process.env.GMAIL_WEBAPP_URL;
 
+/**
+ * La session de `sessions_bacs_blancs` qui correspond à cette matière et cette
+ * date, ou `null`. La comparaison des matières est tolérante aux accents et à
+ * la casse : « Histoire-Géo » et « histoire-geo » désignent la même épreuve.
+ *
+ * Une inscription sans date reste sans session : on ne devine pas à quelle
+ * épreuve un élève s'inscrit.
+ */
+async function trouverSession(matiere: string, date: string | null): Promise<string | null> {
+  if (!date) return null;
+  const { data, error } = await supabase
+    .from('sessions_bacs_blancs')
+    .select('id, matiere')
+    .eq('date_epreuve', date);
+  if (error || !data?.length) return null;
+  const cible = normMatiere(matiere);
+  return data.find((s) => normMatiere(s.matiere) === cible)?.id ?? null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { nom, email, email_parent, telephone, matiere, date_epreuve } = await req.json();
@@ -27,8 +46,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Insert Supabase
-    const row = { nom, email, email_parent, telephone, matiere, date_epreuve: date_epreuve || null };
+    // 1. Insert Supabase — rattaché à SA session quand on peut la retrouver.
+    //
+    // `session_id` restait vide : le tableau de bord des bacs blancs comptait
+    // donc « 0 élève » sur des épreuves pleines, et les e-mails liés à une
+    // session ne partaient pas. La matière et la date suffisent à retrouver la
+    // ligne de `sessions_bacs_blancs` — c'est exactement ce que l'élève a choisi
+    // dans le formulaire, qui lit désormais la même table.
+    const sessionId = await trouverSession(matiere, date_epreuve);
+    const row = {
+      nom,
+      email,
+      email_parent,
+      telephone,
+      matiere,
+      date_epreuve: date_epreuve || null,
+      ...(sessionId ? { session_id: sessionId } : {}),
+    };
     let { data, error } = await supabase.from('inscriptions').insert([row]).select();
 
     // Repli si la colonne date_epreuve n'existe pas encore (migration non faite)
@@ -36,6 +70,14 @@ export async function POST(req: NextRequest) {
       const { date_epreuve: _omit, ...rowSansDate } = row;
       void _omit;
       ({ data, error } = await supabase.from('inscriptions').insert([rowSansDate]).select());
+    }
+
+    // Idem pour session_id : mieux vaut une inscription non rattachée qu'une
+    // inscription perdue.
+    if (error && /session_id/.test(error.message || '')) {
+      const { session_id: _sansSession, ...rowSansSession } = row as typeof row & { session_id?: string };
+      void _sansSession;
+      ({ data, error } = await supabase.from('inscriptions').insert([rowSansSession]).select());
     }
 
     if (error) {

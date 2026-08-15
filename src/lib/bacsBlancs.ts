@@ -386,6 +386,96 @@ export async function chargerEtatBacsBlancs(): Promise<EtatBacsBlancs> {
 
 // --- Écriture (administratrice) --------------------------------------
 
+export type NouveauBacBlanc = {
+  matiere: string;
+  date_epreuve: string;
+  heure_debut?: string | null;
+  heure_fin?: string | null;
+  places?: number | null;
+  coachs_recherches?: number | null;
+  /** Professeurs à assigner dans la foulée. */
+  professeur_ids?: string[];
+};
+
+/**
+ * Créer un bac blanc, et lui assigner ses professeurs dans le même geste.
+ *
+ * Trois refus assumés, tous avant l'écriture :
+ *
+ *  - une matière vide ou une date illisible ;
+ *  - une HEURE DE DÉBUT illisible (« 9 heures », « le matin ») : la base la
+ *    stocke en texte, mais toute la publication automatique du sujet en dépend
+ *    (`debut_le`). Refuser ici coûte une seconde ; s'en apercevoir le jour de
+ *    l'épreuve coûte l'épreuve ;
+ *  - un doublon matière + date, que la contrainte `unique` rattraperait avec un
+ *    message Postgres illisible.
+ *
+ * La session est créée d'abord, les profs ensuite : si l'un d'eux échoue, le bac
+ * blanc existe quand même et l'appelant reçoit la liste des ratés plutôt qu'une
+ * erreur qui laisserait croire que rien n'a été fait.
+ */
+export async function creerBacBlanc(
+  saisie: NouveauBacBlanc,
+): Promise<{ id: string; avertissements: string[] }> {
+  const matiere = String(saisie.matiere ?? '').trim();
+  if (!matiere) throw new Error('La matière est obligatoire.');
+
+  const date = String(saisie.date_epreuve ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(`${date}T00:00:00`).getTime())) {
+    throw new Error('Date de l’épreuve invalide (attendu : AAAA-MM-JJ).');
+  }
+
+  const heureDebut = (saisie.heure_debut ?? '').toString().trim() || '9h';
+  if (heureTexteEnMinutes(heureDebut) === null) {
+    throw new Error(`Heure de début illisible (« ${heureDebut} »). Écrire par exemple « 9h » ou « 9h30 ».`);
+  }
+  const heureFin = (saisie.heure_fin ?? '').toString().trim() || null;
+  if (heureFin && heureTexteEnMinutes(heureFin) === null) {
+    throw new Error(`Heure de fin illisible (« ${heureFin} »). Écrire par exemple « 13h ».`);
+  }
+
+  const entier = (v: unknown, defaut: number) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) && n >= 0 ? n : defaut;
+  };
+
+  const db = crmAdmin();
+  const { data, error } = await db
+    .from('sessions_bacs_blancs')
+    .insert({
+      matiere,
+      date_epreuve: date,
+      heure_debut: heureDebut,
+      heure_fin: heureFin,
+      places: entier(saisie.places, 8),
+      coachs_recherches: entier(saisie.coachs_recherches, 1),
+      statut: 'ouverte',
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error(`Un bac blanc de ${matiere} existe déjà le ${date}.`);
+    }
+    throw error;
+  }
+
+  const id = String(data.id);
+  const avertissements: string[] = [];
+  for (const profId of saisie.professeur_ids ?? []) {
+    try {
+      await assignerProf(id, String(profId));
+    } catch (err) {
+      avertissements.push(
+        `Professeur non assigné (${profId}) : ${err instanceof Error ? err.message : 'erreur inconnue'}`,
+      );
+    }
+  }
+
+  return { id, avertissements };
+}
+
 export async function assignerProf(sessionId: string, professeurId: string): Promise<void> {
   const db = crmAdmin();
   const { data: existant } = await db

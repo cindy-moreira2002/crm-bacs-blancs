@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { matieresDisponibles, sessionsPourMatiere, labelSession, libelleMatiere, type Examen } from '@/lib/sessions';
-
-const MATIERES_BAC = matieresDisponibles('bac');
-const MATIERES_BREVET = matieresDisponibles('brevet');
-const matieresDe = (e: Examen) => (e === 'brevet' ? MATIERES_BREVET : MATIERES_BAC);
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  SESSIONS_PLATEFORME,
+  chargerSessionsPubliques,
+  matieresDisponibles,
+  sessionsPourMatiere,
+  labelSession,
+  libelleMatiere,
+  type Examen,
+  type Session,
+} from '@/lib/sessions';
 
 // Un formulaire = un seul examen. L'élève arrive déjà depuis l'univers bac OU brevet :
 // jamais de bascule ici, c'était la source des inscriptions dans la mauvaise épreuve.
@@ -26,36 +31,65 @@ const THEME = {
 
 export function FormInscription({ examen }: { examen: Examen }) {
   const t = THEME[examen];
-  const MATIERES = matieresDe(examen);
+
+  // Les épreuves proposées viennent de la base (`/api/sessions`) : un bac blanc
+  // créé depuis /admin/bacs-blancs apparaît ici sans toucher au code. Le tableau
+  // en dur ne sert plus que de secours si l'appel échoue.
+  const [catalogue, setCatalogue] = useState<Session[]>(SESSIONS_PLATEFORME);
+  useEffect(() => {
+    let vivant = true;
+    chargerSessionsPubliques().then((s) => {
+      if (vivant) setCatalogue(s);
+    });
+    return () => {
+      vivant = false;
+    };
+  }, []);
+
+  const MATIERES = useMemo(() => matieresDisponibles(examen, new Date(), catalogue), [examen, catalogue]);
 
   const [prenom, setPrenom] = useState('');
   const [nom, setNom] = useState('');
   const [email, setEmail] = useState('');
   const [emailParent, setEmailParent] = useState('');
   const [telephone, setTelephone] = useState('');
-  const [matiere, setMatiere] = useState<string>(MATIERES[0] ?? '');
+  const [matiereSaisie, setMatiere] = useState<string>('');
   const [dateEpreuve, setDateEpreuve] = useState('');
 
   const epreuve = t.epreuve;
 
+  // La matière réellement cochée : celle qu'on a choisie si elle est encore
+  // proposée, sinon la première de la liste. Calculée et non stockée — le
+  // catalogue arrive de la base après le premier rendu, et un état qu'il
+  // faudrait recorriger dans un effet finit toujours par afficher, une frame,
+  // une matière que la base ne propose plus.
+  const matiere = MATIERES.includes(matiereSaisie) ? matiereSaisie : (MATIERES[0] ?? matiereSaisie);
+
   // Arrivée depuis une session précise (« Réserver → » du calendrier) :
   // matière et date arrivent dans l'URL et pré-remplissent le formulaire.
+  // L'effet se rejoue quand le catalogue arrive de la base : au montage, la
+  // matière de l'URL peut n'exister que dans la liste chargée ensuite.
+  const prefill = useRef(false);
   useEffect(() => {
+    if (prefill.current) return;
     const p = new URLSearchParams(window.location.search);
     const m = p.get('matiere');
     const d = p.get('date');
-    if (m && MATIERES.includes(m)) {
+    if (!m || !MATIERES.includes(m)) return;
+    prefill.current = true;
+    // setTimeout : ne pas poser d'état pendant le rendu de l'effet (Next 16).
+    const t = setTimeout(() => {
       setMatiere(m);
-      if (d && sessionsPourMatiere(m).some(s => s.date === d)) setDateEpreuve(d);
-    }
-    // MATIERES est figé pour un examen donné : l'effet ne doit tourner qu'au montage.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      if (d && sessionsPourMatiere(m, new Date(), catalogue).some(s => s.date === d)) setDateEpreuve(d);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [MATIERES, catalogue]);
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Dates de bacs blancs proposées pour la matière cochée
-  const sessions = sessionsPourMatiere(matiere);
+  const sessions = sessionsPourMatiere(matiere, new Date(), catalogue);
 
   const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   const validatePhone = (p: string) => /^[\d\s\-\+\(\)]{10,}$/.test(p.replace(/\s/g, ''));

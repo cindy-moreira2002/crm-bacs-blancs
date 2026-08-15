@@ -17,7 +17,7 @@
  *    passant avant les relances commerciales.
  */
 import { emailsDb } from './client';
-import { chargerReglages, envoiDesactive, type Reglages } from './reglages';
+import { chargerReglages, envoiDesactive, validationManuelle, type Reglages } from './reglages';
 import { construireEmail } from './modeles';
 import { envoyerViaBrevo } from './brevo';
 import { urlDesinscription } from './desinscription';
@@ -59,6 +59,8 @@ export type DetailEnvoi = {
 
 export type RapportEnvoi = {
   dryRun: boolean;
+  /** `true` quand rien n'est parti parce que chaque message attend un feu vert. */
+  attenteValidation: boolean;
   examines: number;
   envoyes: number;
   bloques: number;
@@ -82,7 +84,11 @@ export async function traiterFile(options?: {
   dryRun?: boolean;
 }): Promise<RapportEnvoi> {
   const reglages = await chargerReglages(true);
-  const dryRun = options?.dryRun ?? (dryRunParEnv() || envoiDesactive(reglages));
+  // Relecture avant départ : le moteur automatique prépare tout et n'envoie
+  // rien. Une simulation explicite (`dryRun: true`) reste une simulation.
+  const attenteValidation = options?.dryRun === undefined && validationManuelle(reglages);
+  const dryRun =
+    options?.dryRun ?? (dryRunParEnv() || envoiDesactive(reglages) || attenteValidation);
   const limite = options?.limite ?? 60;
   const avertissements: string[] = [];
 
@@ -93,6 +99,11 @@ export async function traiterFile(options?: {
 
   const quota = await etatQuota(reglages.quota_quotidien, reglages.quota_marge);
   if (quota.alerte) avertissements.push(quota.alerte);
+  if (attenteValidation) {
+    avertissements.push(
+      'Validation manuelle active : les messages sont préparés et attendent ton bouton « Valider et envoyer ». Rien ne part tout seul.',
+    );
+  }
 
   const details: DetailEnvoi[] = [];
 
@@ -112,6 +123,7 @@ export async function traiterFile(options?: {
   if (!lot.length) {
     return {
       dryRun,
+      attenteValidation,
       examines: 0,
       envoyes: 0,
       bloques: 0,
@@ -226,6 +238,7 @@ export async function traiterFile(options?: {
 
   return {
     dryRun,
+    attenteValidation,
     examines: lot.length,
     envoyes,
     bloques,

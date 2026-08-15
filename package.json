@@ -19,6 +19,8 @@
     "test:brevet:francais": "tsx scripts/test-brevet-francais.ts",
     "test:brevet:maths": "tsx scripts/test-brevet-maths.ts",
     "test:brevet:nonregression": "tsx scripts/test-brevet-nonregression.ts",
+    "sessions:verifier": "tsx scripts/synchroniser-sessions.ts",
+    "sessions:synchroniser": "tsx scripts/synchroniser-sessions.ts --apply",
     "seed:brevet": "node scripts/seed-brevet.mjs --check",
     "brevet:sujets-zero": "tsx scripts/installer-sujets-zero.ts",
     "brevet:verifier": "node scripts/verifier-brevet-base.mjs"

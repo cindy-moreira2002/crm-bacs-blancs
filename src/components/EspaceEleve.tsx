@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { LiaisonDiscord } from '@/components/LiaisonDiscord';
-import { SESSIONS_PLATEFORME, examenDeMatiere } from '@/lib/sessions';
+import { SESSIONS_PLATEFORME, chargerSessionsPubliques, examenDeMatiere, type Session } from '@/lib/sessions';
+
+// Les sessions telles qu'elles sont en base, chargées une fois par visite.
+// Module et non état : `heuresEpreuve` est appelée par des composants qui n'ont
+// pas la liste sous la main. Le remplacement déclenche un rendu du composant
+// principal (il pose aussi un état), donc les enfants relisent la bonne valeur.
+let SESSIONS_CONNUES: Session[] = SESSIONS_PLATEFORME;
 
 type Copie = {
   id: string;
@@ -220,7 +226,7 @@ function fmtNote(n: number) { return Number.isInteger(n) ? `${n}` : n.toFixed(1)
 // après la fin. L'heure vient de la session plateforme correspondante
 // (« 9h — 13h ») ; à défaut on suppose 9h — 13h, l'horaire des Matinées.
 function heuresEpreuve(i: Inscription): { debut: number; fin: number; label: string | null } {
-  const s = SESSIONS_PLATEFORME.find(s => s.matiere === i.matiere && s.date === i.date_epreuve);
+  const s = SESSIONS_CONNUES.find(s => s.matiere === i.matiere && s.date === i.date_epreuve);
   const m = s?.heure.match(/(\d+)\s*h\s*(?:—|–|-)\s*(\d+)\s*h/);
   if (m) return { debut: +m[1], fin: +m[2], label: s!.heure };
   return { debut: 9, fin: 13, label: null };
@@ -460,6 +466,19 @@ export function EspaceEleve() {
     return () => clearInterval(t);
   }, []);
 
+  // Les bacs blancs ouverts, lus en base : l'horaire du salon et les sessions
+  // proposées à l'élève suivent ce que l'administratrice a créé.
+  const [catalogue, setCatalogue] = useState<Session[]>(SESSIONS_CONNUES);
+  useEffect(() => {
+    let vivant = true;
+    chargerSessionsPubliques().then(s => {
+      if (!vivant) return;
+      SESSIONS_CONNUES = s;
+      setCatalogue(s);
+    });
+    return () => { vivant = false; };
+  }, []);
+
   // Le sujet s'ouvre tout seul, dix minutes avant l'épreuve : tant qu'une
   // ouverture approche, on redemande la liste à chaque battement d'horloge.
   // Sans cela, l'élève resterait devant un cadenas jusqu'à ce qu'il pense à
@@ -676,7 +695,7 @@ export function EspaceEleve() {
   // On ne propose que l'univers de l'élève : un lycéen ne voit pas les
   // sessions du brevet, et réciproquement.
   const mesExamens = new Set(mesMatieres.map(examenDeMatiere));
-  const sessionsDispos = SESSIONS_PLATEFORME.filter(s =>
+  const sessionsDispos = catalogue.filter(s =>
     new Date(s.date) >= today &&
     mesExamens.has(examenDeMatiere(s.matiere)) &&
     (!filtre || s.matiere === filtre) &&
