@@ -206,6 +206,26 @@ export async function verifierSecretApplication(): Promise<{ ok: boolean; erreur
   }
 }
 
+/**
+ * L'identifiant du compte du bot, mémorisé après le premier appel.
+ *
+ * Il vaut en pratique `DISCORD_CLIENT_ID`, mais on le demande à Discord plutôt
+ * que de le supposer : cette valeur sert à poser une permission sur le bot
+ * lui-même, et une permission écrite sur le mauvais identifiant ne produit
+ * aucune erreur — elle ne fait simplement rien, ce qui est le pire des échecs.
+ */
+let idBotMemorise: string | null = null;
+
+export async function idDuBot(): Promise<{ id: string | null; erreur: string | null }> {
+  if (idBotMemorise) return { id: idBotMemorise, erreur: null };
+  const r = await discord<{ id?: string }>('/users/@me');
+  if (!r.ok || !r.corps?.id) {
+    return { id: null, erreur: r.erreur ?? 'Discord n’a pas dit qui est le bot.' };
+  }
+  idBotMemorise = r.corps.id;
+  return { id: idBotMemorise, erreur: null };
+}
+
 // --- Raccourcis typés utilisés par le reste de l'intégration ----------
 
 export type SalonDiscord = {

@@ -24,7 +24,7 @@
  *     de préparation, qui est le vrai indicateur à regarder avant l'épreuve.
  */
 import { crmAdmin } from '@/lib/authProf';
-import { discord, type SalonDiscord } from '@/lib/discord/api';
+import { discord, idDuBot, type SalonDiscord } from '@/lib/discord/api';
 import {
   CIBLE_OVERWRITE,
   GUILD_ID,
@@ -129,8 +129,20 @@ function joursAvant(dateISO: string): number {
   return Math.round((cible.getTime() - aujourdhui().getTime()) / 86_400_000);
 }
 
+/** Ce qu'on accorde à qui a le droit d'être dans une salle : voir, entrer, parler. */
+const OUVRIR = String(PERM.VIEW_CHANNEL | PERM.CONNECT | PERM.SPEAK);
+
 /**
  * Refus posé sur @everyone + accès pour l'équipe. Le socle de toute salle.
+ *
+ * `botId` est indispensable, et c'est le piège qui a coûté le plus cher.
+ * La catégorie refuse « voir » et « se connecter » à @everyone ; le bot, qui
+ * n'a ni le rôle Équipe ni le rôle Prof, n'est QUE @everyone — il perd donc ces
+ * deux permissions *à l'intérieur de sa propre catégorie*. Or Discord interdit
+ * d'accorder une permission qu'on ne détient pas à cet endroit : la création de
+ * chaque salle vocale échoue alors en « 403 Missing Permissions », tandis que
+ * la catégorie et les salons textuels passent — eux ne demandent rien de vocal.
+ * S'accorder explicitement l'accès referme la boucle.
  *
  * `eleveUserId` est l'occupant légitime de la salle, quand il a relié son
  * compte : sans cette ligne, l'élève voit son lien, clique, et tombe sur une
@@ -138,22 +150,22 @@ function joursAvant(dateISO: string): number {
  * création n'est pas oublié pour autant — la route de liaison pose alors la
  * même permission, et « Préparer les salles » rattrape le cas inverse.
  */
-function permissionsPrivees(avecProfs: boolean, eleveUserId?: string | null) {
-  const ouvrir = String(PERM.VIEW_CHANNEL | PERM.CONNECT | PERM.SPEAK);
+function permissionsPrivees(avecProfs: boolean, botId: string, eleveUserId?: string | null) {
   return [
     {
       id: GUILD_ID,
       type: CIBLE_OVERWRITE.ROLE,
       deny: String(PERM.VIEW_CHANNEL | PERM.CONNECT),
     },
+    { id: botId, type: CIBLE_OVERWRITE.MEMBRE, allow: OUVRIR },
     ...(ROLE_STAFF_ID
-      ? [{ id: ROLE_STAFF_ID, type: CIBLE_OVERWRITE.ROLE, allow: ouvrir }]
+      ? [{ id: ROLE_STAFF_ID, type: CIBLE_OVERWRITE.ROLE, allow: OUVRIR }]
       : []),
     ...(avecProfs && ROLE_PROF_ID
-      ? [{ id: ROLE_PROF_ID, type: CIBLE_OVERWRITE.ROLE, allow: ouvrir }]
+      ? [{ id: ROLE_PROF_ID, type: CIBLE_OVERWRITE.ROLE, allow: OUVRIR }]
       : []),
     ...(eleveUserId
-      ? [{ id: eleveUserId, type: CIBLE_OVERWRITE.MEMBRE, allow: ouvrir }]
+      ? [{ id: eleveUserId, type: CIBLE_OVERWRITE.MEMBRE, allow: OUVRIR }]
       : []),
   ];
 }
@@ -400,6 +412,13 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
   const motif = `Bac blanc ${session.matiere} du ${session.date_epreuve}`;
   const details: string[] = [];
 
+  // Sans son propre identifiant, le bot ne peut pas se garder l'accès à la
+  // catégorie qu'il va rendre privée — et plus rien de vocal ne s'y créera.
+  const { id: botId, erreur: erreurBot } = await idDuBot();
+  if (!botId) {
+    return { ok: false, message: erreurBot ?? 'Bot Discord non identifié.', details: [] };
+  }
+
   const salons = await discord<SalonDiscord[]>(`/guilds/${GUILD_ID}/channels`);
   if (!salons.ok || !Array.isArray(salons.corps)) {
     return { ok: false, message: salons.erreur ?? 'Lecture des salons impossible.', details: [] };
@@ -418,7 +437,7 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
       corps: {
         name: nomCategorie,
         type: TYPE_SALON.CATEGORIE,
-        permission_overwrites: permissionsPrivees(true),
+        permission_overwrites: permissionsPrivees(true, botId),
       },
     });
     if (!creation.ok || !creation.corps) {
@@ -426,6 +445,23 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
     }
     categorie = creation.corps;
     details.push(`Catégorie « ${nomCategorie} » créée.`);
+  } else if (!categorie.permission_overwrites?.some((o) => o.id === botId)) {
+    // Catégorie née avant que le bot pense à se garder l'accès : on le lui
+    // rend ici, sinon chaque salle continuerait d'échouer en 403 sans que rien
+    // n'explique pourquoi la préparation, elle, « réussit ».
+    const reparation = await discord(`/channels/${categorie.id}/permissions/${botId}`, {
+      methode: 'PUT',
+      corps: { type: CIBLE_OVERWRITE.MEMBRE, allow: OUVRIR, deny: '0' },
+      motifAudit: 'Accès du bot à la catégorie qu’il administre',
+    });
+    if (!reparation.ok) {
+      return {
+        ok: false,
+        message: `Le bot ne peut pas se rendre l’accès à « ${nomCategorie} » : ${reparation.erreur}`,
+        details,
+      };
+    }
+    details.push('Accès du bot rétabli sur la catégorie.');
   }
 
   const dedans = salons.corps.filter((c) => c.parent_id === categorie!.id);
@@ -490,7 +526,7 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
           type: TYPE_SALON.VOCAL,
           parent_id: categorie.id,
           user_limit: 2, // l'élève et le coach : personne d'autre ne peut entrer
-          permission_overwrites: permissionsPrivees(true, eleve.discord_user_id),
+          permission_overwrites: permissionsPrivees(true, botId, eleve.discord_user_id),
         },
       });
       if (!r.ok || !r.corps) {

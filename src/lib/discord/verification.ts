@@ -11,11 +11,16 @@
  * Chaque contrôle est indépendant et explique quoi faire s'il échoue : la page
  * d'administration doit permettre de corriger sans revenir demander.
  *
- * Le dernier contrôle crée réellement un salon vocal privé puis le supprime.
- * C'est le seul moyen de prouver que la chaîne complète fonctionne — créer,
- * poser les serrures, supprimer — plutôt que de la supposer.
+ * Le dernier contrôle rejoue réellement ce que fait un bac blanc : une
+ * catégorie privée, puis une salle vocale À L'INTÉRIEUR, puis le ménage.
+ * La salle doit naître dans la catégorie et non à la racine du serveur, sinon
+ * l'épreuve ne prouve rien : à la racine le bot garde ses permissions de
+ * serveur, alors que dans une catégorie qui refuse @everyone il les perd — et
+ * c'est précisément là que la création échouait en « 403 Missing Permissions »
+ * pendant que ce contrôle, lui, passait au vert.
  */
 import {
+  CATEGORIE_TEST,
   CLIENT_ID,
   GUILD_ID,
   PERM,
@@ -214,7 +219,7 @@ export async function verifierDiscord(avecEcriture = true): Promise<RapportVerif
             cle: 'permissions',
             libelle: 'Permissions du bot',
             etat: 'ok',
-            detail: 'Les six permissions nécessaires sont accordées.',
+            detail: 'Les sept permissions nécessaires sont accordées.',
           }
         : {
             cle: 'permissions',
@@ -233,7 +238,7 @@ export async function verifierDiscord(avecEcriture = true): Promise<RapportVerif
         etat: 'alerte',
         detail: 'Le bot possède la permission Administrateur.',
         remede:
-          'Elle n’est pas nécessaire : six permissions suffisent. La retirer réduit les dégâts possibles en cas de fuite du token.',
+          'Elle n’est pas nécessaire : sept permissions suffisent. La retirer réduit les dégâts possibles en cas de fuite du token.',
       });
     }
 
@@ -345,15 +350,17 @@ export async function verifierDiscord(avecEcriture = true): Promise<RapportVerif
           },
     );
 
-    // Un salon de test oublié par une vérification précédente.
-    const orphelin = salons.corps.find((c) => c.name === SALON_TEST);
+    // Un salon (ou une catégorie) de test oublié par une vérification précédente.
+    const orphelin = salons.corps.find(
+      (c) => c.name === SALON_TEST || c.name.toUpperCase() === CATEGORIE_TEST,
+    );
     if (orphelin) {
       ajouter({
         cle: 'salon_test_orphelin',
         libelle: 'Salon de test résiduel',
         etat: 'alerte',
-        detail: `Un salon « ${SALON_TEST} » traîne encore sur le serveur.`,
-        remede: 'Relancer la vérification complète le supprimera, ou le retirer à la main dans Discord.',
+        detail: `« ${orphelin.name} » traîne encore sur le serveur.`,
+        remede: 'Le retirer à la main dans Discord — une vérification interrompue l’a laissé là.',
       });
     }
   }
@@ -369,39 +376,65 @@ export async function verifierDiscord(avecEcriture = true): Promise<RapportVerif
     return rapport(serveur);
   }
 
+  // `botId` vient du contrôle 2 (« Token du bot ») : à ce stade il est connu.
+  const ouvrir = String(PERM.VIEW_CHANNEL | PERM.CONNECT | PERM.SPEAK);
+  const serrures = [
+    { id: GUILD_ID, type: CIBLE_OVERWRITE.ROLE, deny: String(PERM.VIEW_CHANNEL | PERM.CONNECT) },
+    // Le bot s'autorise lui-même : sans cette ligne il ne pourrait plus rien
+    // créer à l'intérieur de la catégorie qu'il vient de fermer.
+    { id: botId, type: CIBLE_OVERWRITE.MEMBRE, allow: ouvrir },
+    ...(ROLE_STAFF_ID ? [{ id: ROLE_STAFF_ID, type: CIBLE_OVERWRITE.ROLE, allow: ouvrir }] : []),
+    ...(ROLE_PROF_ID ? [{ id: ROLE_PROF_ID, type: CIBLE_OVERWRITE.ROLE, allow: ouvrir }] : []),
+  ];
+
+  const bloc = await discord<SalonDiscord>(`/guilds/${GUILD_ID}/channels`, {
+    methode: 'POST',
+    motifAudit: 'Vérification technique des Matinées du Bac',
+    corps: {
+      name: CATEGORIE_TEST,
+      type: TYPE_SALON.CATEGORIE,
+      permission_overwrites: serrures,
+    },
+  });
+
+  if (!bloc.ok || !bloc.corps) {
+    ajouter({
+      cle: 'creation',
+      libelle: 'Création d’une salle de test',
+      etat: 'echec',
+      detail: `Catégorie de test refusée : ${bloc.erreur ?? 'refusée par Discord'}`,
+      remede:
+        'Vérifier « Gérer les salons » et « Gérer les rôles », et que le rôle du bot est assez haut dans la hiérarchie.',
+    });
+    return rapport(serveur);
+  }
+  const blocTest = bloc.corps;
+
   const creation = await discord<SalonDiscord>(`/guilds/${GUILD_ID}/channels`, {
     methode: 'POST',
     motifAudit: 'Vérification technique des Matinées du Bac',
     corps: {
       name: SALON_TEST,
       type: TYPE_SALON.VOCAL,
-      permission_overwrites: [
-        {
-          id: GUILD_ID,
-          type: CIBLE_OVERWRITE.ROLE,
-          deny: String(PERM.VIEW_CHANNEL | PERM.CONNECT),
-        },
-        ...(ROLE_STAFF_ID
-          ? [
-              {
-                id: ROLE_STAFF_ID,
-                type: CIBLE_OVERWRITE.ROLE,
-                allow: String(PERM.VIEW_CHANNEL | PERM.CONNECT),
-              },
-            ]
-          : []),
-      ],
+      parent_id: blocTest.id,
+      user_limit: 2,
+      permission_overwrites: serrures,
     },
   });
 
   if (!creation.ok || !creation.corps) {
     ajouter({
       cle: 'creation',
-      libelle: 'Création d’un salon de test',
+      libelle: 'Création d’une salle de test',
       etat: 'echec',
-      detail: creation.erreur ?? 'Refusée par Discord.',
+      detail: `La catégorie s’est créée, mais pas la salle dedans : ${creation.erreur ?? 'refusée par Discord'}`,
       remede:
-        'Vérifier « Gérer les salons » et « Gérer les rôles », et que le rôle du bot est assez haut dans la hiérarchie.',
+        'C’est le défaut typique : le bot doit posséder « Se connecter » ET « Parler », et se les accorder sur la catégorie — sinon il ne peut pas les donner aux élèves.',
+    });
+    // Ne pas laisser la catégorie de test derrière soi.
+    await discord(`/channels/${blocTest.id}`, {
+      methode: 'DELETE',
+      motifAudit: 'Fin de la vérification technique',
     });
     return rapport(serveur);
   }
@@ -416,9 +449,9 @@ export async function verifierDiscord(avecEcriture = true): Promise<RapportVerif
 
   ajouter({
     cle: 'creation',
-    libelle: 'Création d’un salon de test',
+    libelle: 'Création d’une salle de test',
     etat: 'ok',
-    detail: 'Un salon vocal a bien été créé.',
+    detail: 'Une salle vocale a bien été créée dans une catégorie privée — comme un vrai bac blanc.',
   });
 
   ajouter(
@@ -452,7 +485,7 @@ export async function verifierDiscord(avecEcriture = true): Promise<RapportVerif
           etat: 'echec',
           detail: 'Le bot n’a pas pu accorder l’accès au rôle Équipe Matinées.',
           remede:
-            'Il manque probablement « Se connecter » au bot : Discord refuse d’accorder une permission qu’il ne possède pas.',
+            'Il manque probablement « Se connecter » ou « Parler » au bot : Discord refuse d’accorder une permission qu’il ne possède pas.',
         },
   );
 
@@ -460,20 +493,24 @@ export async function verifierDiscord(avecEcriture = true): Promise<RapportVerif
     methode: 'DELETE',
     motifAudit: 'Fin de la vérification technique',
   });
+  const suppressionBloc = await discord(`/channels/${blocTest.id}`, {
+    methode: 'DELETE',
+    motifAudit: 'Fin de la vérification technique',
+  });
   ajouter(
-    suppression.ok
+    suppression.ok && suppressionBloc.ok
       ? {
           cle: 'suppression',
-          libelle: 'Suppression du salon de test',
+          libelle: 'Suppression de la salle de test',
           etat: 'ok',
-          detail: 'Supprimé — rien ne reste sur le serveur.',
+          detail: 'Salle et catégorie supprimées — rien ne reste sur le serveur.',
         }
       : {
           cle: 'suppression',
-          libelle: 'Suppression du salon de test',
+          libelle: 'Suppression de la salle de test',
           etat: 'echec',
-          detail: suppression.erreur ?? 'Refusée par Discord.',
-          remede: `Supprimer « ${SALON_TEST} » à la main dans Discord, et vérifier « Gérer les salons ».`,
+          detail: suppression.erreur ?? suppressionBloc.erreur ?? 'Refusée par Discord.',
+          remede: `Supprimer « ${CATEGORIE_TEST} » à la main dans Discord, et vérifier « Gérer les salons ».`,
         },
   );
 

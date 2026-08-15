@@ -273,3 +273,10 @@ export const SALONS_TEXTE_SESSION = ['informations', 'assistance-technique'] as 
 
 /** Nom du salon de test — reconnaissable, jamais confondu avec de la production. */
 export const SALON_TEST = 'zz-test-technique';
+
+/**
+ * Catégorie de test. La vérification y crée sa salle plutôt qu'à la racine :
+ * c'est dans une catégorie privée que le bot perd ses permissions de serveur,
+ * donc c'est le seul endroit où l'épreuve reproduit un vrai bac blanc.
+ */
+export const CATEGORIE_TEST = 'ZZ-TEST-TECHNIQUE';
