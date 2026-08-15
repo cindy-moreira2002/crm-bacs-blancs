@@ -56,3 +56,4 @@ supabase/.temp/
 
 # Aperçus d'e-mails générés par `npm run apercu:emails` (jetables)
 /apercu-emails/
+sauvegardes/

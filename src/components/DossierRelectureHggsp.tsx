@@ -455,6 +455,15 @@ function BlocTaxonomie({ taxonomie, grilles }: { taxonomie: TaxonomieV2[]; grill
     () => new Map((grille?.criteres ?? []).map((c) => [c.code, c.libelle])),
     [grille],
   );
+  // « niveau plafonné à fragile » ne dit rien tant qu'on ne sait pas ce que
+  // « fragile » vaut sur CE critère : 1 point ici, 2,5 ailleurs.
+  const pointsDuNiveau = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of grille?.criteres ?? []) {
+      for (const pal of c.paliers ?? []) m.set(`${c.code}|${pal.niveau}`, pal.points);
+    }
+    return m;
+  }, [grille]);
 
   const visibles = useMemo(() => {
     const portee = exercice === 'hggsp_dissertation' ? 'dissertation' : 'etude_critique';
@@ -556,7 +565,13 @@ function BlocTaxonomie({ taxonomie, grilles }: { taxonomie: TaxonomieV2[]; grill
         <div key={portee} className="space-y-3">
           <h3 className="text-lg font-bold text-gray-900">{NOMS_PORTEE[portee] ?? portee}</h3>
           {entrees.map((e) => (
-            <LigneErreur key={e.code} erreur={e} exercice={exercice} nomCritere={nomCritere} />
+            <LigneErreur
+              key={e.code}
+              erreur={e}
+              exercice={exercice}
+              nomCritere={nomCritere}
+              pointsDuNiveau={pointsDuNiveau}
+            />
           ))}
         </div>
       ))}
@@ -568,17 +583,26 @@ function LigneErreur({
   erreur,
   exercice,
   nomCritere,
+  pointsDuNiveau,
 }: {
   erreur: TaxonomieV2;
   exercice: string;
   nomCritere: Map<string, string>;
+  pointsDuNiveau: Map<string, number>;
 }) {
   const critere = erreur.critere_principal[exercice];
+  // Ce que le plafond vaut EN POINTS sur ce critère : un nom de niveau seul
+  // ne se traduit pas en note.
+  const plafondPoints = critere && erreur.plafond_niveau
+    ? pointsDuNiveau.get(`${critere}|${erreur.plafond_niveau}`)
+    : undefined;
   const regle =
     erreur.type_impact === 'criterion_score_cap'
       ? `score plafonné à ${fr(erreur.plafond_score ?? 0)}`
       : erreur.type_impact === 'criterion_level_cap'
-        ? `niveau plafonné à « ${NOMS_NIVEAU[erreur.plafond_niveau ?? ''] ?? erreur.plafond_niveau} »`
+        ? `niveau plafonné à « ${NOMS_NIVEAU[erreur.plafond_niveau ?? ''] ?? erreur.plafond_niveau} »${
+            plafondPoints !== undefined ? ` — soit ${fr(plafondPoints)} pt${plafondPoints >= 2 ? 's' : ''} au maximum sur ce critère` : ''
+          }`
         : erreur.type_impact === 'contextual_range'
           ? `fourchette indicative de ${fr(erreur.impact_min ?? 0)} à ${fr(erreur.impact_max ?? 0)} point(s)`
           : NOMS_IMPACT[erreur.type_impact];
