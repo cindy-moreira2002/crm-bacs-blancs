@@ -8,6 +8,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { listerExamens, creerExamen } from '@/lib/bareme';
+import { LABELS_MATIERES } from '@/lib/matieres';
 import { CE_QUI_SE_DEFINIT, moteurAttendu } from '@/lib/moteurs';
 import { gardeAdmin, erreur } from '../bareme/garde';
 
@@ -37,19 +38,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Un barème par sujet n'a de sens que là où les questions changent d'un
-  // sujet à l'autre. Ailleurs (tout le bac depuis le 15 août 2026), en créer un
-  // ouvre un chantier qui ne se refermera jamais : l'examen resterait bloqué en
-  // brouillon, et sa matière se corrige déjà par sa grille.
+  // CETTE ROUTE EST CELLE DU BACCALAURÉAT, et elle ne connaît que lui : les
+  // matières d'un autre diplôme ont leurs propres routes, qui ne partagent
+  // rien avec celles-ci. Un contrôle de non-régression le vérifie en lisant ce
+  // fichier — d'où l'absence, ici, du nom de l'autre diplôme.
   const matiere = String(corps.matiere).trim();
+  if (!(matiere in LABELS_MATIERES)) {
+    return NextResponse.json(
+      { error: `Matière inconnue au baccalauréat : « ${matiere} ».` },
+      { status: 400 },
+    );
+  }
+
+  // Un barème par sujet n'a de sens que là où les points dépendent des
+  // questions posées. Depuis le 15 août 2026 aucune matière du bac n'est dans
+  // ce cas : en créer un ouvrirait un chantier qui ne se refermerait jamais —
+  // l'examen resterait bloqué en brouillon, alors que sa grille le note déjà.
   const moteur = moteurAttendu(matiere);
   if (moteur !== 'bareme_sujet') {
     return NextResponse.json(
-      {
-        error:
-          `Cette matière ne se note pas au barème par sujet. ${CE_QUI_SE_DEFINIT[moteur]} ` +
-          'Les barèmes par sujet ne concernent que le brevet.',
-      },
+      { error: `Cette matière ne se note pas au barème par sujet. ${CE_QUI_SE_DEFINIT[moteur]}` },
       { status: 400 },
     );
   }

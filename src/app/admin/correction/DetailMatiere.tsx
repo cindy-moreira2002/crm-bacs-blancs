@@ -97,11 +97,13 @@ function BlocDiagnostics({ diags }: { diags: Diagnostic[] }) {
  * a-t-il été confronté à un correcteur humain ?
  */
 function BlocBaremes({ baremes }: { baremes: ExamenEtat[] }) {
+  // Ce bloc ne s'affiche que pour une matière qui se note question par
+  // question (voir l'appelant) : ici, un barème manquant bloque vraiment.
   if (baremes.length === 0) {
     return (
       <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-        Aucun bac blanc de cette matière n’a de barème propre. La note vient donc de la grille
-        générique de compétences ci-dessous — la même pour tous les sujets.{' '}
+        Aucun sujet de cette matière n’a encore de barème. Tant qu’il n’existe pas, aucune copie ne
+        peut être notée.{' '}
         <Link href="/admin/bareme" className="text-purple-700 font-semibold underline">
           Créer un barème →
         </Link>
@@ -524,12 +526,19 @@ export function DetailMatiereVue({
         <BlocDiagnostics diags={detail.diagnostics} />
       </Section>
 
-      <Section
-        titre={`Barèmes par sujet — la note officielle (${detail.baremes.length})`}
-        sousTitre="Un barème par bac blanc, question par question. Là où il existe, c’est lui — et lui seul — qui donne la note sur 20."
-      >
-        <BlocBaremes baremes={detail.baremes} />
-      </Section>
+      {/* La section « barèmes par sujet » ne s'affiche que là où elle a un
+          sens : une matière notée question par question (le brevet), ou une
+          matière qui en garde un d'avant la décision du 15 août 2026. Ailleurs,
+          l'afficher vide donnait l'impression d'un barème manquant alors que la
+          grille ci-dessous EST la façon de noter prévue. */}
+      {(moteurAttendu(detail.matiere) === 'bareme_sujet' || detail.baremes.length > 0) && (
+        <Section
+          titre={`Barèmes par sujet — la note officielle (${detail.baremes.length})`}
+          sousTitre="Un barème par sujet, question par question. Là où il existe, c’est lui — et lui seul — qui donne la note."
+        >
+          <BlocBaremes baremes={detail.baremes} />
+        </Section>
+      )}
 
       <Section
         titre={

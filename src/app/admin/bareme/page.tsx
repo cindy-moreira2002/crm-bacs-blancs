@@ -7,25 +7,27 @@ import { ListeExamens } from './ListeExamens';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Barèmes par sujet (brevet) — Les Matinées du Bac',
+  title: 'Barèmes par sujet (bac) — Les Matinées du Bac',
 };
 
 /**
- * /admin/bareme — les barèmes propres aux sujets. BREVET UNIQUEMENT.
+ * /admin/bareme — les barèmes propres aux sujets, CÔTÉ BACCALAURÉAT.
  *
  * Un barème par sujet dit combien vaut chaque question DE CE SUJET-LÀ. Il n'a
- * de sens que là où les questions changent d'un sujet à l'autre : au brevet.
- * Au baccalauréat, toutes les matières se notent à leur grille commune ou à
- * leur grille rédigée (décision du 15 août 2026, écrite dans `moteurs.ts`) —
- * il n'y a donc rien à créer ici pour un bac blanc, pas même en français.
+ * de sens que là où les points dépendent des questions posées. Depuis la
+ * décision du 15 août 2026, ce n'est le cas d'AUCUNE matière du bac : toutes
+ * se notent à leur grille commune ou à leur grille rédigée (`moteurs.ts`). Il
+ * n'y a donc rien à créer ici, pas même en français.
  *
- * Cet écran a longtemps proposé les neuf matières du bac : il réclamait un
- * travail inutile et cachait les deux seules matières concernées. Le menu de
- * création est désormais tiré de `MATIERES_BREVET`, et l'API refuse toute
- * matière dont le moteur attendu n'est pas `bareme_sujet`.
+ * L'écran proposait pourtant les neuf matières du bac, et son texte annonçait
+ * que « la note officielle vient de SON barème » : il réclamait un travail
+ * inutile. Désormais le menu de création est calculé (`moteurAttendu`), donc
+ * vide, donc masqué ; l'API refuse toute matière dont le moteur attendu n'est
+ * pas `bareme_sujet` ; et la page renvoie vers /admin/brevet, qui a ses
+ * propres écrans pour le seul diplôme qui se note question par question.
  *
- * Les grilles, elles, se pilotent depuis /admin/correction : elles produisent
- * la note au bac, et le diagnostic pédagogique partout.
+ * Les deux systèmes ne se croisent jamais : contrôle 5.2 de
+ * `npm run test:brevet:nonregression`.
  */
 export default async function PageBaremes() {
   const manquants = authManquant();

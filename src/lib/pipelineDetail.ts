@@ -400,7 +400,7 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
   // Couche 1 : les barèmes propres aux sujets. Ils passent AVANT la grille
   // dans le tri, parce que c'est la note officielle qui s'y joue.
   const baremes = (await chargerExamens()).get(matiere) ?? [];
-  diagnostics.unshift(...verifierBaremes(label, baremes));
+  diagnostics.unshift(...verifierBaremes(matiere, baremes));
 
   if (diagnostics.length === 0) {
     diagnostics.push({ niveau: 'ok', texte: 'Rien à signaler : barèmes, grilles, sujets, gabarits et étalons sont cohérents.' });

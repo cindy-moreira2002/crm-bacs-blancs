@@ -574,7 +574,7 @@ export async function chargerSante(): Promise<SanteSysteme> {
   // Couche 1 : les barèmes propres aux sujets. C'est la note officielle qui
   // se joue ici — ces anomalies passent donc avant celles de la grille.
   for (const [matiere, examens] of examensParMatiere.entries()) {
-    for (const d of verifierBaremes(labelMatiere(matiere), examens)) {
+    for (const d of verifierBaremes(matiere, examens)) {
       ajouter('bareme', d.niveau, d.texte, { piste: d.piste, matiere, cible: d.cible });
     }
   }

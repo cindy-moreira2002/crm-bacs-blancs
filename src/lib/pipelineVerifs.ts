@@ -4,7 +4,12 @@
  * Fonction pure, sans accès base : la vue matière (pipelineDetail) et le
  * centre d'anomalies global (pipelineSante) l'appellent tous les deux, pour
  * que la même règle donne le même verdict partout.
+ *
+ * Les deux seuls modules importés ici — `matieres` et `moteurs` — sont
+ * eux-mêmes sans import : la pureté du fichier tient.
  */
+import { labelMatiere } from './matieres';
+import { moteurAttendu } from './moteurs';
 
 export type NiveauDiag = 'bloquant' | 'attention' | 'ok';
 
@@ -216,7 +221,8 @@ export type StructExamen = {
  * générique — devenue couche de diagnostic. Les deux vivent ici pour que la
  * vue matière et le centre de santé rendent le même verdict.
  */
-export function verifierBaremes(matiere: string, examens: StructExamen[]): Diagnostic[] {
+export function verifierBaremes(slugMatiere: string, examens: StructExamen[]): Diagnostic[] {
+  const matiere = labelMatiere(slugMatiere);
   const diags: Diagnostic[] = [];
   const diag = (niveau: NiveauDiag, texte: string, piste?: string, cible?: CibleDiag) =>
     diags.push({ niveau, texte, piste, cible });
@@ -295,11 +301,17 @@ export function verifierBaremes(matiere: string, examens: StructExamen[]): Diagn
     for (let i = debut; i < diags.length; i += 1) diags[i].cible = { exam_id: e.id };
   }
 
-  if (examens.length === 0) {
+  // « Pas de barème propre » n'est une anomalie QUE là où il devrait y en avoir
+  // un — c'est-à-dire là où les points dépendent des questions posées, donc au
+  // brevet. Partout ailleurs la grille EST la façon de noter prévue, et le
+  // signaler faisait passer un choix assumé pour un retard : c'est ce qui
+  // affichait « Aucun bac blanc de Français n'a de barème propre » sur un écran
+  // où il n'y a, précisément, rien à faire.
+  if (examens.length === 0 && moteurAttendu(slugMatiere) === 'bareme_sujet') {
     diag(
       'attention',
-      `Aucun bac blanc de ${matiere} n'a de barème propre : la note vient encore de la grille générique de compétences, la même pour tous les sujets.`,
-      'Créer le bac blanc et son barème dans /admin/bareme.',
+      `Aucun sujet de ${matiere} n'a de barème : sans lui, aucune copie ne peut être notée.`,
+      'Créer le sujet et son barème dans /admin/bareme.',
     );
   }
 

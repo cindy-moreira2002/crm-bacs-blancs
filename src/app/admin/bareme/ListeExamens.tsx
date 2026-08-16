@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { labelMatiere } from '@/lib/matieres';
-import { LABELS_MATIERES_BREVET, MATIERES_BREVET } from '@/lib/matieresBrevet';
+import { LABELS_MATIERES, labelMatiere } from '@/lib/matieres';
 import { LIBELLE_MOTEUR, moteurAttendu } from '@/lib/moteurs';
 
 type Version = {
@@ -40,16 +39,18 @@ const LIBELLES_STATUT: Record<string, { texte: string; classe: string }> = {
 };
 
 /**
- * SEULES les matières qui se notent question par question sont proposées ici.
+ * Les matières du BAC qui se notent question par question — donc les seules
+ * pour lesquelles il y ait un barème à écrire ici.
  *
- * Décision du 15 août 2026 : au baccalauréat, aucune matière n'a de barème
- * propre au sujet — tout se note à la grille commune (voir `moteurs.ts`).
- * Proposer « Français » ou « Mathématiques » du bac dans ce menu réclamait un
- * travail qui n'a pas lieu d'être, et cachait les deux seules matières qui en
- * ont vraiment besoin : celles du brevet, dont les questions changent à chaque
- * sujet.
+ * La liste est calculée, pas écrite à la main : depuis la décision du 15 août
+ * 2026 elle est VIDE (toutes les matières du bac sont passées à la grille
+ * commune, voir `moteurs.ts`), et le formulaire de création disparaît de
+ * lui-même. Proposer les neuf matières du bac réclamait un travail qui n'a pas
+ * lieu d'être — en français notamment. Si un jour une matière repasse à
+ * `bareme_sujet` dans `moteurs.ts`, elle réapparaît ici sans toucher à cet
+ * écran.
  */
-const MATIERES = MATIERES_BREVET.filter((m) => moteurAttendu(m) === 'bareme_sujet');
+const MATIERES = Object.keys(LABELS_MATIERES).filter((m) => moteurAttendu(m) === 'bareme_sujet');
 
 export function ListeExamens() {
   const [examens, setExamens] = useState<Examen[] | null>(null);
@@ -62,7 +63,11 @@ export function ListeExamens() {
       const r = await fetch('/api/admin/bareme');
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? 'Lecture impossible');
-      setExamens(j.examens);
+      // Cet écran est celui du baccalauréat. Les examens d'un autre diplôme
+      // vivent dans leurs propres écrans, qui ne partagent rien avec ceux-ci :
+      // les afficher ici mélangeait deux systèmes de correction séparés à
+      // dessein.
+      setExamens((j.examens as Examen[]).filter((e) => e.matiere in LABELS_MATIERES));
       setErreur(null);
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur inconnue');
@@ -113,27 +118,37 @@ export function ListeExamens() {
             </Link>{' '}
             › Barèmes
           </p>
-          <h1 className="text-3xl font-bold text-gray-900 mt-1">Barèmes par sujet — brevet blanc</h1>
-          <div className="mt-3 max-w-3xl rounded-xl border border-teal-200 bg-teal-50 p-4">
-            <p className="text-teal-900 font-semibold">Cette page ne concerne que le brevet.</p>
-            <p className="text-sm text-teal-900 mt-2 leading-relaxed">
-              Un barème par sujet répond à une seule question : <em>combien vaut la question 2b de
-              ce sujet-là ?</em> Au brevet, les questions changent à chaque sujet, donc les points
-              aussi : personne ne peut les écrire d’avance. Il faut donc un barème par brevet blanc.
+          <h1 className="text-3xl font-bold text-gray-900 mt-1">Barèmes par sujet — baccalauréat</h1>
+          <div className="mt-3 max-w-3xl rounded-xl border border-purple-200 bg-purple-50 p-4">
+            <p className="text-purple-900 font-semibold">
+              Aucun bac blanc n’a de barème à écrire ici, et c’est voulu.
             </p>
-            <p className="text-sm text-teal-900 mt-2 leading-relaxed">
-              <strong>Au baccalauréat, il n’y a rien à écrire ici.</strong> Toutes les matières du
-              bac se notent à leur grille commune — la même pour tous les sujets, parce qu’un
-              commentaire se juge sur la compréhension, l’analyse, l’organisation et l’expression,
-              que le texte soit de Hugo ou de Colette. Pour un nouveau bac blanc, on ajoute
-              seulement le sujet.
+            <p className="text-sm text-purple-900 mt-2 leading-relaxed">
+              Un barème par sujet répond à une seule question : <em>combien vaut la question 2b de
+              ce sujet-là ?</em> Il n’a de sens que là où les points dépendent des questions posées.
+            </p>
+            <p className="text-sm text-purple-900 mt-2 leading-relaxed">
+              Au bac, ce n’est le cas d’aucune matière — décision du 15 août 2026. Une copie s’y
+              juge sur des critères qui ne changent pas d’un sujet à l’autre (compréhension,
+              analyse, organisation, expression), que le texte soit de Hugo ou de Colette :{' '}
+              <strong>un nouveau bac blanc ne demande que son sujet, jamais de barème.</strong> Les
+              grilles se règlent dans{' '}
+              <Link href="/admin/correction" className="underline font-semibold">
+                Pilotage de la correction
+              </Link>
+              , qui dit pour chaque matière ce qui se définit ({LIBELLE_MOTEUR.grille_generique},{' '}
+              {LIBELLE_MOTEUR.criteres_rediges} ou {LIBELLE_MOTEUR.bareme_sujet}).
             </p>
           </div>
-          <p className="text-sm text-gray-600 mt-3 max-w-3xl">
-            Les grilles de toutes les matières, bac et brevet, se pilotent depuis{' '}
-            <Link href="/admin/correction" className="text-purple-700 underline">/admin/correction</Link>,
-            qui indique pour chacune ce qui se définit ({LIBELLE_MOTEUR.grille_generique},{' '}
-            {LIBELLE_MOTEUR.criteres_rediges} ou {LIBELLE_MOTEUR.bareme_sujet}).
+          {/* Le diplôme national du brevet, lui, se note bel et bien question
+              par question — mais il a ses propres écrans, qui ne partagent rien
+              avec ceux du bac. On y renvoie plutôt que de mélanger les deux. */}
+          <p className="text-sm text-gray-700 mt-3 max-w-3xl">
+            Vous cherchez le barème d’un <strong>brevet</strong> blanc ? Il se saisit dans{' '}
+            <Link href="/admin/brevet" className="text-teal-800 font-semibold underline">
+              Brevet blanc →
+            </Link>{' '}
+            : là, les questions changent à chaque sujet, donc chaque sujet a son barème.
           </p>
         </header>
 
@@ -141,36 +156,41 @@ export function ListeExamens() {
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{erreur}</div>
         )}
 
-        <div>
-          <button
-            onClick={() => setOuvert((v) => !v)}
-            className="px-4 py-2 rounded-lg bg-purple-600 text-white font-semibold text-sm hover:bg-purple-700"
-          >
-            {ouvert ? 'Annuler' : '+ Nouveau brevet blanc'}
-          </button>
-        </div>
+        {/* Pas de bouton de création tant qu'aucune matière du bac n'attend un
+            barème par sujet : proposer d'en écrire un serait proposer un
+            travail qui ne servira à rien. */}
+        {MATIERES.length > 0 && (
+          <div>
+            <button
+              onClick={() => setOuvert((v) => !v)}
+              className="px-4 py-2 rounded-lg bg-purple-600 text-white font-semibold text-sm hover:bg-purple-700"
+            >
+              {ouvert ? 'Annuler' : '+ Nouveau bac blanc'}
+            </button>
+          </div>
+        )}
 
-        {ouvert && (
+        {ouvert && MATIERES.length > 0 && (
           <form
             action={creer}
             className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 grid sm:grid-cols-2 gap-4"
           >
-            <Champ nom="code" label="Identifiant" placeholder="brevet_blanc_francais_2027_01" requis />
+            <Champ nom="code" label="Identifiant" placeholder="maths_bac_blanc_2027_01" requis />
             <label className="text-sm">
               <span className="font-semibold text-gray-800">Matière</span>
               <select name="matiere" required className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2">
                 {MATIERES.map((m) => (
                   <option key={m} value={m}>
-                    {LABELS_MATIERES_BREVET[m]}
+                    {LABELS_MATIERES[m]}
                   </option>
                 ))}
               </select>
               <span className="block text-xs text-gray-500 mt-1">
-                Le bac n’apparaît pas : ses matières se notent à la grille commune.
+                Seules les matières qui se notent question par question apparaissent ici.
               </span>
             </label>
-            <Champ nom="titre" label="Titre" placeholder="Brevet blanc de français — novembre" requis />
-            <Champ nom="exercise_type" label="Type d’épreuve (facultatif)" placeholder="brevet_francais_complet" />
+            <Champ nom="titre" label="Titre" placeholder="Bac blanc de mathématiques — septembre" requis />
+            <Champ nom="exercise_type" label="Type d’épreuve (facultatif)" placeholder="maths_analyse" />
             <Champ nom="session" label="Session" placeholder="2027" />
             <Champ nom="date_epreuve" label="Date de l’épreuve" type="date" />
             <div className="sm:col-span-2">
@@ -178,12 +198,11 @@ export function ListeExamens() {
                 disabled={enCours}
                 className="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold text-sm disabled:opacity-50"
               >
-                {enCours ? 'Création…' : 'Créer le brevet blanc et son barème 1.0'}
+                {enCours ? 'Création…' : 'Créer le bac blanc et son barème 1.0'}
               </button>
               <p className="text-xs text-gray-500 mt-2">
-                Le barème 1.0 est créé vide, en brouillon. Rien ne sera corrigeable avant que la
-                somme des questions ne tombe exactement sur le total de l’épreuve (100 points en
-                français, ramenés sur 20) et que le barème ne soit verrouillé.
+                Le barème 1.0 est créé vide, en brouillon. Rien ne sera corrigeable avant qu’il ne
+                totalise exactement 20 points et qu’il ne soit verrouillé.
               </p>
             </div>
           </form>
@@ -193,9 +212,9 @@ export function ListeExamens() {
           <p className="text-gray-500">Chargement…</p>
         ) : examens.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-700 font-medium">Aucun brevet blanc n’a encore de barème.</p>
+            <p className="text-gray-700 font-medium">Aucun bac blanc n’a de barème propre.</p>
             <p className="text-sm text-gray-500 mt-2">
-              Rien d’anormal côté bac : ses matières n’en ont pas besoin.
+              C’est normal, et il n’y a rien à faire : les matières du bac se notent à leur grille.
             </p>
           </div>
         ) : (

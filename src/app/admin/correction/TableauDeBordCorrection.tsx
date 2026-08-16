@@ -1064,10 +1064,13 @@ export function TableauDeBordCorrection() {
             <h1 className="text-3xl font-bold text-gray-900">Pilotage de la correction</h1>
             <p className="text-sm text-gray-600 mt-1 max-w-2xl">
               Trois moteurs de note, à ne pas confondre. Le <strong>barème propre au sujet</strong>,
-              question par question, là où il existe. La <strong>grille rédigée</strong>, critère par
-              critère, pour les épreuves rédigées (HGGSP) : note analytique sur 20 convertie en note
-              officielle. Et la <strong>grille de compétences</strong> partout ailleurs — qui, pour
-              les deux premiers, ne produit plus que le <em>diagnostic pédagogique</em>.
+              question par question — <strong>au brevet uniquement</strong>, parce que ses questions
+              changent à chaque sujet, donc les points aussi. La <strong>grille rédigée</strong>,
+              critère par critère, pour l’HGGSP : note analytique sur 20 convertie en note
+              officielle. Et la <strong>grille commune</strong> pour tout le reste du bac — la même
+              pour tous les sujets : <strong>un nouveau bac blanc ne demande que son sujet, jamais
+              de barème</strong>. Là où la note vient d’ailleurs, la grille ne produit plus que le{' '}
+              <em>diagnostic pédagogique</em>.
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-500">
