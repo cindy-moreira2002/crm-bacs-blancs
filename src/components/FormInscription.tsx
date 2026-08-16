@@ -55,6 +55,13 @@ export function FormInscription({ examen }: { examen: Examen }) {
   const [telephone, setTelephone] = useState('');
   const [matiereSaisie, setMatiere] = useState<string>('');
   const [dateEpreuve, setDateEpreuve] = useState('');
+  // Le code du prof qui a recommandé les Matinées. Facultatif, mais c'est lui
+  // qui déclenche les 10 € d'affiliation : sans champ, le lien `?ref=` d'un
+  // prof ne laissait aucune trace et personne ne pouvait être payé.
+  const [codeProf, setCodeProf] = useState('');
+  const [parrain, setParrain] = useState<{ etat: 'vide' | 'cherche' | 'connu' | 'inconnu'; nom?: string }>({
+    etat: 'vide',
+  });
 
   const epreuve = t.epreuve;
 
@@ -84,6 +91,39 @@ export function FormInscription({ examen }: { examen: Examen }) {
     }, 0);
     return () => clearTimeout(t);
   }, [MATIERES, catalogue]);
+
+  // Arrivée par le lien d'affiliation d'un prof : `?ref=CLAIRE3F7B`. Le code
+  // est aussi mémorisé par la vitrine, qui le repasse dans l'URL — l'élève
+  // n'a donc rien à recopier, mais il voit et peut corriger ce qui est saisi.
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (!ref) return;
+    // setTimeout : ne pas poser d'état pendant le rendu de l'effet (Next 16).
+    const minuteur = setTimeout(() => setCodeProf(ref.replace(/\s+/g, '').toUpperCase()), 0);
+    return () => clearTimeout(minuteur);
+  }, []);
+
+  // Vérification du code pendant la frappe : « ✅ Recommandé par Claire M. »
+  // vaut mieux qu'un code fautif découvert des semaines plus tard, au moment
+  // de payer le prof.
+  useEffect(() => {
+    const code = codeProf.replace(/\s+/g, '').toUpperCase();
+    if (code.length < 4) {
+      const remise = setTimeout(() => setParrain({ etat: 'vide' }), 0);
+      return () => clearTimeout(remise);
+    }
+    const minuteur = setTimeout(async () => {
+      setParrain({ etat: 'cherche' });
+      try {
+        const res = await fetch(`/api/affiliation?code=${encodeURIComponent(code)}`);
+        const data = await res.json();
+        setParrain(data.connu ? { etat: 'connu', nom: data.prof } : { etat: 'inconnu' });
+      } catch {
+        setParrain({ etat: 'vide' });
+      }
+    }, 400);
+    return () => clearTimeout(minuteur);
+  }, [codeProf]);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -128,7 +168,15 @@ export function FormInscription({ examen }: { examen: Examen }) {
       const res = await fetch('/api/inscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nom: `${prenom.trim()} ${nom.trim()}`, email, email_parent: emailParent, telephone, matiere, date_epreuve: dateEpreuve || null }),
+        body: JSON.stringify({
+          nom: `${prenom.trim()} ${nom.trim()}`,
+          email,
+          email_parent: emailParent,
+          telephone,
+          matiere,
+          date_epreuve: dateEpreuve || null,
+          code_affiliation: codeProf.replace(/\s+/g, '').toUpperCase() || null,
+        }),
       });
 
       const data = await res.json();
@@ -141,6 +189,7 @@ export function FormInscription({ examen }: { examen: Examen }) {
         setTelephone('');
         setMatiere(MATIERES[0] ?? '');
         setDateEpreuve('');
+        setCodeProf('');
       } else {
         setMessage({ type: 'error', text: data.error || 'Erreur serveur' });
       }
@@ -235,6 +284,37 @@ export function FormInscription({ examen }: { examen: Examen }) {
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="block text-sm text-gray-600">
+          Code du professeur qui t’a recommandé{' '}
+          <span className="text-gray-400">(facultatif)</span>
+          <input
+            type="text"
+            placeholder="Ex. CLAIRE3F7B"
+            value={codeProf}
+            onChange={(e) => setCodeProf(e.target.value.replace(/\s+/g, '').toUpperCase())}
+            className={`${inputClass} mt-1 font-mono tracking-wide`}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          {parrain.etat === 'connu' && (
+            <span className="mt-1 block text-xs font-semibold text-green-700">
+              ✅ Recommandé par {parrain.nom}
+            </span>
+          )}
+          {parrain.etat === 'inconnu' && (
+            <span className="mt-1 block text-xs text-amber-700">
+              Ce code ne correspond à aucun professeur. Tu peux t’inscrire quand même, mais vérifie
+              le lien qu’il t’a envoyé.
+            </span>
+          )}
+          {parrain.etat === 'vide' && (
+            <span className="mt-1 block text-xs text-gray-400">
+              Laisse vide si tu viens de toi-même.
+            </span>
+          )}
         </label>
 
         <button

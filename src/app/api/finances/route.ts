@@ -17,6 +17,7 @@
  */
 import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { synchroniserAffiliation } from '@/lib/affiliation';
 import { emailsDb } from '@/lib/emails/client';
 import { enfiler } from '@/lib/emails/file';
 
@@ -224,6 +225,10 @@ async function appliquerPaiement(a: CorpsPaiement) {
 
   if (error) throw error;
   if (!data?.length) throw new Error('Inscription introuvable');
+
+  // L'élève est venu avec le lien d'un prof ? Ses 10 € d'affiliation naissent
+  // ici, au moment où l'argent rentre vraiment — jamais à l'inscription.
+  await synchroniserAffiliation(a.inscription_id);
 
   return { action: 'paiement', cible: a.inscription_id, ok: true, detail: a.statut };
 }

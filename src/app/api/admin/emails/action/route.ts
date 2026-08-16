@@ -15,6 +15,7 @@
  *    les personnes ayant accepté d'être recontactées.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { synchroniserAffiliation } from '@/lib/affiliation';
 import { profConnecte } from '@/lib/authProf';
 import { emailsDb } from '@/lib/emails/client';
 import { adressesDeTest } from '@/lib/emails/config';
@@ -205,6 +206,12 @@ export async function POST(req: NextRequest) {
 
         const { error } = await emailsDb().from('inscriptions').update(maj).eq('id', inscriptionId);
         if (error) throw error;
+
+        // Un paiement qui change fait naître (ou disparaître) les 10 €
+        // d'affiliation du prof qui a amené cet élève.
+        if (suite === 'paiement' || corps.annuler_inscription === true) {
+          await synchroniserAffiliation(inscriptionId);
+        }
 
         let misEnFile = 0;
         if (suite === 'paiement') misEnFile = await apresPaiementConfirme(inscriptionId);

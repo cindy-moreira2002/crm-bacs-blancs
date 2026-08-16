@@ -266,11 +266,15 @@ export function TableauDeBordProf({
           <section className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
             <h2 className="font-bold text-gray-900 mb-1">Mon lien d’affiliation</h2>
             <p className="text-sm text-gray-500 mb-3">
-              Partage-le : chaque élève inscrit par ce lien t’est rattaché.
+              Partage-le : chaque élève inscrit par ce lien t’est rattaché, et te rapporte{' '}
+              <strong className="text-gray-700">10 €</strong> dès qu’il a réglé sa matinée.
               {revenus.eleves_parraines > 0 && (
                 <> <strong className="text-gray-700">{revenus.eleves_parraines} élève
                 {revenus.eleves_parraines > 1 ? 's' : ''}</strong> à ce jour.</>
               )}
+              {' '}Un élève qui s’inscrit sans passer par le lien peut aussi taper ton code{' '}
+              <span className="font-mono text-gray-700">{prof.code_affiliation}</span> dans le
+              formulaire.
             </p>
             <div className="flex gap-2">
               <input readOnly value={lienAffiliation}

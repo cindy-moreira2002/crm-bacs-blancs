@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { normaliserCode, profParCode } from '@/lib/affiliation';
 import { codeCopie } from '@/lib/codeCopie';
 import { lienSalon } from '@/lib/discord/config';
 import { apresInscription } from '@/lib/emails/declencheurs';
@@ -37,7 +38,15 @@ async function trouverSession(matiere: string, date: string | null): Promise<str
 
 export async function POST(req: NextRequest) {
   try {
-    const { nom, email, email_parent, telephone, matiere, date_epreuve } = await req.json();
+    const {
+      nom,
+      email,
+      email_parent,
+      telephone,
+      matiere,
+      date_epreuve,
+      code_affiliation: codeSaisi,
+    } = await req.json();
 
     if (!nom || !email || !email_parent || !telephone || !matiere) {
       return NextResponse.json(
@@ -54,6 +63,14 @@ export async function POST(req: NextRequest) {
     // ligne de `sessions_bacs_blancs` — c'est exactement ce que l'élève a choisi
     // dans le formulaire, qui lit désormais la même table.
     const sessionId = await trouverSession(matiere, date_epreuve);
+
+    // Le code du prof qui a recommandé les Matinées. On ne garde QUE le code
+    // d'un prof réellement en activité : un code inventé ou recopié de travers
+    // laisserait croire, dans la page Paiements, qu'un virement est dû à
+    // quelqu'un qui n'existe pas. Une inscription n'échoue jamais pour ça.
+    const parrain = await profParCode(codeSaisi);
+    const codeAffiliation = parrain ? normaliserCode(parrain.code_affiliation) : null;
+
     const row = {
       nom,
       email,
@@ -62,6 +79,7 @@ export async function POST(req: NextRequest) {
       matiere,
       date_epreuve: date_epreuve || null,
       ...(sessionId ? { session_id: sessionId } : {}),
+      ...(codeAffiliation ? { code_affiliation: codeAffiliation } : {}),
     };
     let { data, error } = await supabase.from('inscriptions').insert([row]).select();
 
@@ -78,6 +96,16 @@ export async function POST(req: NextRequest) {
       const { session_id: _sansSession, ...rowSansSession } = row as typeof row & { session_id?: string };
       void _sansSession;
       ({ data, error } = await supabase.from('inscriptions').insert([rowSansSession]).select());
+    }
+
+    // Idem pour code_affiliation (script 09/47 non joué) : on préfère perdre
+    // le parrainage plutôt que l'inscription.
+    if (error && /code_affiliation/.test(error.message || '')) {
+      const { code_affiliation: _sansCode, ...rowSansCode } = row as typeof row & {
+        code_affiliation?: string;
+      };
+      void _sansCode;
+      ({ data, error } = await supabase.from('inscriptions').insert([rowSansCode]).select());
     }
 
     if (error) {
