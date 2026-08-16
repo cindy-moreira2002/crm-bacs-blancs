@@ -7,7 +7,7 @@
  * action et toutes les 60 secondes. Les boutons passent par
  * POST /api/admin/emails/action.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CaseParcours, LigneParcours, MessageAdmin, SnapshotEmails } from '@/lib/emails/admin';
 import { LIBELLE_TYPE, TYPES_EMAIL } from '@/lib/emails/config';
 import { LIBELLE_REGLAGE, type Reglages } from '@/lib/emails/reglages-libelles';
@@ -66,9 +66,13 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
   const [occupe, setOccupe] = useState<string | null>(null);
   const [apercu, setApercu] = useState<Apercu | null>(null);
   const [journal, setJournal] = useState<string | null>(null);
-  const [onglet, setOnglet] = useState<'parcours' | 'messages' | 'paiements' | 'reglages'>(
+  const [onglet, setOnglet] = useState<'valider' | 'parcours' | 'messages' | 'paiements' | 'reglages'>(
     'parcours',
   );
+  // Tant que je n'ai pas choisi d'onglet moi-même, la page s'ouvre là où il y
+  // a quelque chose à faire : les messages qui attendent mon feu vert. Un ref
+  // et pas un état : le rechargement automatique ne doit pas en dépendre.
+  const ongletChoisi = useRef(false);
   const [rechercheEleve, setRechercheEleve] = useState('');
   const [seulementTrous, setSeulementTrous] = useState(false);
   const [masquerTests, setMasquerTests] = useState(false);
@@ -93,6 +97,7 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
       const data = (await res.json()) as SnapshotEmails & { error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Erreur de chargement');
       setEtat(data);
+      setOnglet((actuel) => (!ongletChoisi.current && data.aValider.length > 0 ? 'valider' : actuel));
       setErreur(null);
     } catch (err) {
       setErreur(err instanceof Error ? err.message : 'Erreur inconnue');
@@ -290,6 +295,37 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
           </div>
         </div>
 
+        {/* Ce qui attend mon feu vert : la première chose qu'on voit. */}
+        {etat.aValider.length > 0 && (
+          <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-lg font-bold text-amber-900">
+                  🔔{' '}
+                  {etat.aValider.length === 1
+                    ? '1 message attend ton feu vert'
+                    : `${etat.aValider.length} messages attendent ton feu vert`}
+                </p>
+                <p className="text-sm text-amber-800">
+                  Ils ne partiront pas tant que tu n’auras pas cliqué « Valider et envoyer ».
+                  {etat.plusTard > 0 && ` (${etat.plusTard} autre(s) programmé(s) pour plus tard.)`}
+                </p>
+              </div>
+              {onglet !== 'valider' && (
+                <button
+                  onClick={() => {
+                    ongletChoisi.current = true;
+                    setOnglet('valider');
+                  }}
+                  className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                >
+                  Les voir maintenant
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Alertes */}
         {etat.alertes.length > 0 && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-1">
@@ -308,7 +344,26 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
         )}
 
         {/* Quota + compteurs */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div
+            className={`rounded-2xl border p-4 ${
+              etat.aValider.length > 0
+                ? 'border-amber-300 bg-amber-50'
+                : 'border-gray-200 bg-white'
+            }`}
+          >
+            <p className="text-xs uppercase tracking-wide text-gray-500">À valider</p>
+            <p
+              className={`text-2xl font-bold ${
+                etat.aValider.length > 0 ? 'text-amber-800' : 'text-gray-900'
+              }`}
+            >
+              {etat.aValider.length}
+            </p>
+            <p className="mt-2 text-xs text-gray-500">
+              {etat.aValider.length > 0 ? 'en attente de mon clic' : 'rien à faire'}
+            </p>
+          </div>
           <div className="rounded-2xl border border-gray-200 bg-white p-4">
             <p className="text-xs uppercase tracking-wide text-gray-500">Aujourd’hui</p>
             <p className="text-2xl font-bold text-gray-900">
@@ -344,6 +399,7 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
         <div className="flex gap-2 border-b border-gray-200">
           {(
             [
+              ['valider', `🔔 À valider (${etat.aValider.length})`],
               ['parcours', `Par élève (${etat.parcours.length})`],
               ['messages', 'Messages'],
               ['paiements', `Paiements à confirmer (${etat.paiementsEnAttente.length})`],
@@ -352,17 +408,79 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
           ).map(([cle, libelle]) => (
             <button
               key={cle}
-              onClick={() => setOnglet(cle)}
+              onClick={() => {
+                ongletChoisi.current = true;
+                setOnglet(cle);
+              }}
               className={`px-3 py-2 text-sm font-medium ${
                 onglet === cle
                   ? 'border-b-2 border-purple-700 text-purple-800'
-                  : 'text-gray-500 hover:text-gray-800'
+                  : cle === 'valider' && etat.aValider.length > 0
+                    ? 'text-amber-800 hover:text-amber-900'
+                    : 'text-gray-500 hover:text-gray-800'
               }`}
             >
               {libelle}
             </button>
           ))}
         </div>
+
+        {onglet === 'valider' && (
+          <div className="space-y-3">
+            {etat.aValider.length === 0 ? (
+              <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">
+                <p className="font-medium text-gray-700">Rien n’attend ton feu vert.</p>
+                <p className="mt-1 text-sm">
+                  {etat.plusTard > 0
+                    ? `${etat.plusTard} message(s) sont programmés pour plus tard : ils apparaîtront ici le moment venu.`
+                    : 'La file est vide : aucun message n’est prévu pour l’instant.'}
+                </p>
+              </div>
+            ) : (
+              etat.aValider.map((m) => (
+                <div
+                  key={m.id}
+                  className="rounded-2xl border border-amber-200 bg-white p-4 flex flex-wrap items-start justify-between gap-4"
+                >
+                  <div className="min-w-[16rem]">
+                    <p className="font-semibold text-gray-900">{m.type_libelle}</p>
+                    <p className="text-sm text-gray-700">
+                      Pour <strong>{m.destinataire_nom || m.eleve || m.destinataire}</strong> ({m.role})
+                      {' · '}
+                      {m.destinataire}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {m.matiere ?? 'matière —'}
+                      {m.session_date ? ` · session du ${jourCourt(m.session_date)}` : ''}
+                      {' · prévu le '}
+                      {instantCourt(m.planifie_le)}
+                    </p>
+                    {m.blocage && <p className="mt-1 text-xs text-amber-700">{m.blocage}</p>}
+                    {m.erreur && <p className="mt-1 text-xs text-red-600">{m.erreur}</p>}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <Bouton onClick={() => previsualiser(m)} occupe={occupe === `apercu-${m.id}`}>
+                      Voir le message
+                    </Bouton>
+                    <Bouton onClick={() => envoyerTest(m)} occupe={occupe === `test-${m.id}`}>
+                      M’en envoyer une copie
+                    </Bouton>
+                    <Bouton
+                      onClick={() => valider(m)}
+                      occupe={occupe === `valider-${m.id}`}
+                      principal
+                    >
+                      Valider et envoyer
+                    </Bouton>
+                    <Bouton onClick={() => annulerMessage(m)} occupe={occupe === `annuler-${m.id}`}>
+                      Annuler
+                    </Bouton>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
         {onglet === 'parcours' && (
           <VueParEleve

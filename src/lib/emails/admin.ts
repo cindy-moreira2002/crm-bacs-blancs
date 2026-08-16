@@ -118,6 +118,14 @@ export type LigneParcours = {
 export type SnapshotEmails = {
   messages: MessageAdmin[];
   total: number;
+  /**
+   * Les messages qui attendent le feu vert : leur heure est passée, ils ne
+   * partiront pas tant qu'on n'a pas cliqué. Jamais filtrés — c'est la
+   * question « qu'est-ce qui m'attend ? », pas « que contient la file ».
+   */
+  aValider: MessageAdmin[];
+  /** Ceux dont l'heure n'est pas encore venue : rien à faire pour l'instant. */
+  plusTard: number;
   compteurs: Record<string, number>;
   parType: { type: string; libelle: string; total: number }[];
   quota: EtatQuota;
@@ -147,6 +155,39 @@ const CHAMPS =
   'session_id, professeur_id, planifie_le, envoye_le, statut, tentatives, derniere_erreur, ' +
   'raison_blocage, variables, sujet, ouvert_le, clique_le, created_at';
 
+/** Les statuts d'un message qui n'est pas encore parti. */
+const STATUTS_EN_FILE = ['pending', 'scheduled', 'processing'];
+
+/** Une ligne de la table `emails` telle que la page l'affiche. */
+function versMessageAdmin(l: LigneEmail): MessageAdmin {
+  const v = (l.variables ?? {}) as Record<string, string>;
+  return {
+    id: l.id,
+    type: l.type,
+    type_libelle: LIBELLE_TYPE[l.type as TypeEmail] ?? l.type,
+    categorie: l.categorie,
+    statut: l.statut,
+    statut_libelle: LIBELLE_STATUT[l.statut] ?? l.statut,
+    destinataire: l.destinataire_email,
+    destinataire_nom: l.destinataire_nom ?? null,
+    role: l.destinataire_role,
+    eleve: v.student_name || null,
+    matiere: v.subject_name || null,
+    session_date: v.session_date_iso || null,
+    planifie_le: l.planifie_le,
+    envoye_le: l.envoye_le,
+    sujet: l.sujet,
+    tentatives: l.tentatives ?? 0,
+    erreur: l.derniere_erreur,
+    blocage: l.raison_blocage,
+    ouvert: Boolean(l.ouvert_le),
+    clique: Boolean(l.clique_le),
+    inscription_id: l.inscription_id ?? null,
+    session_id: l.session_id ?? null,
+    professeur_id: l.professeur_id ?? null,
+  };
+}
+
 export async function chargerSnapshotEmails(f: FiltresEmails = {}): Promise<SnapshotEmails> {
   const db = emailsDb();
   const reglages = await chargerReglages(true);
@@ -162,45 +203,27 @@ export async function chargerSnapshotEmails(f: FiltresEmails = {}): Promise<Snap
   if (f.jusqua) q = q.lte('planifie_le', f.jusqua);
   if (f.recherche) q = q.ilike('destinataire_email', `%${f.recherche.trim()}%`);
 
-  const [lignes, compteursBruts, sessions, quota, brevo] = await Promise.all([
+  const [lignes, compteursBruts, enFile, sessions, quota, brevo] = await Promise.all([
     q,
     db.from('emails').select('statut').limit(5000),
+    // Volontairement hors filtres : ce qui attend mon feu vert doit rester
+    // visible même quand la page est filtrée sur autre chose.
+    db
+      .from('emails')
+      .select(CHAMPS)
+      .in('statut', STATUTS_EN_FILE)
+      .order('planifie_le', { ascending: true })
+      .limit(200),
     db.from('sessions_bacs_blancs').select('id, matiere, date_epreuve').order('date_epreuve', { ascending: false }).limit(100),
     etatQuota(reglages.quota_quotidien, reglages.quota_marge),
     verifierCompteBrevo().catch((err) => ({ ok: false, message: String(err) })),
   ]);
 
   if (lignes.error) throw lignes.error;
+  if (enFile.error) throw enFile.error;
 
   const messages: MessageAdmin[] = ((lignes.data ?? []) as unknown as LigneEmail[])
-    .map((l) => {
-      const v = (l.variables ?? {}) as Record<string, string>;
-      return {
-        id: l.id,
-        type: l.type,
-        type_libelle: LIBELLE_TYPE[l.type as TypeEmail] ?? l.type,
-        categorie: l.categorie,
-        statut: l.statut,
-        statut_libelle: LIBELLE_STATUT[l.statut] ?? l.statut,
-        destinataire: l.destinataire_email,
-        destinataire_nom: l.destinataire_nom ?? null,
-        role: l.destinataire_role,
-        eleve: v.student_name || null,
-        matiere: v.subject_name || null,
-        session_date: v.session_date_iso || null,
-        planifie_le: l.planifie_le,
-        envoye_le: l.envoye_le,
-        sujet: l.sujet,
-        tentatives: l.tentatives ?? 0,
-        erreur: l.derniere_erreur,
-        blocage: l.raison_blocage,
-        ouvert: Boolean(l.ouvert_le),
-        clique: Boolean(l.clique_le),
-        inscription_id: l.inscription_id ?? null,
-        session_id: l.session_id ?? null,
-        professeur_id: l.professeur_id ?? null,
-      };
-    })
+    .map(versMessageAdmin)
     // La matière n'est pas une colonne : elle vit dans les variables du
     // message. On filtre donc ici, après lecture.
     .filter((m) => !f.matiere || f.matiere === 'toutes' || m.matiere === f.matiere);
@@ -209,6 +232,15 @@ export async function chargerSnapshotEmails(f: FiltresEmails = {}): Promise<Snap
   for (const l of (compteursBruts.data ?? []) as { statut: string }[]) {
     compteurs[l.statut] = (compteurs[l.statut] ?? 0) + 1;
   }
+
+  // « À valider » = son heure est passée. Même découpage que le tableau de
+  // bord de direction, pour que les deux écrans annoncent le même nombre.
+  const maintenant = Date.now();
+  const enFileMessages = ((enFile.data ?? []) as unknown as LigneEmail[]).map(versMessageAdmin);
+  const heurePassee = (m: MessageAdmin) =>
+    (m.planifie_le ? new Date(m.planifie_le).getTime() : 0) <= maintenant;
+  const aValider = enFileMessages.filter(heurePassee);
+  const plusTard = enFileMessages.length - aValider.length;
 
   const parTypeMap = new Map<string, number>();
   for (const m of messages) parTypeMap.set(m.type, (parTypeMap.get(m.type) ?? 0) + 1);
@@ -220,10 +252,13 @@ export async function chargerSnapshotEmails(f: FiltresEmails = {}): Promise<Snap
 
   const alertes: string[] = [];
   if (quota.alerte) alertes.push(quota.alerte);
-  if (validationManuelle(reglages)) {
-    const enAttente = (compteurs.pending ?? 0) + (compteurs.scheduled ?? 0);
+  // Le détail « combien attendent » est dit en grand par l'encadré en haut de
+  // page. Ici on ne garde que ce qui n'y est pas : comment sortir de ce mode.
+  if (validationManuelle(reglages) && aValider.length === 0) {
     alertes.push(
-      `Validation manuelle active : rien ne part tout seul. ${enAttente} message(s) attendent que tu cliques « Valider et envoyer ». Pour revenir à l’envoi automatique, passe le réglage « Je valide chaque e-mail avant qu’il parte » sur « non ».`,
+      `Validation manuelle active : rien ne part tout seul, mais aucun message n’attend actuellement.${
+        plusTard > 0 ? ` ${plusTard} message(s) sont programmés pour plus tard.` : ''
+      } Pour revenir à l’envoi automatique, passe le réglage « Je valide chaque e-mail avant qu’il parte » sur « non ».`,
     );
   }
   if (compteurs.bloque) {
@@ -248,6 +283,8 @@ export async function chargerSnapshotEmails(f: FiltresEmails = {}): Promise<Snap
   return {
     messages,
     total: messages.length,
+    aValider,
+    plusTard,
     compteurs,
     parType,
     quota,
