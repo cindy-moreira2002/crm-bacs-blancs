@@ -7,19 +7,25 @@ import { ListeExamens } from './ListeExamens';
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Barèmes des bacs blancs — Les Matinées du Bac',
+  title: 'Barèmes par sujet (brevet) — Les Matinées du Bac',
 };
 
 /**
- * /admin/bareme — les barèmes propres aux sujets.
+ * /admin/bareme — les barèmes propres aux sujets. BREVET UNIQUEMENT.
  *
- * C'est ici que naît la note officielle d'un bac blanc : un barème question
- * par question, testé sur des copies étalons, validé puis verrouillé avant
- * que la moindre copie d'élève ne soit corrigée.
+ * Un barème par sujet dit combien vaut chaque question DE CE SUJET-LÀ. Il n'a
+ * de sens que là où les questions changent d'un sujet à l'autre : au brevet.
+ * Au baccalauréat, toutes les matières se notent à leur grille commune ou à
+ * leur grille rédigée (décision du 15 août 2026, écrite dans `moteurs.ts`) —
+ * il n'y a donc rien à créer ici pour un bac blanc, pas même en français.
  *
- * La grille de compétences de la matière, elle, vit toujours dans
- * /admin/correction : elle ne produit plus la note, elle produit le
- * diagnostic pédagogique.
+ * Cet écran a longtemps proposé les neuf matières du bac : il réclamait un
+ * travail inutile et cachait les deux seules matières concernées. Le menu de
+ * création est désormais tiré de `MATIERES_BREVET`, et l'API refuse toute
+ * matière dont le moteur attendu n'est pas `bareme_sujet`.
+ *
+ * Les grilles, elles, se pilotent depuis /admin/correction : elles produisent
+ * la note au bac, et le diagnostic pédagogique partout.
  */
 export default async function PageBaremes() {
   const manquants = authManquant();

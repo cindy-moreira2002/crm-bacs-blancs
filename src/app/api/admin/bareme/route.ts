@@ -8,6 +8,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { listerExamens, creerExamen } from '@/lib/bareme';
+import { CE_QUI_SE_DEFINIT, moteurAttendu } from '@/lib/moteurs';
 import { gardeAdmin, erreur } from '../bareme/garde';
 
 export const dynamic = 'force-dynamic';
@@ -36,10 +37,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Un barème par sujet n'a de sens que là où les questions changent d'un
+  // sujet à l'autre. Ailleurs (tout le bac depuis le 15 août 2026), en créer un
+  // ouvre un chantier qui ne se refermera jamais : l'examen resterait bloqué en
+  // brouillon, et sa matière se corrige déjà par sa grille.
+  const matiere = String(corps.matiere).trim();
+  const moteur = moteurAttendu(matiere);
+  if (moteur !== 'bareme_sujet') {
+    return NextResponse.json(
+      {
+        error:
+          `Cette matière ne se note pas au barème par sujet. ${CE_QUI_SE_DEFINIT[moteur]} ` +
+          'Les barèmes par sujet ne concernent que le brevet.',
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     const { examen, version } = await creerExamen({
       code: String(corps.code).trim(),
-      matiere: String(corps.matiere).trim(),
+      matiere,
       titre: String(corps.titre).trim(),
       track: corps.track ? String(corps.track) : 'generale',
       exercise_type: corps.exercise_type ?? null,
