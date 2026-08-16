@@ -18,6 +18,16 @@ const INTERNAL_PREFIXES = ['/crm', '/ecoles-partenaires', '/api/leads', '/api/gm
 
 const HOTE_INSCRIPTION = 'inscription.matineesdubac.fr';
 const HOTE_ESPACES = 'https://espaces.matineesdubac.fr';
+const URL_INSCRIPTION_PUBLIQUE = 'https://inscription.matineesdubac.fr';
+
+/**
+ * Les vieilles adresses techniques Vercel. Un lien déjà envoyé, un favori, un
+ * QR code imprimé continuent de fonctionner — mais la personne arrive sur une
+ * adresse propre. Seuls le CRM interne et les API restent joignables ici : le
+ * CRM parce qu'il n'a pas d'autre porte, les API parce qu'elles sont appelées
+ * par Brevo et Discord avec une adresse déclarée chez eux.
+ */
+const HOTES_TECHNIQUES = ['crm-bacs-blancs-ihgf.vercel.app', 'crm-bacs-blancs.vercel.app'];
 
 export function proxy(request: NextRequest) {
   const host = (request.headers.get('host') ?? '').toLowerCase();
@@ -43,6 +53,11 @@ export function proxy(request: NextRequest) {
     if (!pathname.startsWith('/inscription') && !pathname.startsWith('/api/')) {
       return NextResponse.redirect(new URL(pathname + search, HOTE_ESPACES));
     }
+  }
+
+  if (HOTES_TECHNIQUES.includes(host) && !isInternalPath && !pathname.startsWith('/api/')) {
+    const cible = pathname.startsWith('/inscription') ? URL_INSCRIPTION_PUBLIQUE : HOTE_ESPACES;
+    return NextResponse.redirect(new URL(pathname + search, cible));
   }
 
   return NextResponse.next();
