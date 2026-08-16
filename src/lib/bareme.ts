@@ -93,6 +93,8 @@ export type QuestionComplete = QuestionBareme & {
   id: string;
   bareme_version_id: string;
   exercice_id: string | null;
+  /** Ajouté à la lecture (cf. chargerBareme) : l'éditeur travaille par code. */
+  exercice_code?: string | null;
   partie: string | null;
   ordre: number;
   unites_attendues: string | null;
@@ -194,12 +196,19 @@ export async function chargerBareme(versionId: string): Promise<BaremeComplet | 
     ? await db.from('bareme_awards').select('*').in('question_id', ids).order('ordre')
     : { data: [] as Palier[] };
 
+  // La base range l'exercice par identifiant, l'éditeur le manipule par code.
+  // Sans cette traduction, l'écran rouvre chaque question sans exercice et le
+  // premier « Enregistrer » les détacherait toutes.
+  const exercices = (exRes.data ?? []) as ExerciceBareme[];
+  const codeParId = new Map(exercices.map((e) => [e.id, e.code]));
+
   return {
     examen: examRes.data as Examen,
     version: v,
-    exercices: (exRes.data ?? []) as ExerciceBareme[],
+    exercices,
     questions: questions.map((q) => ({
       ...q,
+      exercice_code: q.exercice_id ? codeParId.get(q.exercice_id) ?? null : null,
       paliers: ((paliers ?? []) as Palier[]).filter((p) => p.question_id === q.id),
     })),
     referentiel: (refRes.data ?? []) as CompetenceReferentiel[],
