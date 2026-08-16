@@ -6,7 +6,7 @@ import { labelMatiere } from '@/lib/matieres';
 import { EditeurBareme } from './EditeurBareme';
 import { ModuleEtalons } from './ModuleEtalons';
 import { TableauCalibrationVue } from './TableauCalibration';
-import type { VueExamen } from './types';
+import type { Examen, VueExamen } from './types';
 
 const ONGLETS = [
   { cle: 'examen', label: 'Examen' },
@@ -325,6 +325,128 @@ function incrementer(version: string): string {
   return m ? `${m[1]}.${Number(m[2]) + 1}` : `${version}-b`;
 }
 
+/**
+ * Dépôt du PDF du sujet.
+ *
+ * Le geste attendu tient en un bouton : choisir le fichier. Le PDF monte
+ * directement du navigateur vers le Storage par une URL signée (aucune clé ne
+ * descend au client, et la limite de 4,5 Mo des fonctions Vercel ne s'applique
+ * pas), puis le serveur en extrait le texte et remplit « Texte du sujet ».
+ *
+ * Ce que ça remplace : recopier un énoncé de mathématiques à la main. Les
+ * exposants et les symboles n'y survivaient pas, et une réponse attendue fausse
+ * note faux.
+ */
+function DepotSujetPdf({ examen, onDepose }: { examen: Examen; onDepose: () => void }) {
+  const [enCours, setEnCours] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [resultat, setResultat] = useState<{ pages: number; caracteres: number } | null>(null);
+
+  const dejaDepose = Boolean(examen.sujet_url && !examen.sujet_url.startsWith('http'));
+  const nomFichier = dejaDepose ? examen.sujet_url!.split('/').pop() : null;
+
+  async function deposer(fichier: File) {
+    setErreur(null);
+    setResultat(null);
+    try {
+      if (fichier.type && fichier.type !== 'application/pdf') {
+        throw new Error('Le sujet doit être un fichier PDF.');
+      }
+
+      setEnCours('Envoi du fichier…');
+      const rPrep = await fetch(`/api/admin/bareme/${examen.id}/sujet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'preparer', nom: fichier.name }),
+      });
+      const prep = await rPrep.json();
+      if (!rPrep.ok) throw new Error(prep.error ?? 'Préparation impossible');
+
+      const rUp = await fetch(prep.signed_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: fichier,
+      });
+      if (!rUp.ok) throw new Error(`Envoi du fichier : ${rUp.status}`);
+
+      setEnCours('Lecture du sujet…');
+      const rLire = await fetch(`/api/admin/bareme/${examen.id}/sujet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'lire', chemin: prep.chemin }),
+      });
+      const lu = await rLire.json();
+      if (!rLire.ok) throw new Error(lu.error ?? 'Lecture impossible');
+
+      setResultat({ pages: lu.pages, caracteres: lu.caracteres });
+      onDepose();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setEnCours(null);
+    }
+  }
+
+  async function ouvrirPdf() {
+    const r = await fetch(`/api/admin/bareme/${examen.id}/sujet`);
+    const j = await r.json();
+    if (j.lien) window.open(j.lien, '_blank', 'noopener');
+    else setErreur('Aucun PDF enregistré pour ce sujet.');
+  }
+
+  return (
+    <section className="rounded-xl border border-purple-200 bg-purple-50/60 p-4 space-y-3">
+      <div>
+        <h3 className="font-bold text-gray-900 text-sm">Déposer le PDF du sujet</h3>
+        <p className="text-xs text-gray-700 mt-1">
+          Choisis le fichier : le site le range et en lit le texte tout seul. <strong>Rien à
+          recopier</strong> — surtout pas des formules, qui ne survivent pas à un copier-coller. Le
+          champ « Texte du sujet » plus bas se remplit automatiquement, et reste modifiable.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="file"
+          accept="application/pdf"
+          disabled={Boolean(enCours)}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void deposer(f);
+            e.target.value = '';
+          }}
+          className="text-xs text-gray-700 file:mr-3 file:rounded-lg file:border file:border-purple-300 file:bg-white file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-purple-700"
+        />
+        {enCours && <span className="text-xs text-purple-800 font-medium">{enCours}</span>}
+        {dejaDepose && !enCours && (
+          <button type="button" onClick={ouvrirPdf} className="text-xs text-purple-700 hover:underline">
+            📄 Revoir le PDF déposé
+          </button>
+        )}
+      </div>
+
+      {dejaDepose && !resultat && (
+        <p className="text-xs text-gray-600">
+          Fichier enregistré : <span className="font-mono">{nomFichier}</span>. En déposer un autre
+          le remplace.
+        </p>
+      )}
+
+      {resultat && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+          Sujet lu : <strong>{resultat.pages} page(s)</strong>, {resultat.caracteres.toLocaleString('fr-FR')}{' '}
+          caractères enregistrés. Relis le texte plus bas — si des formules sont mal rendues,
+          corrige-les à la main, elles servent de référence au correcteur.
+        </p>
+      )}
+
+      {erreur && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">{erreur}</p>
+      )}
+    </section>
+  );
+}
+
 /** Une ligne d'explication sous un champ : à quoi il sert, et pour qui. */
 function Aide({ children }: { children: React.ReactNode }) {
   return <span className="block text-xs text-gray-500 mt-1 leading-snug">{children}</span>;
@@ -414,6 +536,8 @@ function FicheExamen({
         suivant ; ce qui se remplit ici, c’est le reste. Sans le sujet, le correcteur lit des
         réponses sans savoir ce qui était demandé.
       </p>
+
+      <DepotSujetPdf examen={examen} onDepose={onEnregistre} />
 
       <div className="grid sm:grid-cols-2 gap-4 text-sm">
         <label>
