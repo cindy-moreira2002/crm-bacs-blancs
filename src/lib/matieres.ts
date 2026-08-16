@@ -17,6 +17,12 @@ export const LABELS_MATIERES: Record<string, string> = {
   svt: 'SVT',
   hggsp: 'HGGSP',
   hlp: 'HLP',
+  // Ajouté le 16 août 2026. « anglais » désigne ici la spécialité LLCER
+  // Anglais, la seule épreuve d'anglais qui donne lieu à un écrit terminal
+  // (synthèse 16 points + traduction 4 points). Le tronc commun LVA/LVB relève
+  // du contrôle continu, et AMC est une autre spécialité : ni l'un ni l'autre
+  // n'est branché ici.
+  anglais: 'Anglais (LLCER)',
 };
 
 /**
@@ -66,6 +72,8 @@ const LABELS_EXERCICES: Record<string, string> = {
   hggsp_etude_critique: 'Étude critique de documents',
   hlp_interpretation: 'Question d’interprétation',
   hlp_essai: 'Essai',
+  llcer_synthese: 'Synthèse du dossier (en anglais)',
+  llcer_traduction: 'Traduction en français',
 };
 
 export function labelExercice(type: string): string {

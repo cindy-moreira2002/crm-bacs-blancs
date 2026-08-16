@@ -15,6 +15,7 @@
     "test:hggsp": "node --test scripts/test-hggsp.mjs",
     "hggsp:verifier": "node scripts/verifier-hggsp-base.mjs",
     "test:sujets": "tsx scripts/test-sujets-eleves.ts",
+    "sujet:pousser": "tsx scripts/pousser-sujet.ts",
     "test:brevet": "npm run test:brevet:francais && npm run test:brevet:maths && npm run test:brevet:nonregression",
     "test:brevet:francais": "tsx scripts/test-brevet-francais.ts",
     "test:brevet:maths": "tsx scripts/test-brevet-maths.ts",

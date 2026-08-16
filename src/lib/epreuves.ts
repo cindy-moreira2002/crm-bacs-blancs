@@ -53,6 +53,17 @@ export const COMPOSITIONS: Record<string, CompositionEpreuve[]> = {
       note: 'Au bac, l’élève choisit ENTRE la dissertation (sur 20) ET l’épreuve composée (4 + 6 + 10 = 20). Les deux ne s’additionnent jamais.',
     },
   ],
+  anglais: [
+    {
+      nom: 'Épreuve écrite de LLCER Anglais',
+      total: 20,
+      parties: [
+        { exercise_type: 'llcer_synthese', libelle: 'Synthèse du dossier', points: 16 },
+        { exercise_type: 'llcer_traduction', libelle: 'Traduction en français', points: 4 },
+      ],
+      note: 'Les deux parties sont passées par le même élève et s’additionnent. La synthèse se rédige en anglais à partir des trois documents ; la traduction porte sur un passage d’environ 500 signes tiré du dossier. Une traduction rendue seule est donc notée sur 4, et ce n’est pas un bug.',
+    },
+  ],
   hggsp: [
     {
       nom: 'Épreuve d’HGGSP',

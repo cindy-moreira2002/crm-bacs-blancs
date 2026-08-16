@@ -42,6 +42,18 @@ export const MOTEUR_ATTENDU: Record<string, MoteurNote> = {
   ses: 'grille_generique',
   hlp: 'grille_generique',
 
+  // LLCER Anglais, ajouté le 16 août 2026. La synthèse — 16 des 20 points — est
+  // une épreuve rédigée : ses critères (compréhension des trois documents, mise
+  // en relation, argumentation, qualité de la langue) ne dépendent pas du
+  // dossier tombé le jour de l'épreuve. D'où la grille commune.
+  //
+  // Réserve à connaître : la traduction, elle, se noterait mieux segment par
+  // segment, donc au barème du sujet — le passage change à chaque fois. Une
+  // matière n'ayant qu'un seul moteur, c'est la synthèse qui l'emporte, et le
+  // découpage par segment vit dans le corrigé remis au professeur. À rouvrir si
+  // les traductions se corrigent mal.
+  anglais: 'grille_generique',
+
   // DÉCISION DE CINDY, 16 août 2026 : les épreuves à calculs reviennent au
   // barème par sujet. « Les calculs sont comptés comme des exercices » : un
   // exercice de maths, de physique ou de SVT se note en additionnant des
