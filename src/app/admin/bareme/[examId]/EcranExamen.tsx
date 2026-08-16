@@ -325,6 +325,11 @@ function incrementer(version: string): string {
   return m ? `${m[1]}.${Number(m[2]) + 1}` : `${version}-b`;
 }
 
+/** Une ligne d'explication sous un champ : à quoi il sert, et pour qui. */
+function Aide({ children }: { children: React.ReactNode }) {
+  return <span className="block text-xs text-gray-500 mt-1 leading-snug">{children}</span>;
+}
+
 function Chiffre({ valeur, label, alerte }: { valeur: string; label: string; alerte?: boolean }) {
   return (
     <div className={`rounded-xl border p-3 ${alerte ? 'border-amber-200 bg-amber-50' : 'border-gray-200'}`}>
@@ -404,14 +409,17 @@ function FicheExamen({
     <form action={enregistrer} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
       <h2 className="text-lg font-bold text-gray-900">Le sujet et son corrigé</h2>
       <p className="text-sm text-gray-600">
-        Le texte du sujet et celui du corrigé sont remis au correcteur avec le barème. Plus ils sont
-        complets, moins l’IA a besoin de deviner — et moins il y a de copies en relecture.
+        Quand une copie est notée, le correcteur reçoit trois choses : le <strong>sujet</strong>, le{' '}
+        <strong>corrigé</strong> et le <strong>barème</strong>. Le barème s’écrit dans l’onglet
+        suivant ; ce qui se remplit ici, c’est le reste. Sans le sujet, le correcteur lit des
+        réponses sans savoir ce qui était demandé.
       </p>
 
       <div className="grid sm:grid-cols-2 gap-4 text-sm">
         <label>
           <span className="font-semibold text-gray-800">Titre</span>
           <input name="titre" defaultValue={examen.titre} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" />
+          <Aide>Le nom que tu vois dans la liste des bacs blancs. Il n’a aucun autre effet.</Aide>
         </label>
         <label>
           <span className="font-semibold text-gray-800">Type d’épreuve</span>
@@ -421,10 +429,14 @@ function FicheExamen({
             placeholder="maths_analyse"
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
           />
+          <Aide>
+            Facultatif. Sert à ranger les épreuves entre elles quand une matière en a plusieurs formes.
+          </Aide>
         </label>
         <label>
           <span className="font-semibold text-gray-800">Session</span>
           <input name="session" defaultValue={examen.session ?? ''} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" />
+          <Aide>L’année du bac visé, par exemple 2027.</Aide>
         </label>
         <label>
           <span className="font-semibold text-gray-800">Date de l’épreuve</span>
@@ -434,24 +446,39 @@ function FicheExamen({
             defaultValue={examen.date_epreuve ?? ''}
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
           />
+          <Aide>Le jour du bac blanc. Affichée sur la fiche, elle ne déclenche rien toute seule.</Aide>
         </label>
         <label>
-          <span className="font-semibold text-gray-800">Fiche sujet liée (subject_cards.id)</span>
+          <span className="font-semibold text-gray-800">Fiche sujet du catalogue</span>
           <input
             name="subject_id"
             defaultValue={examen.subject_id ?? ''}
             placeholder="MA-ANALYSE-2027-01"
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
           />
+          <Aide>
+            Facultatif, et réservé aux sujets déjà présents dans le catalogue de l’ancien moteur.
+            Laisse vide si tu ne sais pas quoi y mettre : le barème marche sans.
+          </Aide>
         </label>
         <label>
           <span className="font-semibold text-gray-800">Lien vers le sujet (PDF)</span>
           <input name="sujet_url" defaultValue={examen.sujet_url ?? ''} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" />
+          <Aide>
+            Adresse d’un PDF accessible en ligne. Utile si le sujet contient des figures : « Proposer
+            le barème » ira le chercher.
+          </Aide>
         </label>
       </div>
 
       <label className="block text-sm">
         <span className="font-semibold text-gray-800">Texte du sujet</span>
+        <Aide>
+          L’énoncé complet, tel que l’élève l’a eu sous les yeux — exercices, questions, données,
+          documents. C’est le champ le plus utile de cette page : il est remis au correcteur avec
+          chaque copie, et c’est lui que lit « Proposer le barème » quand tu ne déposes pas de PDF.
+          Colle-le tel quel, la mise en forme n’a pas d’importance.
+        </Aide>
         <textarea
           name="sujet_texte"
           defaultValue={examen.sujet_texte ?? ''}
@@ -462,6 +489,11 @@ function FicheExamen({
 
       <label className="block text-sm">
         <span className="font-semibold text-gray-800">Texte du corrigé</span>
+        <Aide>
+          La correction rédigée, celle qu’un professeur écrirait au tableau. Facultative : le barème
+          dit déjà ce qu’on attend question par question. Elle sert au correcteur à trancher les cas
+          limites, en lui montrant la démarche complète et pas seulement le résultat attendu.
+        </Aide>
         <textarea
           name="corrige_texte"
           defaultValue={examen.corrige_texte ?? ''}
@@ -472,6 +504,11 @@ function FicheExamen({
 
       <label className="block text-sm">
         <span className="font-semibold text-gray-800">Consignes particulières au correcteur</span>
+        <Aide>
+          Ce qui vaut pour CE sujet-là et qu’aucun barème ne peut deviner : une méthode hors
+          programme à accepter, une coquille de l’énoncé à ne pas sanctionner, une tolérance décidée
+          en équipe.
+        </Aide>
         <textarea
           name="consignes_correcteur"
           defaultValue={examen.consignes_correcteur ?? ''}
