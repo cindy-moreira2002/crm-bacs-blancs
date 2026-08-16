@@ -70,6 +70,41 @@ const NOMS_NATURE: Record<string, { titre: string; explication: string }> = {
 
 const NOMS_GRAVITE: Record<string, string> = { majeure: 'forte', moderee: 'moyenne', mineure: 'faible' };
 
+/**
+ * La copie transcrite de l'élève, dépliable.
+ *
+ * Elle dit franchement quand elle n'a rien à montrer : une correction sans
+ * copie n'est pas jugeable, et le relecteur doit savoir que le manque vient
+ * de nous, pas de son écran.
+ */
+function Copie({ pages }: { pages: string[] }) {
+  if (!pages.length) {
+    return (
+      <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <strong>Copie non transcrite.</strong> Cette correction n’a pas de
+        transcription en base : impossible d’afficher ce que l’élève a écrit.
+      </p>
+    );
+  }
+  return (
+    <details className="rounded-xl border border-gray-200 bg-gray-50">
+      <summary className="cursor-pointer px-5 py-3 font-semibold text-gray-800 select-none">
+        Lire la copie de l’élève ({pages.length} page{pages.length > 1 ? 's' : ''})
+      </summary>
+      <div className="px-5 pb-5 space-y-4">
+        {pages.map((page, i) => (
+          <div key={i}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">
+              Page {i + 1}
+            </p>
+            <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-gray-800">{page}</p>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 /** Nombre à la française : 3,75 et non 3.75. */
 const fr = (n: number) => n.toLocaleString('fr-FR');
 
@@ -442,26 +477,7 @@ export default async function PageRelecture({
                 <SujetIntrouvable />
               )}
 
-              {exemple.pagesCopie.length > 0 && (
-                <details className="rounded-xl border border-gray-200 bg-gray-50">
-                  <summary className="cursor-pointer px-5 py-3 font-semibold text-gray-800 select-none">
-                    Lire la copie de l’élève ({exemple.pagesCopie.length} page
-                    {exemple.pagesCopie.length > 1 ? 's' : ''})
-                  </summary>
-                  <div className="px-5 pb-5 space-y-4">
-                    {exemple.pagesCopie.map((page, i) => (
-                      <div key={i}>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">
-                          Page {i + 1}
-                        </p>
-                        <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-gray-800">
-                          {page}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
+              <Copie pages={exemple.pagesCopie} />
 
               <div className="space-y-4">
                 {exemple.criteria.map((c) => (
@@ -562,6 +578,7 @@ export default async function PageRelecture({
                       ) : (
                         <SujetIntrouvable />
                       )}
+                      <Copie pages={a.pagesCopie} />
                     </div>
                   ))}
                 </div>

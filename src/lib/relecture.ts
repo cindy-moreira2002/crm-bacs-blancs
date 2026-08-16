@@ -174,6 +174,9 @@ export type DonneesRelecture = {
     noteFinale: number;
     bareme: number;
     sujet: SujetCopie | null;
+    /** La copie transcrite, comme pour l'exemple principal : une correction
+     *  sans sa copie ne se juge pas davantage qu'une correction sans sujet. */
+    pagesCopie: string[];
   }[];
   /** Barèmes propres aux sujets de cette matière. Vide tant qu'aucun n'existe. */
   baremes: BaremeRelecture[];
@@ -308,6 +311,7 @@ export async function chargerDonneesRelecture(matiere: string): Promise<DonneesR
           noteFinale: rj.note_finale as number,
           bareme,
           sujet: null,
+          pagesCopie: [],
         });
       }
     }
@@ -323,14 +327,25 @@ export async function chargerDonneesRelecture(matiere: string): Promise<DonneesR
     for (const a of autresExemples) a.sujet = sujetDe(a.correctionId);
   }
 
-  if (exemple) {
+  // Les copies transcrites de TOUTES les corrections affichées, en une requête.
+  // Avant, seule la première était chargée : la dissertation de français
+  // s'affichait sans sa copie, donc sans rien à juger.
+  const idsAffiches = [
+    ...(exemple ? [exemple.correctionId] : []),
+    ...autresExemples.map((a) => a.correctionId),
+  ];
+  if (idsAffiches.length) {
     const { data: transcriptions } = await db
       .from('copy_transcriptions')
-      .select('transcription_json')
-      .eq('correction_id', exemple.correctionId)
-      .limit(1);
-    const pages = (transcriptions?.[0]?.transcription_json as { pages?: { text?: string }[] } | undefined)?.pages;
-    exemple.pagesCopie = (pages ?? []).map((p) => p.text ?? '').filter(Boolean);
+      .select('correction_id, transcription_json')
+      .in('correction_id', idsAffiches);
+    const pagesDe = (correctionId: string) => {
+      const ligne = (transcriptions ?? []).find((t) => t.correction_id === correctionId);
+      const pages = (ligne?.transcription_json as { pages?: { text?: string }[] } | undefined)?.pages;
+      return (pages ?? []).map((p) => p.text ?? '').filter(Boolean);
+    };
+    if (exemple) exemple.pagesCopie = pagesDe(exemple.correctionId);
+    for (const a of autresExemples) a.pagesCopie = pagesDe(a.correctionId);
   }
 
   return {
