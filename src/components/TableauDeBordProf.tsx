@@ -127,6 +127,16 @@ export function TableauDeBordProf({
     setTimeout(() => setCopie(false), 2000);
   };
 
+  // Le code seul, pour l'élève qui s'inscrit sans passer par le lien (il le
+  // recopie dans le formulaire). Sans lui, un prof qui parle de vive voix à un
+  // élève n'avait rien à lui donner d'autre qu'une longue adresse.
+  const [codeCopie, setCodeCopie] = useState(false);
+  const copierCode = async () => {
+    await navigator.clipboard.writeText(prof.code_affiliation);
+    setCodeCopie(true);
+    setTimeout(() => setCodeCopie(false), 2000);
+  };
+
   const seCoacher = async (session: SessionEnrichie) => {
     setBusy(session.id);
     setErreur(null);
@@ -284,6 +294,24 @@ export function TableauDeBordProf({
                 className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 whitespace-nowrap">
                 {copie ? 'Copié ✓' : 'Copier'}
               </button>
+            </div>
+
+            {/* Le code seul, en gros : c'est ce qu'on dicte au téléphone. */}
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-purple-50 border border-purple-200 p-3">
+              <div>
+                <p className="text-xs font-semibold text-purple-800">Mon code</p>
+                <p className="text-2xl font-bold font-mono tracking-wider text-purple-900 leading-tight">
+                  {prof.code_affiliation}
+                </p>
+              </div>
+              <button onClick={copierCode}
+                className="px-3 py-1.5 rounded-lg border border-purple-300 bg-white text-xs font-semibold text-purple-800 hover:bg-purple-100">
+                {codeCopie ? 'Copié ✓' : 'Copier le code'}
+              </button>
+              <p className="text-xs text-purple-800 sm:ml-auto sm:max-w-xs">
+                À dicter à un élève qui s’inscrit sans passer par ton lien : il le tape dans le champ
+                « Code du professeur qui t’a recommandé ».
+              </p>
             </div>
           </section>
 

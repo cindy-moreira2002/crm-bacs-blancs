@@ -63,6 +63,14 @@ export function TableauProfs({ monId }: { monId: string }) {
   const [recherche, setRecherche] = useState('');
   const [ouvert, setOuvert] = useState<string | null>(null);
   const [motDePasse, setMotDePasse] = useState('');
+  const [formulaire, setFormulaire] = useState(false);
+  const [nouveau, setNouveau] = useState({
+    prenom: '',
+    nom: '',
+    email: '',
+    telephone: '',
+    matieres: [] as string[],
+  });
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -110,6 +118,37 @@ export function TableauProfs({ monId }: { monId: string }) {
     } catch {
       setErreur('Impossible de joindre le serveur.');
       return false;
+    } finally {
+      setOccupe(null);
+    }
+  };
+
+  const creer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOccupe('creation');
+    setMessage(null);
+    setErreur(null);
+    try {
+      const r = await fetch('/api/admin/professeurs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nouveau),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        setErreur(data.error ?? 'Création refusée.');
+        return;
+      }
+      // Le code est annoncé tout de suite : c'est l'information que
+      // l'administratrice doit transmettre au prof.
+      setProfs((liste) => [data.prof as Prof, ...liste]);
+      setMessage(
+        `${data.prof.prenom} ${data.prof.nom} est créé. Son code d’affiliation : ${data.prof.code_affiliation} — définis-lui un mot de passe sur sa ligne.`,
+      );
+      setNouveau({ prenom: '', nom: '', email: '', telephone: '', matieres: [] });
+      setFormulaire(false);
+    } catch {
+      setErreur('Impossible de joindre le serveur.');
     } finally {
       setOccupe(null);
     }
@@ -212,7 +251,101 @@ export function TableauProfs({ monId }: { monId: string }) {
         >
           ↻
         </button>
+        <button
+          onClick={() => setFormulaire((v) => !v)}
+          className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm font-semibold"
+        >
+          {formulaire ? 'Annuler' : '＋ Ajouter un professeur'}
+        </button>
       </div>
+
+      {/* Créer une fiche — et son code d'affiliation, qui naît avec elle. */}
+      {formulaire && (
+        <form
+          onSubmit={creer}
+          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3"
+        >
+          <div>
+            <h2 className="font-bold text-slate-900">Nouveau professeur</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Son <strong>code d’affiliation</strong> est tiré au sort à la création (prénom + 4
+              caractères, par exemple CLAIRE3F7B) : il le voit dans son espace et le donne à ses
+              élèves. Le mot de passe se définit ensuite sur sa ligne.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              value={nouveau.prenom}
+              onChange={(e) => setNouveau({ ...nouveau, prenom: e.target.value })}
+              placeholder="Prénom"
+              className="px-3 py-2 rounded-lg border border-slate-300 text-sm"
+              required
+            />
+            <input
+              value={nouveau.nom}
+              onChange={(e) => setNouveau({ ...nouveau, nom: e.target.value })}
+              placeholder="Nom"
+              className="px-3 py-2 rounded-lg border border-slate-300 text-sm"
+              required
+            />
+            <input
+              type="email"
+              value={nouveau.email}
+              onChange={(e) => setNouveau({ ...nouveau, email: e.target.value })}
+              placeholder="Adresse e-mail"
+              className="px-3 py-2 rounded-lg border border-slate-300 text-sm"
+              required
+            />
+            <input
+              value={nouveau.telephone}
+              onChange={(e) => setNouveau({ ...nouveau, telephone: e.target.value })}
+              placeholder="Téléphone (facultatif)"
+              className="px-3 py-2 rounded-lg border border-slate-300 text-sm"
+            />
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 mb-1.5">
+              Ses matières — sans matière, son espace reste vide.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {MATIERES.map((m) => {
+                const cochee = nouveau.matieres.includes(m);
+                return (
+                  <button
+                    type="button"
+                    key={m}
+                    onClick={() =>
+                      setNouveau({
+                        ...nouveau,
+                        matieres: cochee
+                          ? nouveau.matieres.filter((x) => x !== m)
+                          : [...nouveau.matieres, m],
+                      })
+                    }
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                      cochee
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-600 border-slate-300'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={occupe === 'creation'}
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50"
+          >
+            {occupe === 'creation' ? 'Création…' : 'Créer la fiche et son code'}
+          </button>
+        </form>
+      )}
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {chargement ? (
