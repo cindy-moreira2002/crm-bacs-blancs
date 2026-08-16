@@ -13,6 +13,7 @@
  * exactement le barème qui sera appliqué aux copies.
  */
 import { pipelineDb } from '@/lib/pipeline';
+import { chargerSujets, type SujetCopie } from '@/lib/sujet';
 import type { NiveauCritere, PorteeErreur, TypeImpact } from '@/lib/hggspNoyau';
 
 export type PalierV2 = { points: number; niveau: NiveauCritere; description: string };
@@ -136,6 +137,8 @@ export type ExempleV2 = {
   controles: Record<string, unknown> | null;
   motifsRelecture: { code: string; message: string }[];
   pages: string[];
+  /** Le sujet sur lequel la copie a été écrite : sans lui, rien n'est jugeable. */
+  sujet: SujetCopie | null;
   /** Correction antérieure du même devoir, avec l'ancienne grille. */
   ancienne?: { correctionId: string; note: number; bareme: number; date: string } | null;
 };
@@ -408,6 +411,7 @@ export async function chargerRelectureHggsp(): Promise<DonneesHggsp | null> {
         message: String(m.message ?? ''),
       })),
       pages: pages.map((p) => p.text ?? '').filter(Boolean),
+      sujet: null,
       ancienne: ancienne
         ? {
             correctionId: ancienne.id,
@@ -417,6 +421,21 @@ export async function chargerRelectureHggsp(): Promise<DonneesHggsp | null> {
           }
         : null,
     });
+  }
+
+  // Les fiches sujet des copies retenues, en une seule requête.
+  const sujetsParCorrection = new Map<string, string>();
+  for (const c of corrections ?? []) {
+    if (c.subject_id && exemples.some((e) => e.correctionId === c.id)) {
+      sujetsParCorrection.set(c.id, c.subject_id as string);
+    }
+  }
+  if (sujetsParCorrection.size) {
+    const parSujet = await chargerSujets([...sujetsParCorrection.values()]);
+    for (const e of exemples) {
+      const id = sujetsParCorrection.get(e.correctionId);
+      e.sujet = id ? parSujet.get(id) ?? null : null;
+    }
   }
 
   return { grilles, taxonomie, etalons, calibration, exemples };

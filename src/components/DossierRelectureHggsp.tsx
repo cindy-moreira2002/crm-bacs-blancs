@@ -9,6 +9,7 @@
  * du code : c'est exactement le barème qui sera appliqué aux copies.
  */
 import { useMemo, useState } from 'react';
+import { SujetDeLaCopie, SujetIntrouvable } from '@/components/SujetDeLaCopie';
 import type {
   Calibration,
   CritereV2,
@@ -117,7 +118,7 @@ export function DossierRelectureHggsp({
     { cle: 'comparer', libelle: '4 · Comparer les deux grilles', visible: grilles.length > 1 },
     { cle: 'erreurs', libelle: '5 · Erreurs types et impacts', visible: taxonomie.length > 0 },
     { cle: 'etalons', libelle: '6 · Copies étalons et calibration', visible: etalons.length > 0 },
-    { cle: 'copie', libelle: '7 · Une copie corrigée', visible: exemples.length > 0 },
+    { cle: 'copie', libelle: '7 · Sujet, copie et correction', visible: exemples.length > 0 },
   ];
 
   return (
@@ -799,6 +800,9 @@ function BlocCopies({ exemples }: { exemples: ExempleV2[] }) {
             à 0,5 / 6. La nouvelle grille paie le prélèvement et maintient la critique au plus bas.
           </div>
         )}
+
+        {/* Le sujet d'abord : une note ne se juge pas sans l'énoncé. */}
+        {e.sujet ? <SujetDeLaCopie sujet={e.sujet} avecAttendus /> : <SujetIntrouvable />}
 
         {e.pages.length > 0 && (
           <details className="rounded-xl border border-gray-200 bg-gray-50">

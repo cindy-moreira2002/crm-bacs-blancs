@@ -13,6 +13,7 @@ import { estVoieTechnologique, libelleVoie } from '@/lib/matieres';
 import { moteurAttendu } from '@/lib/moteurs';
 import { FormulaireRelecture } from '@/components/FormulaireRelecture';
 import { DossierRelectureHggsp } from '@/components/DossierRelectureHggsp';
+import { SujetDeLaCopie, SujetIntrouvable } from '@/components/SujetDeLaCopie';
 
 export const dynamic = 'force-dynamic';
 
@@ -398,7 +399,10 @@ export default async function PageRelecture({
         {/* --------------------------------------------- 5. Copie corrigée */}
         {aUneCopieCorrigee && exemple && (
           <section className="space-y-6">
-            <TitreSection numero={numero('copie')} titre="Une copie réelle, corrigée par le système" />
+            <TitreSection
+              numero={numero('copie')}
+              titre="Le sujet, la copie et sa correction"
+            />
             <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 space-y-6">
               <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div>
@@ -421,6 +425,21 @@ export default async function PageRelecture({
                   de la grille de compétences, pas d’un barème propre au sujet. Elle est montrée pour
                   ce qu’elle est — un point de départ à améliorer, pas le fonctionnement cible.
                 </p>
+              )}
+
+              {exemple.revueHumaine && (
+                <p className="rounded-lg bg-sky-50 border border-sky-200 p-3 text-sm text-sky-900">
+                  Le système a lui-même <strong>signalé cette copie pour relecture humaine</strong> :
+                  il n’est pas sûr de sa correction. C’est précisément le cas où votre avis compte.
+                </p>
+              )}
+
+              {/* Le sujet d'abord : sans lui, la note et les critères ne
+                  veulent rien dire pour qui découvre la copie. */}
+              {exemple.sujet ? (
+                <SujetDeLaCopie sujet={exemple.sujet} avecAttendus />
+              ) : (
+                <SujetIntrouvable />
               )}
 
               {exemple.pagesCopie.length > 0 && (
@@ -516,20 +535,37 @@ export default async function PageRelecture({
                 >
                   Ouvrir le dossier tel que l’élève le reçoit
                 </a>
-                {autresExemples.map((a) => (
-                  <span key={a.correctionId}>
-                    {' · '}
-                    <a
-                      href={`/dossier/${a.correctionId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-purple-700 font-semibold underline"
-                    >
-                      autre exemple : {nomExercice(a.exerciseType).toLowerCase()} ({fr(a.noteFinale)}/{a.bareme})
-                    </a>
-                  </span>
-                ))}
               </p>
+
+              {autresExemples.length > 0 && (
+                <div className="space-y-3 border-t border-gray-200 pt-5">
+                  <h4 className="font-bold text-gray-900">Les autres copies corrigées</h4>
+                  {autresExemples.map((a) => (
+                    <div key={a.correctionId} className="space-y-2">
+                      <p className="text-sm text-gray-700">
+                        <a
+                          href={`/dossier/${a.correctionId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-purple-700 font-semibold underline"
+                        >
+                          {nomExercice(a.exerciseType)}
+                        </a>{' '}
+                        — {fr(a.noteFinale)}/{a.bareme}
+                      </p>
+                      {a.sujet ? (
+                        <SujetDeLaCopie
+                          sujet={a.sujet}
+                          avecAttendus
+                          titre="Le sujet de cette copie"
+                        />
+                      ) : (
+                        <SujetIntrouvable />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         )}

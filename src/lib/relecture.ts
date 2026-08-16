@@ -11,6 +11,7 @@
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { baremeGrille, pipelineDb } from '@/lib/pipeline';
+import { chargerSujets, type SujetCopie } from '@/lib/sujet';
 
 const secret = process.env.PIPELINE_INTERNAL_SECRET ?? '';
 
@@ -112,6 +113,12 @@ export type ExempleCorrige = {
   priorites: string[];
   appreciation: string;
   pagesCopie: string[];
+  /** La correction est signalée pour relecture humaine : à dire au relecteur,
+   *  sinon il croit juger une correction que le système tient pour sûre. */
+  revueHumaine: boolean;
+  /** Le sujet sur lequel la copie a été écrite. Sans lui, la correction n'est
+   *  pas jugeable : le relecteur ne sait pas ce qui était demandé. */
+  sujet: SujetCopie | null;
 };
 
 /** Un barème propre au sujet, tel que le relecteur doit le voir. */
@@ -161,7 +168,13 @@ export type DonneesRelecture = {
   taxonomie: EntreeTaxonomie[];
   exemple: ExempleCorrige | null;
   /** Autres corrections consultables (dossier élève), ex. la dissertation. */
-  autresExemples: { correctionId: string; exerciseType: string; noteFinale: number; bareme: number }[];
+  autresExemples: {
+    correctionId: string;
+    exerciseType: string;
+    noteFinale: number;
+    bareme: number;
+    sujet: SujetCopie | null;
+  }[];
   /** Barèmes propres aux sujets de cette matière. Vide tant qu'aucun n'existe. */
   baremes: BaremeRelecture[];
   /** Nouvelle taxonomie interrogeable, séparant erreur d'élève et incident technique. */
@@ -246,13 +259,19 @@ export async function chargerDonneesRelecture(matiere: string): Promise<DonneesR
 
   let exemple: ExempleCorrige | null = null;
   const autresExemples: DonneesRelecture['autresExemples'] = [];
+  // Le sujet de chaque correction retenue, rempli après la boucle en une seule
+  // requête : une par copie ferait autant d'allers-retours que d'exercices.
+  const sujetParCorrection = new Map<string, string>();
 
   if (sujetIds.length) {
     const { data: corrections } = await db
       .from('corrections')
-      .select('id, exercise_type, status, result_json')
+      .select('id, exercise_type, status, result_json, subject_id')
       .in('subject_id', sujetIds)
-      .in('status', ['corrected', 'dossier_ready'])
+      // `corrected_review` = corrigée ET signalée pour relecture humaine.
+      // C'est exactement le cas qu'un professeur relecteur doit voir : l'exclure
+      // laissait la physique-chimie sans aucune copie affichée.
+      .in('status', ['corrected', 'corrected_review', 'dossier_ready'])
       .not('result_json', 'is', null)
       .order('created_at', { ascending: false });
 
@@ -265,6 +284,7 @@ export async function chargerDonneesRelecture(matiere: string): Promise<DonneesR
       // La note du moteur est à l'échelle de la grille de SON exercice.
       const grille = grilles.find((g) => g.exercise_type === c.exercise_type);
       const bareme = baremeGrille(grille?.rubric_json);
+      if (c.subject_id) sujetParCorrection.set(c.id, c.subject_id as string);
       if (!exemple) {
         exemple = {
           correctionId: c.id,
@@ -278,6 +298,8 @@ export async function chargerDonneesRelecture(matiere: string): Promise<DonneesR
           priorites: (rj.priorites_amelioration as string[]) ?? [],
           appreciation: (rj.appreciation_generale as string) ?? '',
           pagesCopie: [],
+          revueHumaine: c.status === 'corrected_review' || rj.human_review_required === true,
+          sujet: null,
         };
       } else {
         autresExemples.push({
@@ -285,9 +307,20 @@ export async function chargerDonneesRelecture(matiere: string): Promise<DonneesR
           exerciseType: c.exercise_type,
           noteFinale: rj.note_finale as number,
           bareme,
+          sujet: null,
         });
       }
     }
+  }
+
+  if (sujetParCorrection.size) {
+    const parSujet = await chargerSujets([...sujetParCorrection.values()]);
+    const sujetDe = (correctionId: string) => {
+      const id = sujetParCorrection.get(correctionId);
+      return id ? parSujet.get(id) ?? null : null;
+    };
+    if (exemple) exemple.sujet = sujetDe(exemple.correctionId);
+    for (const a of autresExemples) a.sujet = sujetDe(a.correctionId);
   }
 
   if (exemple) {
