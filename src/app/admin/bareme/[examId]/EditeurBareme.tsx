@@ -1,7 +1,50 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { REGLES_TRANSVERSALES } from '@/lib/baremeNoyau';
 import { QUESTION_VIDE, type Bareme, type Question, type Palier } from './types';
+
+/**
+ * Ce que le correcteur fera, quoi qu'on écrive question par question.
+ *
+ * Ces règles ne se saisissent pas : elles sont dans la consigne envoyée au
+ * correcteur et vérifiées après coup (`REGLES_TRANSVERSALES`). Les afficher
+ * ici évite deux choses : les réécrire à la main dans chaque question, et
+ * découvrir après cinquante copies que le barème comptait sur un
+ * comportement que le moteur n'a pas.
+ */
+function ReglesTransversales() {
+  const [ouvert, setOuvert] = useState(false);
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white">
+      <button
+        type="button"
+        onClick={() => setOuvert((v) => !v)}
+        className="w-full text-left px-4 py-3 flex items-center justify-between gap-3"
+      >
+        <span className="text-sm font-semibold text-gray-800">
+          Ce qui s’applique à toutes les questions, sans avoir à l’écrire ({REGLES_TRANSVERSALES.length})
+        </span>
+        <span className="text-gray-400 text-xs">{ouvert ? 'replier' : 'déplier'}</span>
+      </button>
+      {ouvert && (
+        <ul className="px-4 pb-4 space-y-3">
+          {REGLES_TRANSVERSALES.map((r) => (
+            <li key={r.id} className="text-sm">
+              <p className="font-semibold text-gray-900">{r.titre}</p>
+              <p className="text-gray-600 mt-0.5">{r.texte}</p>
+              {r.controle && (
+                <p className="text-xs text-emerald-800 mt-0.5">
+                  Vérifié après correction : une copie qui semble y déroger part en relecture humaine.
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /**
  * Éditeur du barème : exercices, questions, attendus, fractions de points.
@@ -74,6 +117,7 @@ export function EditeurBareme({
           garantit que toutes les copies du lot ont été notées avec le même barème. Pour la faire
           évoluer, crée une nouvelle version depuis le bandeau ci-dessus.
         </div>
+        <ReglesTransversales />
         <ApercuLecture questions={questions} bareme={bareme} total={total} cible={cible} />
       </div>
     );
@@ -81,6 +125,8 @@ export function EditeurBareme({
 
   return (
     <div className="space-y-4">
+      <ReglesTransversales />
+
       {/* ------------------------------------------------ Barre de total */}
       <div
         className={`sticky top-0 z-10 rounded-xl border p-4 flex flex-wrap items-center justify-between gap-3 ${

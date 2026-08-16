@@ -121,18 +121,21 @@ export function ListeExamens() {
           <h1 className="text-3xl font-bold text-gray-900 mt-1">Barèmes par sujet — baccalauréat</h1>
           <div className="mt-3 max-w-3xl rounded-xl border border-purple-200 bg-purple-50 p-4">
             <p className="text-purple-900 font-semibold">
-              Aucun bac blanc n’a de barème à écrire ici, et c’est voulu.
+              {MATIERES.length > 0
+                ? `Un barème à écrire pour chaque nouveau bac blanc de ${MATIERES.map((m) => LABELS_MATIERES[m]).join(', ')}.`
+                : 'Aucun bac blanc n’a de barème à écrire ici, et c’est voulu.'}
             </p>
             <p className="text-sm text-purple-900 mt-2 leading-relaxed">
               Un barème par sujet répond à une seule question : <em>combien vaut la question 2b de
               ce sujet-là ?</em> Il n’a de sens que là où les points dépendent des questions posées.
+              Dans une épreuve à calculs, chaque exercice pèse ce que ce sujet-là a décidé qu’il
+              pèse : aucune grille écrite d’avance ne peut le dire.
             </p>
             <p className="text-sm text-purple-900 mt-2 leading-relaxed">
-              Au bac, ce n’est le cas d’aucune matière — décision du 15 août 2026. Une copie s’y
-              juge sur des critères qui ne changent pas d’un sujet à l’autre (compréhension,
-              analyse, organisation, expression), que le texte soit de Hugo ou de Colette :{' '}
-              <strong>un nouveau bac blanc ne demande que son sujet, jamais de barème.</strong> Les
-              grilles se règlent dans{' '}
+              Les épreuves rédigées, elles, n’en ont pas besoin : une copie de français ou de philo
+              se juge sur des critères qui ne changent pas d’un sujet à l’autre — introduction,
+              problématique, plan, expression — que le texte soit de Hugo ou de Colette. Elles se
+              règlent une fois pour toutes dans{' '}
               <Link href="/admin/correction" className="underline font-semibold">
                 Pilotage de la correction
               </Link>
@@ -212,9 +215,11 @@ export function ListeExamens() {
           <p className="text-gray-500">Chargement…</p>
         ) : examens.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-            <p className="text-gray-700 font-medium">Aucun bac blanc n’a de barème propre.</p>
+            <p className="text-gray-700 font-medium">Aucun bac blanc n’a encore de barème.</p>
             <p className="text-sm text-gray-500 mt-2">
-              C’est normal, et il n’y a rien à faire : les matières du bac se notent à leur grille.
+              {MATIERES.length > 0
+                ? `Tant qu’un sujet de ${MATIERES.map((m) => LABELS_MATIERES[m]).join(', ')} n’a pas le sien, ses copies ne peuvent pas être notées.`
+                : 'C’est normal, et il n’y a rien à faire : les matières du bac se notent à leur grille.'}
             </p>
           </div>
         ) : (

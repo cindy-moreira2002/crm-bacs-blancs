@@ -33,27 +33,34 @@
 export type MoteurNote = 'grille_generique' | 'bareme_sujet' | 'criteres_rediges';
 
 export const MOTEUR_ATTENDU: Record<string, MoteurNote> = {
-  // Épreuves rédigées : une grille commune suffit, et c'est voulu.
+  // Épreuves rédigées : une grille commune suffit, et c'est voulu. On peut y
+  // fixer d'avance ce que vaut l'introduction, la problématique, le plan — ces
+  // critères ne dépendent pas du texte tombé le jour de l'épreuve.
   francais: 'grille_generique',
   philosophie: 'grille_generique',
   'histoire-geo': 'grille_generique',
   ses: 'grille_generique',
   hlp: 'grille_generique',
-  svt: 'grille_generique',
 
-  // DÉCISION DE CINDY, 15 août 2026 : « pour maths, physique, il n'y a pas de
-  // barème par copie ». Ces deux matières restent donc sur leur grille commune,
-  // comme les épreuves rédigées. Le moteur `bareme_sujet` n'est pas supprimé
-  // pour autant — la machinerie est en place et le brevet s'en sert — mais le
-  // bac ne le réclame plus, et l'administration ne demande plus d'écrire un
-  // barème à chaque nouveau bac blanc de maths ou de physique-chimie.
+  // DÉCISION DE CINDY, 16 août 2026 : les épreuves à calculs reviennent au
+  // barème par sujet. « Les calculs sont comptés comme des exercices » : un
+  // exercice de maths, de physique ou de SVT se note en additionnant des
+  // questions numérotées, et ce que vaut chaque question n'existe que dans CE
+  // sujet-là. Aucune grille commune ne peut dire d'avance combien vaut la
+  // question 2b.
   //
-  // C'est aussi ce que dit la base : ces deux matières n'ont aucun bac blanc
-  // avec barème, et leurs grilles de dépôt pointent sur `grille_generique`.
-  // Pour revenir en arrière : remettre 'bareme_sujet' ici, créer les examens
-  // et écrire leurs barèmes (voir GUIDE_BAREME_PAR_SUJET.md).
-  maths: 'grille_generique',
-  'physique-chimie': 'grille_generique',
+  // Cela annule la décision du 15 août (« pour maths, physique, il n'y a pas
+  // de barème par copie »), qui les avait mises en grille commune. La
+  // distinction qui tient, et qui est la sienne : épreuve découpée en
+  // questions → barème par sujet ; épreuve rédigée → grille commune.
+  //
+  // Ce que cela engage concrètement : chaque nouveau bac blanc de ces trois
+  // matières demande son barème, écrit dans /admin/bareme avant que la moindre
+  // copie ne soit corrigée (voir GUIDE_BAREME_PAR_SUJET.md et
+  // REGLES_TRANSVERSALES dans `baremeNoyau`).
+  maths: 'bareme_sujet',
+  'physique-chimie': 'bareme_sujet',
+  svt: 'bareme_sujet',
 
   // Épreuve rédigée à deux exercices notés séparément, avec conversion.
   hggsp: 'criteres_rediges',

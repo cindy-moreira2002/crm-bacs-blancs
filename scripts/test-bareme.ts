@@ -12,8 +12,11 @@
  * sont dans scripts/test-bareme-supabase.mjs.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
+import { moteurAttendu } from '../src/lib/moteurs';
 import {
+  REGLES_TRANSVERSALES,
   arrondi,
   calculerNoteBrute,
   comparerEtalon,
@@ -836,6 +839,99 @@ test('10.3', 'un barème dont les maximums ne font pas 20 est signalé, pas ratt
   });
   assert.ok(motifs.some((m) => m.code === 'total_incoherent'));
   assert.equal(calculerNoteBrute(questions), 10, 'la note n’est pas gonflée pour atteindre 20');
+});
+
+// =====================================================================
+//  11. Les règles transversales des épreuves à calculs
+//
+//  Elles s'appliquent à toutes les questions de tous les barèmes. Le
+//  correcteur reçoit la consigne ; ces contrôles vérifient qu'elle a été
+//  suivie, parce qu'une consigne n'est pas une garantie.
+// =====================================================================
+
+titre('11 · Les règles transversales');
+
+test('11.1', 'chaque règle est réellement demandée au correcteur', () => {
+  const consigne = readFileSync(
+    new URL('../supabase/functions/correct-copy-bareme/index.ts', import.meta.url),
+    'utf8',
+  );
+  for (const r of REGLES_TRANSVERSALES) {
+    assert.ok(
+      consigne.includes(r.dans_consigne),
+      `la règle « ${r.titre} » ne figure pas dans la consigne (marque « ${r.dans_consigne} » absente)`,
+    );
+  }
+});
+
+test('11.2', 'zéro sur une question où des éléments justes sont relevés part en relecture', () => {
+  const { questions } = normaliserQuestions(BAREME, [
+    reponse('ex1_q1a', 0, { elements_observes: ['dérivée correctement calculée'] }),
+    reponse('ex1_q1b', 4),
+    reponse('ex1_q2', 6),
+    reponse('ex1_q3', 4),
+  ]);
+  const motifs = motifsRelectureHumaine(BAREME, questions, { ...CONTEXTE_SAIN, noteBrute: 14 });
+  assert.ok(
+    motifs.some((m) => m.code === 'cas_non_couvert' && m.question_key === 'ex1_q1a'),
+    'un résultat final faux ne doit jamais mettre la question à zéro en silence',
+  );
+});
+
+test('11.3', 'le maximum malgré des manques, sur une question qui demande une justification', () => {
+  const { questions } = normaliserQuestions(BAREME, [
+    reponse('ex1_q1a', 6, { elements_manquants: ['aucune étude de signe'] }),
+    reponse('ex1_q1b', 4),
+    reponse('ex1_q2', 6),
+    reponse('ex1_q3', 4),
+  ]);
+  const motifs = motifsRelectureHumaine(BAREME, questions, { ...CONTEXTE_SAIN, noteBrute: 20 });
+  assert.ok(
+    motifs.some((m) => m.code === 'cas_non_couvert' && m.question_key === 'ex1_q1a'),
+    'un bon résultat sans la démonstration demandée ne vaut pas tous les points',
+  );
+});
+
+test('11.4', 'une correction propre ne déclenche aucune de ces deux alertes', () => {
+  const { questions } = normaliserQuestions(BAREME, [
+    reponse('ex1_q1a', 5, { elements_observes: ['dérivée juste'] }),
+    reponse('ex1_q1b', 4),
+    reponse('ex1_q2', 6),
+    reponse('ex1_q3', 4),
+  ]);
+  const motifs = motifsRelectureHumaine(BAREME, questions, { ...CONTEXTE_SAIN, noteBrute: 19 });
+  assert.equal(motifs.filter((m) => m.code === 'cas_non_couvert').length, 0);
+});
+
+test('11.5', 'des étapes attendues sans aucun palier de points bloquent le verrouillage', () => {
+  const controles = verifierBareme({
+    questions: BAREME.map((q) => ({ ...q, paliers: [] })),
+    maxScore: 20,
+    competencesConnues: REFERENTIEL.map((c) => c.code),
+  });
+  assert.ok(controles.blocages.some((b) => b.code === 'etapes_sans_points'));
+  assert.equal(controles.ok, false);
+});
+
+test('11.6', 'une question à plusieurs points sans réponse alternative est signalée', () => {
+  const controles = verifierBareme({
+    questions: BAREME.map((q) => ({ ...q, paliers: [{ points: 1, cumulable: true }] })),
+    maxScore: 20,
+    competencesConnues: REFERENTIEL.map((c) => c.code),
+  });
+  assert.ok(
+    controles.avertissements.some((a) => a.code === 'aucune_reponse_acceptee_alternative'),
+    'un écart de formulation partirait en relecture sans que personne ne l’ait dit',
+  );
+});
+
+test('11.7', 'les épreuves à calculs se notent bien au barème du sujet', () => {
+  for (const m of ['maths', 'physique-chimie', 'svt']) {
+    assert.equal(moteurAttendu(m), 'bareme_sujet', `${m} devrait se noter au barème du sujet`);
+  }
+  for (const m of ['francais', 'philosophie', 'histoire-geo', 'ses', 'hlp']) {
+    assert.equal(moteurAttendu(m), 'grille_generique', `${m} devrait se noter à la grille commune`);
+  }
 });
 
 // --- Bilan ------------------------------------------------------------

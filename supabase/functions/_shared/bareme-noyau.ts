@@ -136,6 +136,95 @@ export type ContexteTranscription = {
 /** Seuil sous lequel la correction part systématiquement en relecture. */
 export const SEUIL_CONFIANCE = 0.85;
 
+/* ------------------------------------------------------------------ */
+/*  Les règles transversales du barème par sujet                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Ce qui s'applique à TOUTES les questions de TOUS les barèmes, quel que soit
+ * le sujet — par opposition au barème analytique, qui est propre à chaque
+ * question d'un sujet donné.
+ *
+ * Elles sont écrites ici, une seule fois, parce qu'elles ont trois emplois qui
+ * doivent dire exactement la même chose :
+ *   1. la consigne envoyée au correcteur (`CONSIGNE_SOCLE`) ;
+ *   2. les contrôles mécaniques d'après-correction (`motifsRelectureHumaine`),
+ *      qui rattrapent une consigne mal suivie — une consigne n'est pas une
+ *      garantie ;
+ *   3. l'écran du barème, pour que celle qui l'écrit sache ce que le moteur
+ *      fera de ce qu'elle saisit.
+ *
+ * Un contrôle de non-régression vérifie que chaque règle marquée
+ * `dans_consigne` figure bien dans la consigne : elles ne peuvent pas diverger
+ * en silence.
+ */
+export type RegleTransversale = {
+  id: string;
+  titre: string;
+  texte: string;
+  /** La marque à retrouver dans `CONSIGNE_SOCLE` — preuve que la règle est bien demandée au correcteur. */
+  dans_consigne: string;
+  /** Le motif de relecture levé mécaniquement quand la règle paraît violée, s'il y en a un. */
+  controle?: CodeMotifRelecture;
+};
+
+export const REGLES_TRANSVERSALES: RegleTransversale[] = [
+  {
+    id: 'non_double_sanction',
+    titre: 'Une erreur ne se paie qu’une fois',
+    texte:
+      'La même erreur n’est jamais sanctionnée deux fois, ni sur deux questions, ni sur deux ' +
+      'titres de la même question.',
+    dans_consigne: 'NON-DOUBLE-SANCTION',
+    controle: 'double_sanction_possible',
+  },
+  {
+    id: 'poursuite',
+    titre: 'Les points de méthode survivent à une erreur de calcul',
+    texte:
+      'Un élève qui poursuit correctement avec un résultat faux garde les points de méthode et ' +
+      'de raisonnement des étapes suivantes. Seule l’erreur initiale est retirée.',
+    dans_consigne: 'ERREUR ANTERIEURE ET POURSUITE CORRECTE',
+    controle: 'double_sanction_possible',
+  },
+  {
+    id: 'methode_alternative',
+    titre: 'Toute méthode valide est acceptée',
+    texte:
+      'Une démarche juste mais absente du corrigé vaut ses points. Une démarche que le correcteur ' +
+      'ne sait pas rattacher au barème part en relecture humaine — jamais à zéro d’office.',
+    dans_consigne: 'METHODES ALTERNATIVES',
+    controle: 'methode_alternative_non_prevue',
+  },
+  {
+    id: 'retraits_separes',
+    titre: 'Justification, unité et conclusion se retirent séparément',
+    texte:
+      'Le barème de la question distingue ce qui revient au résultat, à la démonstration, à ' +
+      'l’unité et à la conclusion. Un oubli d’unité coûte les points d’unité, pas la question.',
+    dans_consigne: 'RESULTAT JUSTE SANS JUSTIFICATION',
+  },
+  {
+    id: 'jamais_zero_automatique',
+    titre: 'Jamais zéro parce que le résultat final est faux',
+    texte:
+      'Un résultat final faux ne met pas la question à zéro : tout ce qui est juste avant lui ' +
+      'reste payé. Une question à zéro alors que la copie montre des étapes justes part en ' +
+      'relecture.',
+    dans_consigne: 'RAISONNEMENT CORRECT AVEC ERREUR DE CALCUL',
+    controle: 'cas_non_couvert',
+  },
+  {
+    id: 'pas_tout_sans_justification',
+    titre: 'Un résultat juste non justifié ne prend pas tous les points',
+    texte:
+      'Quand la question demande une justification, le bon résultat seul ne vaut pas le maximum : ' +
+      'la part de la démonstration reste à gagner.',
+    dans_consigne: 'RESULTAT JUSTE SANS JUSTIFICATION',
+    controle: 'cas_non_couvert',
+  },
+];
+
 /** Codes de la taxonomie qui désignent une anomalie du dispositif, pas une faute de l'élève. */
 export const CODES_ANOMALIE_SUJET = ['SU-ANOMALIE-01'];
 export const CODES_REGLES_CONTRADICTOIRES = ['SU-BAREME-CONTRADICTION-01'];
@@ -368,6 +457,42 @@ export function motifsRelectureHumaine(
         code: 'methode_alternative_non_prevue',
         question_key: q.question_key,
         message: `Question ${q.numero} : méthode non prévue au barème. À trancher par un humain, pas à mettre à zéro.`,
+      });
+    }
+
+    // RÈGLE « jamais zéro parce que le résultat final est faux ». Le correcteur
+    // a beau lister des choses justes, il met la question à zéro : c'est
+    // exactement le réflexe « résultat faux donc rien », que le barème
+    // analytique existe pour empêcher. La consigne le dit déjà ; ce contrôle
+    // est là parce qu'une consigne n'est pas une garantie.
+    if (q.points === 0 && q.elements_observes.length > 0 && !q.transcription_incertaine) {
+      motifs.push({
+        code: 'cas_non_couvert',
+        question_key: q.question_key,
+        message:
+          `Question ${q.numero} : zéro alors que le correcteur relève ${q.elements_observes.length} ` +
+          `élément(s) juste(s). Un résultat final faux ne met pas la question à zéro — ` +
+          `vérifier ce qui reste dû à la méthode.`,
+      });
+    }
+
+    // RÈGLE « un résultat juste non justifié ne prend pas tous les points ».
+    // Le maximum est attribué alors que le barème demandait une démonstration
+    // et que le correcteur lui-même signale des manques.
+    if (
+      def?.raisonnement_attendu &&
+      String(def.raisonnement_attendu).trim().length > 0 &&
+      q.max_points > 0 &&
+      Math.abs(q.points - q.max_points) < 0.001 &&
+      q.elements_manquants.length > 0
+    ) {
+      motifs.push({
+        code: 'cas_non_couvert',
+        question_key: q.question_key,
+        message:
+          `Question ${q.numero} : tous les points (${q.max_points}) alors qu'il manque ` +
+          `${q.elements_manquants.length} élément(s) et que la question demande une ` +
+          `justification. La part de la démonstration ne se donne pas avec le résultat.`,
       });
     }
 
@@ -838,6 +963,7 @@ export type BlocageBareme = { code: string; question_key?: string; message: stri
 export type QuestionAVerifier = QuestionBareme & {
   reponse_attendue?: string | null;
   etapes?: unknown[];
+  reponses_equivalentes?: unknown[];
   paliers?: { points: number; cumulable: boolean }[];
 };
 
@@ -885,6 +1011,20 @@ export function verifierBareme(entree: {
         message: `Question ${q.numero} : aucune règle d'attribution des points (ni palier, ni étape valorisée).`,
       });
     }
+    // Des étapes attendues, mais aucun palier de points : on sait ce qu'on
+    // attend et pas ce que ça vaut. Le correcteur n'a alors que le maximum de
+    // la question — donc tout ou rien, exactement ce qu'un barème analytique
+    // doit rendre impossible.
+    if ((q.etapes ?? []).length > 0 && !paliers.length) {
+      blocages.push({
+        code: 'etapes_sans_points',
+        question_key: q.question_key,
+        message:
+          `Question ${q.numero} : ${(q.etapes ?? []).length} étape(s) attendue(s) mais aucun palier ` +
+          `de points. Sans le prix de chaque étape, la question se note tout ou rien.`,
+      });
+    }
+
     const somme = arrondi(paliers.filter((p) => p.cumulable).reduce((s, p) => s + p.points, 0));
     if (somme > q.max_points + 0.001) {
       blocages.push({
@@ -937,6 +1077,22 @@ export function verifierBareme(entree: {
       message:
         "Aucune méthode alternative prévue : toute démarche non prévue partira en relecture humaine.",
     });
+  }
+
+  // Une question qui vaut plusieurs points sans aucune réponse équivalente ni
+  // méthode alternative : tout écart de formulation partira en relecture. Ce
+  // n'est pas bloquant — certaines questions n'admettent qu'une réponse — mais
+  // ça se dit avant le verrouillage, pas après cinquante copies.
+  for (const q of entree.questions) {
+    const alternatives =
+      (q.methodes_alternatives ?? []).length + (q.reponses_equivalentes ?? []).length;
+    if (q.max_points >= 2 && alternatives === 0) {
+      avertissements.push({
+        code: 'aucune_reponse_acceptee_alternative',
+        question_key: q.question_key,
+        message: `Question ${q.numero} (${q.max_points} pts) : aucune réponse équivalente ni méthode alternative acceptée.`,
+      });
+    }
   }
 
   return { ok: blocages.length === 0, blocages, avertissements, total };
