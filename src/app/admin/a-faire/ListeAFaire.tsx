@@ -7,8 +7,9 @@
  * Une seule source : GET /api/admin/correction/a-faire. Rien n'est calculé ici.
  *
  * Deux principes de lecture :
- *   • le filtre par défaut ne montre QUE ce qui bloque aujourd'hui, parce
- *     qu'une liste de trente lignes ne se lit pas ;
+ *   • par défaut on montre TOUTE la liste, y compris les matières où il n'y a
+ *     rien à faire : une to-do amputée fait croire qu'on a fait le tour. Le
+ *     bouton « Ce qui bloque » réduit à l'urgent quand on le demande ;
  *   • chaque ligne dit qui la fait. « Un clic » = un écran de l'application ;
  *     « Toi » = il faut une personne, et aucun bouton n'y changera rien.
  */
@@ -141,7 +142,7 @@ function BlocMatiere({ m, seulementBloquants }: { m: TodoMatiere; seulementBloqu
         <p className="px-4 py-4 text-sm text-gray-500">
           {m.taches.length === 0
             ? 'Rien à faire ici. Cette matière peut corriger.'
-            : 'Rien qui bloque. Décoche le filtre pour voir ce qui reste à finir.'}
+            : 'Rien qui bloque. Reviens sur « Toute ma to-do » pour voir ce qui reste à finir.'}
         </p>
       ) : (
         <ul className="p-3 space-y-2">
@@ -230,7 +231,7 @@ export function ListeAFaire() {
   const [todo, setTodo] = useState<TodoPipeline | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
-  const [seulementBloquants, setSeulementBloquants] = useState(true);
+  const [seulementBloquants, setSeulementBloquants] = useState(false);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -317,15 +318,32 @@ export function ListeAFaire() {
         <CommentCestNote matieres={todo.matieres} />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={seulementBloquants}
-              onChange={(e) => setSeulementBloquants(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300"
-            />
-            Ne montrer que ce qui bloque
-          </label>
+          {/* Deux boutons plutôt qu'une case à cocher : on voit d'un coup d'œil
+              qu'on est sur la liste entière, et combien de lignes l'autre vue
+              cacherait. Une case discrète laissait croire que la to-do
+              s'arrêtait aux lignes rouges. */}
+          <div className="inline-flex rounded-full border border-gray-300 bg-white p-0.5 text-sm">
+            <button
+              type="button"
+              onClick={() => setSeulementBloquants(false)}
+              aria-pressed={!seulementBloquants}
+              className={`rounded-full px-3 py-1.5 font-medium transition ${
+                seulementBloquants ? 'text-gray-600 hover:text-gray-900' : 'bg-purple-600 text-white'
+              }`}
+            >
+              📋 Toute ma to-do ({todo.totaux.taches})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSeulementBloquants(true)}
+              aria-pressed={seulementBloquants}
+              className={`rounded-full px-3 py-1.5 font-medium transition ${
+                seulementBloquants ? 'bg-red-600 text-white' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              🔴 Ce qui bloque ({todo.totaux.bloquants})
+            </button>
+          </div>
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -344,7 +362,7 @@ export function ListeAFaire() {
         {avecTaches.length === 0 && general.length === 0 ? (
           <p className="text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
             {seulementBloquants
-              ? 'Rien ne bloque nulle part. Décoche le filtre pour voir ce qui reste à finir.'
+              ? 'Rien ne bloque nulle part. Clique sur « Toute ma to-do » pour voir ce qui reste à finir.'
               : 'Tout est fait. Le système peut corriger.'}
           </p>
         ) : (
