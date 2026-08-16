@@ -80,7 +80,7 @@ continue de fonctionner **tant que `BREVO_API_KEY` n'est pas posée**.
 | `EMAILS_EXPEDITEUR` | `matineesdubac@gmail.com` |
 | `EMAILS_EXPEDITEUR_NOM` | `Les Matinées du Bac` |
 | `EMAILS_REPONSE_A` | `matineesdubac@gmail.com` |
-| `NEXT_PUBLIC_SITE_URL` | `https://crm-bacs-blancs-ihgf.vercel.app` |
+| `NEXT_PUBLIC_SITE_URL` | `https://espaces.matineesdubac.fr` |
 | `NEXT_PUBLIC_VITRINE_URL` | `https://matineesdubac.fr` |
 
 **Vérifie aussi que ces variables existent déjà** (elles sont nécessaires et
@@ -123,7 +123,7 @@ Ce script est rejouable : le relancer ne casse rien et n'efface rien.
 1. Toujours dans le SQL Editor du **même projet**, nouvelle requête.
 2. Ouvre `supabase/sql/29_emails_cron.sql`.
 3. **Avant de coller**, remplace dans le texte :
-   - `__URL_DU_SITE__` → `https://crm-bacs-blancs-ihgf.vercel.app`
+   - `__URL_DU_SITE__` → `https://espaces.matineesdubac.fr`
    - `__SECRET_CRON__` → la valeur **exacte** de `EMAILS_CRON_SECRET` posée à
      l'étape 3
 4. Colle et clique **Run**. Le résultat doit afficher une ligne `emails-moteur`
@@ -176,7 +176,7 @@ secret voyage dans une URL, et un `+` y serait lu comme un espace.
    plus haut (aucun espace, aucun retour à la ligne) :
 
    ```
-   https://crm-bacs-blancs-ihgf.vercel.app/api/emails/webhook-brevo?jeton=TON_SECRET
+   https://espaces.matineesdubac.fr/api/emails/webhook-brevo?jeton=TON_SECRET
    ```
 
 5. **Authentication** : laisse **No authentication** (le secret est déjà dans

@@ -31,7 +31,16 @@ export const SUPPORT_EMAIL =
 
 /** Racine publique du site, sans barre oblique finale. */
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://crm-bacs-blancs-ihgf.vercel.app'
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://espaces.matineesdubac.fr'
+).replace(/\/+$/, '');
+
+/**
+ * Adresse donnée aux familles pour s'inscrire. Elle est distincte de
+ * `SITE_URL` : les espaces élève et prof vivent sous `espaces.`, l'inscription
+ * sous une adresse qu'on peut lire à voix haute et écrire sur une affiche.
+ */
+export const INSCRIPTION_URL = (
+  process.env.NEXT_PUBLIC_INSCRIPTION_URL?.trim() || 'https://inscription.matineesdubac.fr'
 ).replace(/\/+$/, '');
 
 /** Site vitrine — utilisé par les messages marketing. */
@@ -41,7 +50,7 @@ export const VITRINE_URL = (
 
 export const URL_ESPACE_ELEVE = `${SITE_URL}/espace-eleve`;
 export const URL_ESPACE_PROF = `${SITE_URL}/espace-prof`;
-export const URL_INSCRIPTION = `${SITE_URL}/inscription`;
+export const URL_INSCRIPTION = `${INSCRIPTION_URL}/inscription`;
 
 // L'adresse du salon d'un élève ne se calcule plus ici : elle est lue sur son
 // inscription (`discord_salon_id`) et construite par `lienSalon`, dans

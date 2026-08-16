@@ -200,7 +200,7 @@ pas grave, mais le token précédent devient invalide).
    **exactement** cette adresse (aucun espace, aucune barre oblique finale) :
 
    ```
-   https://crm-bacs-blancs-ihgf.vercel.app/api/discord/oauth/retour
+   https://espaces.matineesdubac.fr/api/discord/oauth/retour
    ```
 
 4. Clique **« Add Redirect »** une deuxième fois et ajoute :

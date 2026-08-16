@@ -3,7 +3,7 @@
  * Imprime le lien signé du dossier de relecture prof d'une matière.
  *
  *   node scripts/lien-relecture.mjs francais
- *   node scripts/lien-relecture.mjs ses https://crm-bacs-blancs-ihgf.vercel.app
+ *   node scripts/lien-relecture.mjs ses https://espaces.matineesdubac.fr
  *
  * Le jeton est un HMAC de PIPELINE_INTERNAL_SECRET : le même secret étant
  * posé sur Vercel, le lien imprimé ici est aussi valable en production.
@@ -26,7 +26,7 @@ for (const fichier of ['.env', '.env.local']) {
 }
 
 const matiere = (process.argv[2] ?? '').toLowerCase().trim();
-const base = (process.argv[3] ?? 'https://crm-bacs-blancs-ihgf.vercel.app').replace(/\/$/, '');
+const base = (process.argv[3] ?? 'https://espaces.matineesdubac.fr').replace(/\/$/, '');
 
 if (!matiere) {
   console.error('Usage : node scripts/lien-relecture.mjs <matiere> [url-de-base]');

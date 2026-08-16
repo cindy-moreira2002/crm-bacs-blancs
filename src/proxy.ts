@@ -2,21 +2,26 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * Sépare le CRM interne (prospection) de l'espace public (matineesdubac).
+ * Aiguillage par nom de domaine.
  *
- * Le CRM de prospection (leads, démarchage écoles) est un outil interne : il ne
- * doit JAMAIS être accessible via un domaine public `*.matineesdubac.fr`.
- * Il reste joignable uniquement sur l'URL Vercel interne (`*.vercel.app`).
- *
- * L'espace élève/prof/inscription reste public sur tous les domaines.
+ * 1. Le CRM de prospection (leads, démarchage écoles) est un outil interne : il
+ *    ne doit JAMAIS être accessible via un domaine public `*.matineesdubac.fr`.
+ *    Il reste joignable uniquement sur l'URL Vercel interne (`*.vercel.app`).
+ * 2. `inscription.matineesdubac.fr` est l'adresse imprimable donnée aux
+ *    familles : elle ne sert qu'au formulaire. Tout le reste (espace élève,
+ *    espace prof, dossiers) repart sur `espaces.matineesdubac.fr`, pour qu'une
+ *    seule adresse porte les sessions de connexion et les retours OAuth.
  */
 
 // Routes réservées au CRM interne — bloquées sur les domaines matineesdubac.
 const INTERNAL_PREFIXES = ['/crm', '/ecoles-partenaires', '/api/leads', '/api/gmail-contacted'];
 
+const HOTE_INSCRIPTION = 'inscription.matineesdubac.fr';
+const HOTE_ESPACES = 'https://espaces.matineesdubac.fr';
+
 export function proxy(request: NextRequest) {
   const host = (request.headers.get('host') ?? '').toLowerCase();
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
 
   const isPublicDomain = host.endsWith('matineesdubac.fr');
   const isInternalPath = INTERNAL_PREFIXES.some(
@@ -28,18 +33,25 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
+  if (host === HOTE_INSCRIPTION) {
+    // La racine de l'adresse imprimée ouvre le choix bac / brevet, sur place.
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/inscription', request.url));
+    }
+    // Les appels d'API partent de la page qui les héberge : les laisser sur
+    // place, sinon la requête perd son corps au passage de la redirection.
+    if (!pathname.startsWith('/inscription') && !pathname.startsWith('/api/')) {
+      return NextResponse.redirect(new URL(pathname + search, HOTE_ESPACES));
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    '/crm',
-    '/crm/:path*',
-    '/ecoles-partenaires',
-    '/ecoles-partenaires/:path*',
-    '/api/leads',
-    '/api/leads/:path*',
-    '/api/gmail-contacted',
-    '/api/gmail-contacted/:path*',
+    // Tout, sauf les fichiers servis tels quels (sinon la redirection casserait
+    // les feuilles de style et les images de la page d'inscription).
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|txt|xml|webmanifest)$).*)',
   ],
 };

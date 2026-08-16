@@ -26,7 +26,7 @@ create extension if not exists pg_net;
 -- 2. LA TACHE — toutes les 5 minutes
 --
 --    Remplace :
---      __URL_DU_SITE__  par  https://crm-bacs-blancs-ihgf.vercel.app
+--      __URL_DU_SITE__  par  https://espaces.matineesdubac.fr
 --      __SECRET_CRON__  par  la valeur EXACTE que tu as mise dans la
 --                            variable Vercel EMAILS_CRON_SECRET
 --

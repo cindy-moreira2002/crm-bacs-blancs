@@ -122,7 +122,7 @@ Pas de guillemets nécessaires, pas d'espace autour du `=`, une ligne par clé.
 ## Étape 4 — Renseigner les clés en production (dans Vercel)
 
 1. Va sur https://vercel.com et ouvre le projet **`espaces-matineesdubac`**
-   (c'est celui qui sert `crm-bacs-blancs-ihgf.vercel.app`).
+   (c'est celui qui sert `espaces.matineesdubac.fr` et `inscription.matineesdubac.fr`).
 2. Onglet **Settings** → **Environment Variables**.
 3. Ajoute **trois** variables, une par une. Pour chacune, coche les trois
    environnements (**Production**, **Preview**, **Development**) :

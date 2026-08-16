@@ -27,12 +27,12 @@ const VARIABLES: Record<string, string> = {
   end_time: '13 h 00',
   connection_time: '8 h 45',
   teacher_name: 'Camille Durand',
-  student_space_url: 'https://crm-bacs-blancs-ihgf.vercel.app/espace-eleve',
-  teacher_space_url: 'https://crm-bacs-blancs-ihgf.vercel.app/espace-prof',
+  student_space_url: 'https://espaces.matineesdubac.fr/espace-eleve',
+  teacher_space_url: 'https://espaces.matineesdubac.fr/espace-prof',
   // Forme réelle d'une adresse de salle Discord : serveur, puis salon.
   video_room_url: 'https://discord.com/channels/000000000000000000/111111111111111111',
-  inscription_url: 'https://crm-bacs-blancs-ihgf.vercel.app/inscription',
-  correction_url: 'https://crm-bacs-blancs-ihgf.vercel.app/espace-eleve',
+  inscription_url: 'https://inscription.matineesdubac.fr/inscription',
+  correction_url: 'https://espaces.matineesdubac.fr/espace-eleve',
   survey_url: 'https://exemple.fr/avis',
   support_email: 'matineesdubac@gmail.com',
   site_url: 'https://matineesdubac.fr',
@@ -58,7 +58,7 @@ let erreurs = 0;
 
 for (const type of Object.keys(MODELES)) {
   const c = construireEmail(type, VARIABLES, {
-    desinscriptionUrl: 'https://crm-bacs-blancs-ihgf.vercel.app/desinscription?jeton=exemple',
+    desinscriptionUrl: 'https://espaces.matineesdubac.fr/desinscription?jeton=exemple',
   });
   if (!c.ok) {
     console.error(`❌ ${type} : ${c.raison}`);

@@ -15,7 +15,7 @@ const SUPABASE_URL = 'https://orpbfnmdlvxmkvyrpvtj.supabase.co';
 const SUPABASE_KEY = 'COLLE_TA_CLE_SERVICE_ROLE_ICI';
 
 // URL du site en production (Vercel)
-const SITE_URL = 'https://crm-bacs-blancs-ihgf.vercel.app';
+const SITE_URL = 'https://espaces.matineesdubac.fr';
 
 // Heure de début du bac blanc (format 24h, Paris) — utilisée pour le rappel H-1
 const HEURE_DEBUT_BB = 9;
