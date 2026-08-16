@@ -8,8 +8,8 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "CRM Bacs Blancs - Les Matinées du Bac",
-  description: "Gestion des leads profs particuliers pour les bacs blancs",
+  title: "Les Matinées du Bac",
+  description: "Bacs blancs et brevets blancs corrigés : inscriptions, espace élève et espace professeur.",
 };
 
 export default function RootLayout({
