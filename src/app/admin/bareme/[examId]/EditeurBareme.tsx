@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { REGLES_TRANSVERSALES } from '@/lib/baremeNoyau';
-import { QUESTION_VIDE, type Bareme, type Question, type Palier } from './types';
+import { QUESTION_VIDE, type Bareme, type Exercice, type Question, type Palier } from './types';
 
 /**
  * Ce que le correcteur fera, quoi qu'on écrive question par question.
@@ -43,6 +43,158 @@ function ReglesTransversales() {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * « Écrire le barème à partir du sujet ».
+ *
+ * Le sujet part chez le correcteur, qui rend un barème question par question.
+ * Ce qui revient est un BROUILLON : il remplit l'éditeur et rien d'autre.
+ * Aucune écriture en base tant que l'administratrice n'a pas cliqué sur
+ * « Enregistrer le barème », puis « Vérifier » et « Verrouiller ». Une note
+ * d'élève ne se pose pas toute seule.
+ */
+function PropositionDepuisSujet({
+  examId,
+  bareme,
+  nbQuestions,
+  onProposition,
+}: {
+  examId: string;
+  bareme: Bareme;
+  nbQuestions: number;
+  onProposition: (p: { exercices: Exercice[]; questions: Question[] }) => void;
+}) {
+  const [fichier, setFichier] = useState<File | null>(null);
+  const [consignes, setConsignes] = useState('');
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [remarques, setRemarques] = useState<string[] | null>(null);
+
+  const sujetEnregistre = Boolean(bareme.examen.sujet_texte || bareme.examen.sujet_url);
+
+  async function lireBase64(f: File): Promise<string> {
+    const tampon = await f.arrayBuffer();
+    const octets = new Uint8Array(tampon);
+    let binaire = '';
+    for (let i = 0; i < octets.length; i += 0x8000) {
+      binaire += String.fromCharCode(...octets.subarray(i, i + 0x8000));
+    }
+    return btoa(binaire);
+  }
+
+  async function proposer() {
+    setEnCours(true);
+    setErreur(null);
+    setRemarques(null);
+    try {
+      if (fichier && fichier.size > 3 * 1024 * 1024) {
+        throw new Error(
+          `Ce PDF pèse ${(fichier.size / 1024 / 1024).toFixed(1)} Mo ; la limite est de 3 Mo. ` +
+            'Allège-le, ou colle le texte du sujet dans l’onglet Examen.',
+        );
+      }
+      const r = await fetch(`/api/admin/bareme/${examId}/proposition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          version_id: bareme.version.id,
+          sujet_pdf_base64: fichier ? await lireBase64(fichier) : undefined,
+          consignes: consignes.trim() || undefined,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Proposition impossible');
+
+      onProposition({
+        exercices: (j.proposition?.exercices ?? []) as Exercice[],
+        questions: ((j.proposition?.questions ?? []) as Question[]).map((q, i) => ({
+          ...QUESTION_VIDE(i),
+          ...q,
+          ordre: i,
+        })),
+      });
+      setRemarques(j.remarques ?? []);
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Erreur inconnue');
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-purple-200 bg-purple-50/60 p-4 space-y-3">
+      <div>
+        <h3 className="font-bold text-gray-900 text-sm">Écrire le barème à partir du sujet</h3>
+        <p className="text-xs text-gray-700 mt-1">
+          Dépose le PDF du sujet : les exercices, les questions, les points, les réponses attendues
+          et les paliers se remplissent ici. <strong>Rien n’est enregistré</strong> — tu relis, tu
+          corriges ce qui te gêne, puis tu cliques sur « Enregistrer le barème ».
+          {sujetEnregistre && ' Sans fichier, le sujet déjà enregistré dans l’onglet Examen sera utilisé.'}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="file"
+          accept="application/pdf"
+          onChange={(e) => setFichier(e.target.files?.[0] ?? null)}
+          className="text-xs text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-purple-700 file:border file:border-purple-300"
+        />
+        <button
+          type="button"
+          onClick={proposer}
+          disabled={enCours || (!fichier && !sujetEnregistre)}
+          className="px-4 py-1.5 rounded-lg bg-purple-600 text-white text-sm font-semibold disabled:opacity-40"
+        >
+          {enCours ? 'Lecture du sujet…' : 'Proposer le barème'}
+        </button>
+        {nbQuestions > 0 && (
+          <span className="text-xs text-amber-800">
+            Remplacera les {nbQuestions} question(s) affichées à l’écran.
+          </span>
+        )}
+      </div>
+
+      <input
+        value={consignes}
+        onChange={(e) => setConsignes(e.target.value)}
+        placeholder="Consignes (facultatif) : « exercice 1 sur 5 points, exercice 2 sur 7 »…"
+        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs"
+      />
+
+      {!fichier && !sujetEnregistre && (
+        <p className="text-xs text-gray-600">
+          Aucun sujet disponible : dépose le PDF ci-dessus, ou colle le texte du sujet dans l’onglet
+          <strong> Examen</strong>.
+        </p>
+      )}
+
+      {erreur && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">{erreur}</p>
+      )}
+
+      {remarques && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+          <p className="text-xs font-semibold text-amber-900">
+            Barème proposé — à relire avant d’enregistrer.
+          </p>
+          {remarques.length > 0 ? (
+            <ul className="mt-1 space-y-1 text-xs text-amber-900 list-disc list-inside">
+              {remarques.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-amber-900 mt-1">
+              Aucun point douteux signalé. Vérifie quand même les réponses attendues : c’est ce qui
+              notera les élèves.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -126,6 +278,17 @@ export function EditeurBareme({
   return (
     <div className="space-y-4">
       <ReglesTransversales />
+
+      <PropositionDepuisSujet
+        examId={examId}
+        bareme={bareme}
+        nbQuestions={questions.length}
+        onProposition={(p) => {
+          setExercices(p.exercices);
+          setQuestions(p.questions);
+          setOuverte(null);
+        }}
+      />
 
       {/* ------------------------------------------------ Barre de total */}
       <div

@@ -43,7 +43,10 @@ export type EdgeFunctionName =
   // de DNB rattachées à leur matière : le garde-fou est rejoué côté fonction
   // et côté base (contrainte exams_brevet_coherence).
   | 'correct-brevet-francais'
-  | 'correct-brevet-maths';
+  | 'correct-brevet-maths'
+  // Ne corrige rien : lit un sujet et propose son barème. N'écrit jamais en
+  // base — la proposition remonte à l'écran et attend une relecture.
+  | 'propose-bareme';
 
 /**
  * Appelle une Edge Function du pipeline.
