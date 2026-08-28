@@ -2,6 +2,10 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { NavDirection } from '@/components/direction/NavDirection';
 import { authManquant, profConnecte } from '@/lib/authProf';
+import { archiveClasseurs } from '@/lib/classeurs';
+import { chargerReglagesConsole } from '@/lib/reglagesConsole';
+import { ArchiveClasseurs } from './ArchiveClasseurs';
+import { ReglagesJourJ } from './ReglagesJourJ';
 import { TableauBacsBlancs } from './TableauBacsBlancs';
 
 export const dynamic = 'force-dynamic';
@@ -53,9 +57,28 @@ export default async function BacsBlancsPage() {
     );
   }
 
+  const [reglages, classeurs] = await Promise.all([
+    chargerReglagesConsole(),
+    archiveClasseurs(),
+  ]);
+
   return (
     <>
       <NavDirection />
+      <div className="max-w-6xl mx-auto px-4 pt-6">
+        <ReglagesJourJ initiales={reglages} />
+        <ArchiveClasseurs
+          lignes={classeurs.map((c) => ({
+            id: c.id,
+            matiere: c.matiere,
+            date_epreuve: c.date_epreuve,
+            professeur_nom: c.professeur_nom,
+            nom: c.nom,
+            url: c.url,
+            cree_le: c.cree_le,
+          }))}
+        />
+      </div>
       <TableauBacsBlancs />
     </>
   );

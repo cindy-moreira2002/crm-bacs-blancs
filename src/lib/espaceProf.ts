@@ -7,6 +7,13 @@
  */
 import { Professeur, crmAdmin } from '@/lib/authProf';
 import { lienCategorie, lienSalon } from '@/lib/discord/config';
+import { appelsOuvertsSession } from '@/lib/appels';
+import { lienCorrection } from '@/lib/guidelines';
+import { cleMatiere } from '@/lib/matieres';
+import { classeursDuProf } from '@/lib/classeurs';
+import { codeCopie } from '@/lib/codeCopie';
+import { lienEcritureCopie } from '@/lib/liens';
+import { adresseRetenue, chargerReglagesConsole } from '@/lib/reglagesConsole';
 
 export type Session = {
   id: string;
@@ -18,6 +25,11 @@ export type Session = {
   coachs_recherches: number;
   statut: string;
   sheet_correction_url: string | null;
+  /**
+   * Le dossier des copies propre à ce bac blanc. Nul la plupart du temps : on
+   * retombe alors sur le dossier général (réglages de la console).
+   */
+  drive_copies_url: string | null;
   /**
    * Le bloc Discord de l'épreuve : c'est de là que le prof surveille, en
    * passant d'une salle d'élève à l'autre. Nul tant que les salles n'ont pas
@@ -33,6 +45,32 @@ export type SessionEnrichie = Session & {
   remuneration: number;
   /** L'adresse du bloc Discord, ou null si les salles n'existent pas encore. */
   categorie_url: string | null;
+  /**
+   * La grille de correction réellement ouverte par le prof, dans cet ordre :
+   * le classeur propre à la session s'il existe, sinon LE CLASSEUR DE LA
+   * MATIÈRE (les « guidelines », un par matière — c'est le cas normal), sinon
+   * le classeur de secours posé dans les réglages. Nulle = aucune des trois,
+   * et la console le dit au lieu d'afficher un lien mort.
+   */
+  grille_url: string | null;
+  /**
+   * D'où vient cette grille — la console l'écrit sous le bouton.
+   *  · `mienne`  : la copie créée par CE prof pour CE bac blanc (le cas voulu) ;
+   *  · `session` : une copie posée à la main sur la session ;
+   *  · `matiere` : le classeur commun de la matière, encore non dupliqué ;
+   *  · `secours` : le classeur de dépannage des réglages ;
+   *  · `aucune`  : rien nulle part.
+   */
+  grille_origine: 'mienne' | 'session' | 'matiere' | 'secours' | 'aucune';
+  /** Le nom du classeur ouvert : celui de la copie, sinon celui de la matière. */
+  grille_titre: string | null;
+  /**
+   * Ce prof peut-il encore créer SA copie du classeur pour ce bac blanc ?
+   * Faux s'il l'a déjà, ou si la matière n'a aucun classeur à dupliquer.
+   */
+  classeur_a_creer: boolean;
+  /** Le dossier des copies, même règle : celui de la session, sinon le général. */
+  dossier_url: string | null;
 };
 
 export type EleveSession = {
@@ -48,6 +86,30 @@ export type EleveSession = {
    * dit « pas de salle » plutôt que d'afficher un bouton qui ne mène nulle part.
    */
   salon_url: string | null;
+  /**
+   * Un document collé à la main sur cette ligne, quand la copie ne vit PAS dans
+   * l'application d'écriture (un Google Doc apporté par l'élève, par exemple).
+   * Vide dans le cas normal.
+   */
+  copie_doc_url: string | null;
+  /**
+   * La copie de l'élève dans l'application d'écriture — celle dont il reçoit le
+   * lien à son inscription. Calculée à partir du même code signé que son
+   * espace : le prof et l'élève ouvrent forcément la MÊME copie, sans que
+   * personne n'ait rien à recopier.
+   */
+  ecriture_url: string | null;
+  /**
+   * Ce que le bouton « Sa copie » ouvre vraiment : le document collé à la main
+   * s'il y en a un, sinon la copie de l'application d'écriture.
+   */
+  doc_url: string | null;
+  /** D'où vient ce lien — la console le dit au survol. */
+  doc_origine: 'colle' | 'ecriture' | 'aucun';
+  /**
+   * L'appel en cours de cet élève, s'il a levé la main. Nul le reste du temps.
+   */
+  appel: { id: string; motif: string; cree_le: string } | null;
   copie: {
     id: string;
     statut: string;
@@ -87,23 +149,40 @@ function aujourdhui(): string {
 export async function chargerSessions(prof: Professeur): Promise<SessionEnrichie[]> {
   const db = crmAdmin();
 
-  const [{ data: sessions }, { data: coachs }, { data: inscriptions }] = await Promise.all([
-    // Repli tant que le script 45 n'a pas été passé : l'espace prof doit
-    // continuer à s'ouvrir, simplement sans le bouton Discord.
+  // Repli tant que les scripts 45 et 51 n'ont pas été passés : l'espace prof
+  // doit continuer à s'ouvrir, simplement sans le bouton Discord ni le dossier.
+  const COLONNES_BASE =
+    'id, matiere, date_epreuve, heure_debut, heure_fin, places, coachs_recherches, statut, sheet_correction_url';
+
+  const [{ data: sessions }, { data: coachs }, { data: inscriptions }, reglages, mesClasseurs] =
+    await Promise.all([
     db.from('sessions_bacs_blancs')
-      .select('id, matiere, date_epreuve, heure_debut, heure_fin, places, coachs_recherches, statut, sheet_correction_url, discord_categorie_id')
+      .select(`${COLONNES_BASE}, discord_categorie_id, drive_copies_url`)
       .order('date_epreuve', { ascending: true })
-      .then(async (r) =>
-        r.error && /discord_categorie_id/.test(r.error.message ?? '')
-          ? db.from('sessions_bacs_blancs')
-              .select('id, matiere, date_epreuve, heure_debut, heure_fin, places, coachs_recherches, statut, sheet_correction_url')
-              .order('date_epreuve', { ascending: true })
-          : r,
-      ),
+      .then(async (r) => {
+        if (!r.error) return r;
+        const message = r.error.message ?? '';
+        if (/drive_copies_url/.test(message)) {
+          return db.from('sessions_bacs_blancs')
+            .select(`${COLONNES_BASE}, discord_categorie_id`)
+            .order('date_epreuve', { ascending: true })
+            .then(async (r2) =>
+              r2.error && /discord_categorie_id/.test(r2.error.message ?? '')
+                ? db.from('sessions_bacs_blancs').select(COLONNES_BASE).order('date_epreuve', { ascending: true })
+                : r2,
+            );
+        }
+        if (/discord_categorie_id/.test(message)) {
+          return db.from('sessions_bacs_blancs').select(COLONNES_BASE).order('date_epreuve', { ascending: true });
+        }
+        return r;
+      }),
     db.from('session_coachs')
       .select('session_id, professeur_id, remuneration, statut')
       .eq('statut', 'confirme'),
     db.from('inscriptions').select('session_id'),
+    chargerReglagesConsole(),
+    classeursDuProf(prof.id),
   ]);
 
   const parSession = new Map<string, { eleves: number; coachs: number; maRemu: number; moi: boolean }>();
@@ -132,13 +211,62 @@ export async function chargerSessions(prof: Professeur): Promise<SessionEnrichie
     return {
       ...row,
       discord_categorie_id: row.discord_categorie_id ?? null,
+      drive_copies_url: row.drive_copies_url ?? null,
       nb_eleves: stats?.eleves ?? 0,
       nb_coachs: stats?.coachs ?? 0,
       je_coache: stats?.moi ?? false,
       remuneration: stats?.maRemu ?? 0,
       categorie_url: lienCategorie(row.discord_categorie_id),
+      ...grilleDeLaSession(row, reglages.sheet_correction_url, mesClasseurs.get(row.id) ?? null),
+      dossier_url: adresseRetenue(row.drive_copies_url, reglages.drive_copies_url),
     };
   });
+}
+
+/**
+ * Quelle grille ouvre le prof, et d'où elle vient.
+ *
+ * L'ordre compte : depuis août 2026 les professeurs corrigent avec le classeur
+ * de LEUR MATIÈRE (« guidelines », un par matière, barème + page à cocher).
+ * C'est donc lui le cas normal, pas un réglage général — celui-ci ne sert plus
+ * que de filet pour une matière dont le classeur n'existe pas encore.
+ */
+function grilleDeLaSession(
+  row: Session,
+  secours: string,
+  mienne: { url: string; nom: string } | null,
+): Pick<SessionEnrichie, 'grille_url' | 'grille_origine' | 'grille_titre' | 'classeur_a_creer'> {
+  const cle = cleMatiere(row.matiere);
+  const { url, origine, guideline } = lienCorrection(cle ?? row.matiere, row.sheet_correction_url);
+
+  // La copie du prof passe avant tout le reste : c'est là qu'il corrige.
+  if (mienne) {
+    return {
+      grille_url: mienne.url,
+      grille_origine: 'mienne',
+      grille_titre: mienne.nom,
+      classeur_a_creer: false,
+    };
+  }
+
+  // Pas encore de copie : le bouton « créer mon classeur » n'a de sens que si
+  // la matière a bien un classeur à dupliquer.
+  const aCreer = Boolean(guideline?.url);
+
+  if (url) {
+    return {
+      grille_url: url,
+      grille_origine: origine === 'session' ? 'session' : 'matiere',
+      grille_titre: guideline?.titre ?? null,
+      classeur_a_creer: aCreer,
+    };
+  }
+  return {
+    grille_url: secours || null,
+    grille_origine: secours ? 'secours' : 'aucune',
+    grille_titre: guideline?.titre ?? null,
+    classeur_a_creer: aCreer,
+  };
 }
 
 export type BlocsSessions = {
@@ -214,29 +342,50 @@ export async function chargerRevenus(prof: Professeur): Promise<Revenus> {
 export async function chargerElevesSession(session: Session): Promise<EleveSession[]> {
   const db = crmAdmin();
 
-  const [{ data: inscrits }, { data: copies }] = await Promise.all([
-    // Repli tant que le script 45 n'a pas été passé : la liste des élèves doit
-    // s'afficher même sans salle attribuée.
+  // Repli tant que les scripts 45 et 51 n'ont pas été passés : la liste des
+  // élèves doit s'afficher même sans salle attribuée ni colonne de document.
+  const eleves = () => db.from('inscriptions').select('id, nom, email, matiere, created_at');
+  const deLaSession = <T>(q: { eq: (c: string, v: string) => T }) => q.eq('session_id', session.id);
+
+  const [{ data: inscrits }, { data: copies }, appels] = await Promise.all([
     db.from('inscriptions')
-      .select('id, nom, email, matiere, created_at, discord_salon_id')
+      .select('id, nom, email, matiere, created_at, discord_salon_id, copie_doc_url')
       .eq('session_id', session.id)
       .order('created_at', { ascending: true })
-      .then(async (r) =>
-        r.error && /discord_salon_id/.test(r.error.message ?? '')
-          ? db.from('inscriptions')
-              .select('id, nom, email, matiere, created_at')
-              .eq('session_id', session.id)
-              .order('created_at', { ascending: true })
-          : r,
-      ),
+      .then(async (r) => {
+        if (!r.error) return r;
+        const message = r.error.message ?? '';
+        if (/copie_doc_url/.test(message)) {
+          return db.from('inscriptions')
+            .select('id, nom, email, matiere, created_at, discord_salon_id')
+            .eq('session_id', session.id)
+            .order('created_at', { ascending: true })
+            .then(async (r2) =>
+              r2.error && /discord_salon_id/.test(r2.error.message ?? '')
+                ? deLaSession(eleves()).order('created_at', { ascending: true })
+                : r2,
+            );
+        }
+        if (/discord_salon_id/.test(message)) {
+          return deLaSession(eleves()).order('created_at', { ascending: true });
+        }
+        return r;
+      }),
     db.from('copies')
       .select('id, matiere, eleve_nom, eleve_email, statut, note, fichier_nom, pdf_pret, envoye')
       .eq('matiere', session.matiere),
+    appelsOuvertsSession(session.id),
   ]);
 
+  const appelParEleve = new Map(appels.map((a) => [a.inscription_id, a]));
+
   return (inscrits ?? []).map((i) => {
-    const { discord_salon_id, ...eleve } = i as unknown as Omit<EleveSession, 'copie' | 'salon_url'> & {
+    const { discord_salon_id, copie_doc_url, ...eleve } = i as unknown as Omit<
+      EleveSession,
+      'copie' | 'salon_url' | 'copie_doc_url' | 'appel'
+    > & {
       discord_salon_id?: string | null;
+      copie_doc_url?: string | null;
     };
     const copie = (copies ?? []).find((c) => {
       const row = c as { eleve_email: string | null; eleve_nom: string };
@@ -245,9 +394,17 @@ export async function chargerElevesSession(session: Session): Promise<EleveSessi
         norm(row.eleve_nom) === norm(eleve.nom)
       );
     });
+    const appel = appelParEleve.get(eleve.id);
+    const ecriture = lienEcritureCopie(codeCopie(eleve.nom, eleve.matiere), eleve.matiere);
+    const doc = (copie_doc_url ?? '').trim() || ecriture;
     return {
       ...eleve,
       salon_url: lienSalon(discord_salon_id),
+      copie_doc_url: copie_doc_url ?? null,
+      ecriture_url: ecriture,
+      doc_url: doc,
+      doc_origine: (copie_doc_url ?? '').trim() ? 'colle' : ecriture ? 'ecriture' : 'aucun',
+      appel: appel ? { id: appel.id, motif: appel.motif, cree_le: appel.cree_le } : null,
       copie: (copie as EleveSession['copie']) ?? null,
     };
   });

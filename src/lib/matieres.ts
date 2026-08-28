@@ -93,3 +93,36 @@ export function estVoieTechnologique(track?: string | null): boolean {
 export function libelleVoie(track?: string | null): string {
   return estVoieTechnologique(track) ? 'voie technologique' : 'voie générale';
 }
+
+/**
+ * L'inverse de `labelMatiere` : « Mathématiques » → « maths ».
+ *
+ * Les sessions stockent le LIBELLÉ de la matière, alors que les tables du
+ * projet (guidelines de correction, référentiels) sont indexées par la CLÉ.
+ * Sans cette traduction, chercher le classeur de correction d'une session
+ * échouerait silencieusement — et le professeur verrait « aucune grille » alors
+ * que la grille existe.
+ *
+ * Renvoie null pour une matière de brevet : le brevet a ses propres moteurs,
+ * et lui servir une guideline de bac serait pire que ne rien servir.
+ */
+export function cleMatiere(libelleOuCle: string): string | null {
+  const brut = (libelleOuCle ?? '').trim();
+  if (!brut) return null;
+  if (/brevet/i.test(brut)) return null;
+
+  // Déjà une clé connue.
+  if (LABELS_MATIERES[brut]) return brut;
+
+  const normaliser = (s: string) =>
+    s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  const cible = normaliser(brut);
+  for (const [cle, label] of Object.entries(LABELS_MATIERES)) {
+    if (normaliser(label) === cible || normaliser(cle) === cible) return cle;
+  }
+  // « Anglais (LLCER) » est stocké tel quel, mais on croise aussi « Anglais ».
+  if (cible.startsWith('anglais')) return 'anglais';
+  if (cible.startsWith('mathematiques')) return 'maths';
+  return null;
+}

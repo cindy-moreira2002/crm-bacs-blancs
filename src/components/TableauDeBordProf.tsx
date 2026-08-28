@@ -324,7 +324,7 @@ export function TableauDeBordProf({
                 action={
                   <a href={`/espace-prof/session/${prochaine.id}`}
                     className="inline-block px-5 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700">
-                    Ouvrir la session →
+                    Ouvrir ma console →
                   </a>
                 }
               />
@@ -380,7 +380,7 @@ export function TableauDeBordProf({
                     action={
                       <a href={`/espace-prof/session/${s.id}`}
                         className="inline-block px-5 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700">
-                        Ouvrir la session →
+                        Ouvrir ma console →
                       </a>
                     }
                   />

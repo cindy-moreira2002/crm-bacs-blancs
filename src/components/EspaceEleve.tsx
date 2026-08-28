@@ -37,6 +37,10 @@ type Inscription = {
   // attribuée : dans ce cas le bouton reste verrouillé plutôt que de mener
   // nulle part le matin de l'épreuve.
   salon_url?: string | null;
+  // Le Google Doc de la copie, quand il y en a un. L'application d'écriture
+  // n'étant pas encore finie, les deux cohabitent : l'élève voit les deux
+  // boutons, et on n'en gardera qu'un le jour venu.
+  copie_doc_url?: string | null;
 };
 
 const COULEURS: Record<string, string> = {
@@ -281,6 +285,80 @@ function BoutonSalon({ i, now, grand }: { i: Inscription; now: Date; grand?: boo
       style={{ fontSize: '.75rem', fontWeight: 700, color: '#9CA3AF', background: '#F3F4F6', padding: '5px 12px', borderRadius: 100, cursor: 'not-allowed' }}>
       🔒 Salon
     </span>
+  );
+}
+
+// ── Appeler le prof ─────────────────────────────────────────────────────────
+// Pendant l'épreuve, l'élève est seul dans sa salle vocale et le professeur
+// circule d'une salle à l'autre. Parler dans le vide ne sert à rien s'il est
+// ailleurs : ce bouton lève la main pour de bon — la demande s'affiche en rouge
+// sur le tableau de bord du prof, avec le temps d'attente.
+//
+// Il n'apparaît que pendant la fenêtre où la salle est ouverte : appeler la
+// veille n'aurait aucun sens, et personne ne serait là pour répondre.
+function BoutonAppelProf({ i, now }: { i: Inscription; now: Date }) {
+  const [levee, setLevee] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const demo = i.id.startsWith('demo-');
+
+  useEffect(() => {
+    if (demo) return;
+    let vivant = true;
+    fetch('/api/eleve/appel', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { appels: [] }))
+      .then((d) => {
+        if (!vivant) return;
+        setLevee((d.appels ?? []).some((a: { inscription_id: string }) => a.inscription_id === i.id));
+      })
+      .catch(() => {});
+    return () => { vivant = false; };
+  }, [i.id, demo]);
+
+  if (etatSalon(i, now) !== 'ouvert') return null;
+
+  const basculer = async () => {
+    if (demo) { setLevee((v) => !v); return; }
+    setBusy(true);
+    setErreur(null);
+    try {
+      const res = await fetch('/api/eleve/appel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inscription_id: i.id, action: levee ? 'baisser' : 'lever' }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setErreur(data.error ?? 'Erreur.'); return; }
+      setLevee(!levee);
+    } catch {
+      setErreur('Pas de réseau. Réessaie.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <button
+        onClick={basculer}
+        disabled={busy}
+        style={{
+          background: levee ? '#fff' : 'rgba(255,255,255,.18)',
+          border: levee ? '1.5px solid #fff' : '1.5px solid rgba(255,255,255,.55)',
+          color: levee ? '#DC2626' : '#fff',
+          padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem',
+          display: 'flex', alignItems: 'center', gap: 8, cursor: busy ? 'wait' : 'pointer',
+        }}
+      >
+        {levee ? '✋ Le prof arrive — annuler' : '✋ Appeler le prof'}
+      </button>
+      {levee && (
+        <span style={{ fontSize: '.72rem', opacity: .9 }}>
+          Ton professeur voit ta demande et te rejoint dans ta salle.
+        </span>
+      )}
+      {erreur && <span style={{ fontSize: '.72rem', color: '#FEE2E2' }}>{erreur}</span>}
+    </div>
   );
 }
 
@@ -867,6 +945,13 @@ export function EspaceEleve() {
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', flexShrink: 0 }}>
                 <BoutonSalon i={prochain} now={now} grand />
+                <BoutonAppelProf i={prochain} now={now} />
+                {prochain.copie_doc_url && (
+                  <a href={prochain.copie_doc_url} target="_blank" rel="noreferrer"
+                    style={{ background: 'rgba(255,255,255,.95)', color: couleur(prochain.matiere), padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(0,0,0,.15)' }}>
+                    📄 Mon document de copie
+                  </a>
+                )}
                 {ECRITURE_URL && prochain.code_copie && (
                   <a href={ecritureUrl(prochain)} target="_blank" rel="noreferrer"
                     style={{ background: 'rgba(255,255,255,.18)', border: '1.5px solid rgba(255,255,255,.55)', color: '#fff', padding: '13px 22px', borderRadius: 14, fontWeight: 800, fontSize: '.95rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>

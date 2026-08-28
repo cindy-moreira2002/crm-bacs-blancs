@@ -24,6 +24,7 @@
  *     de préparation, qui est le vrai indicateur à regarder avant l'épreuve.
  */
 import { crmAdmin } from '@/lib/authProf';
+import { boutonAppelActif, messageBoutonAppel } from './interactions';
 import { discord, idDuBot, type SalonDiscord } from '@/lib/discord/api';
 import {
   CIBLE_OVERWRITE,
@@ -196,10 +197,12 @@ export type InscriptionSalle = {
   /** Le compte Discord relié par l'élève. Sans lui, sa salle reste fermée. */
   discord_user_id: string | null;
   discord_acces_pose_le: string | null;
+  /** Quand le message « ✋ Appeler le prof » a été posté dans sa salle. */
+  discord_bouton_pose_le: string | null;
 };
 
 const CHAMPS_INSCRIPTION_SALLE =
-  'id, nom, session_id, discord_salon_id, discord_salon_nom, discord_user_id, discord_acces_pose_le';
+  'id, nom, session_id, discord_salon_id, discord_salon_nom, discord_user_id, discord_acces_pose_le, discord_bouton_pose_le';
 
 async function sessionsEtEleves(): Promise<{
   sessions: SessionCrm[];
@@ -220,6 +223,16 @@ async function sessionsEtEleves(): Promise<{
       .select(CHAMPS_INSCRIPTION_SALLE)
       .then(async (r) => {
         if (!r.error) return r;
+        // Script 51 pas encore passé : tout le reste doit continuer à marcher,
+        // simplement sans le bouton d'appel.
+        if (/discord_bouton_pose_le/.test(r.error.message ?? '')) {
+          const sansBouton = await db
+            .from('inscriptions')
+            .select(
+              'id, nom, session_id, discord_salon_id, discord_salon_nom, discord_user_id, discord_acces_pose_le',
+            );
+          if (!sansBouton.error) return sansBouton;
+        }
         if (/discord_user_id|discord_acces_pose_le/.test(r.error.message ?? '')) {
           const sansCompte = await db
             .from('inscriptions')
@@ -245,6 +258,7 @@ async function sessionsEtEleves(): Promise<{
       discord_salon_nom: brut.discord_salon_nom ?? null,
       discord_user_id: brut.discord_user_id ?? null,
       discord_acces_pose_le: brut.discord_acces_pose_le ?? null,
+      discord_bouton_pose_le: brut.discord_bouton_pose_le ?? null,
     });
     eleves.set(brut.session_id, liste);
   }
@@ -498,6 +512,7 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
   let posees = 0;
   let acces = 0;
   let sansCompte = 0;
+  let boutons = 0;
 
   for (let i = 0; i < inscrits.length; i++) {
     const eleve = inscrits[i];
@@ -560,6 +575,8 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
     const r = await assurerAcces(eleve, salonId, venaitDetreCreee);
     if (r === 'pose') acces += 1;
     if (r === 'sans-compte') sansCompte += 1;
+
+    if (await poserBoutonAppel(eleve, salonId)) boutons += 1;
   }
 
   if (creees) details.push(`${creees} salle${creees > 1 ? 's' : ''} créée${creees > 1 ? 's' : ''}.`);
@@ -569,6 +586,13 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
   details.push(`${posees} lien${posees > 1 ? 's' : ''} déposé${posees > 1 ? 's' : ''} dans l’espace élève.`);
   if (acces) {
     details.push(`${acces} élève${acces > 1 ? 's' : ''} autorisé${acces > 1 ? 's' : ''} sur sa salle.`);
+  }
+  if (boutons) {
+    details.push(`${boutons} bouton${boutons > 1 ? 's' : ''} « ✋ Appeler le prof » posé${boutons > 1 ? 's' : ''}.`);
+  } else if (!boutonAppelActif()) {
+    details.push(
+      '⚠️ Bouton « ✋ Appeler le prof » non posé : la variable DISCORD_PUBLIC_KEY manque. Les élèves peuvent quand même lever la main depuis leur espace.',
+    );
   }
   // Le point qui décide si la matinée se passe bien : un élève sans compte
   // relié a son lien, mais la porte reste fermée. Mieux vaut le voir la veille
@@ -580,6 +604,47 @@ export async function preparerSalles(sessionId: string): Promise<ResultatAction>
   }
 
   return { ok: true, message: `Salles prêtes pour ${session.matiere}.`, details };
+}
+
+/**
+ * Pose le message « ✋ Appeler le prof » dans la salle de l'élève.
+ *
+ * Un salon vocal Discord porte son propre fil de discussion : le message y vit
+ * donc là où l'élève est déjà, sans salon supplémentaire à ouvrir.
+ *
+ * Trois raisons de ne rien faire, et aucune n'est une erreur :
+ *   · la clé publique manque — le bouton répondrait « échec de l'interaction »,
+ *     mieux vaut pas de bouton du tout ;
+ *   · il a déjà été posé — « Préparer les salles » est rejouable, et le
+ *     rejouer ne doit pas empiler dix messages identiques ;
+ *   · l'envoi échoue — la salle existe quand même, l'élève garde le bouton de
+ *     son espace élève.
+ *
+ * Renvoie `true` seulement si un message vient d'être posté.
+ */
+async function poserBoutonAppel(eleve: InscriptionSalle, salonId: string): Promise<boolean> {
+  if (!boutonAppelActif()) return false;
+  if (eleve.discord_bouton_pose_le) return false;
+
+  const r = await discord(`/channels/${salonId}/messages`, {
+    methode: 'POST',
+    corps: messageBoutonAppel(),
+  });
+  if (!r.ok) {
+    console.error(`⚠️ Bouton d’appel non posé pour ${eleve.nom} :`, r.erreur);
+    return false;
+  }
+
+  const { error } = await crmAdmin()
+    .from('inscriptions')
+    .update({ discord_bouton_pose_le: new Date().toISOString() })
+    .eq('id', eleve.id);
+  // La colonne manque (script 51) : le message EST posté. On ne le repostera
+  // pas au prochain passage tant que la colonne n'existe pas — c'est le prix
+  // d'un script non passé, et il est visible dans le compte rendu.
+  if (error) console.error('⚠️ Date de pose du bouton non écrite :', error.message);
+
+  return true;
 }
 
 /**

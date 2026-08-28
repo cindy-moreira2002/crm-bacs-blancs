@@ -211,8 +211,15 @@ export async function GET(req: NextRequest) {
     };
 
     let { data, error } = await build(
-      'id, nom, email, matiere, date_epreuve, created_at, discord_salon_id',
+      'id, nom, email, matiere, date_epreuve, created_at, discord_salon_id, copie_doc_url',
     );
+    // Repli si la colonne copie_doc_url n'existe pas encore (script 51) :
+    // l'élève garde son espace, simplement sans le lien de son document.
+    if (error && /copie_doc_url/.test(error.message || '')) {
+      ({ data, error } = await build(
+        'id, nom, email, matiere, date_epreuve, created_at, discord_salon_id',
+      ));
+    }
     // Repli si la colonne discord_salon_id n'existe pas encore (script 45) :
     // l'élève doit continuer à voir son espace, salon verrouillé.
     if (error && /discord_salon_id/.test(error.message || '')) {
@@ -231,6 +238,7 @@ export async function GET(req: NextRequest) {
       nom: string;
       matiere: string;
       discord_salon_id?: string | null;
+      copie_doc_url?: string | null;
     }[];
     if (matieresProf) {
       const permises = new Set(matieresProf);
@@ -243,10 +251,13 @@ export async function GET(req: NextRequest) {
     // connaît pas l'identifiant du serveur Discord, et surtout il ne peut pas
     // fabriquer l'adresse d'une salle qui n'est pas la sienne — il reçoit
     // seulement celle inscrite sur SON inscription.
-    const inscriptions = lignes.map(({ discord_salon_id, ...i }) => ({
+    const inscriptions = lignes.map(({ discord_salon_id, copie_doc_url, ...i }) => ({
       ...i,
       code_copie: codeCopie(i.nom ?? '', i.matiere ?? ''),
       salon_url: lienSalon(discord_salon_id),
+      // Le Google Doc de cet élève, tant que l'application d'écriture n'a pas
+      // pris toute la place. Les deux cohabitent volontairement.
+      copie_doc_url: copie_doc_url ?? null,
     }));
 
     return NextResponse.json({ inscriptions });
