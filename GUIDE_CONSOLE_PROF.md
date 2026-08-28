@@ -72,15 +72,22 @@ Copier un fichier Google demande d'être identifié auprès de Google : ça pass
 par un petit script qui tourne **sous ton compte**. Le CRM ne touche jamais ton
 Drive, il ne sait que demander une copie.
 
+> ⚠️ **Le compte compte.** Le script tourne sous le compte Google avec lequel tu
+> le crées, et c'est CE compte qui doit pouvoir ouvrir les classeurs de matière.
+> Ici, c'est **slaylefrancais@gmail.com** — pas cindyoce2002. Si tu as plusieurs
+> comptes Google ouverts, vérifie l'avatar en haut à droite avant de commencer :
+> l'écran de déploiement affiche « Exécuter en tant que : Moi (…) », c'est là
+> que tu lis la vérité.
+
 1. Va sur https://script.google.com → **Nouveau projet**. Nomme-le
    « Classeurs de correction — Les Matinées du Bac ».
 2. Ouvre `GOOGLE_APPS_SCRIPT_CLASSEURS.js` (à la racine du projet) et **colle
    tout son contenu**, en remplaçant ce qu'il y a.
 3. Remplace `JETON_A_REMPLACER` par une longue chaîne au hasard (30 caractères
    ou plus). **Garde-la sous la main.**
-4. Facultatif mais conseillé : crée un dossier Drive « Classeurs de correction »,
-   ouvre-le, copie l'identifiant dans son adresse
-   (`drive.google.com/drive/folders/`**ICI**) et colle-le dans `DOSSIER_ID`.
+4. Rien à faire pour le rangement : le script crée tout seul un dossier Drive
+   « Classeurs de correction » à son premier usage, et y dépose toutes les
+   copies. (Pour en imposer un autre, colle son identifiant dans `DOSSIER_ID`.)
 5. **Déployer** → **Nouveau déploiement** → type **Application web** :
    *Exécuter en tant que* **moi**, *Qui a accès* **tout le monde** → **Déployer**.
    Autorise l'accès quand Google le demande. Copie l'**URL /exec**.
@@ -97,9 +104,10 @@ encore ton classeur pour ce bac blanc » avec le bouton **📋 Créer mon
 classeur**. Un clic : la copie se crée, s'ouvre dans un nouvel onglet, et le
 gros bouton vert devient **« Mon classeur de correction »**.
 
-⚠️ **Les classeurs de matière sont dans le Drive de Maël.** Ton compte Google
-doit pouvoir les **ouvrir** pour pouvoir les copier. Si le script répond
-« Modèle inaccessible », demande-lui le partage du classeur concerné.
+⚠️ **Les classeurs de matière sont dans le Drive de Maël**, partagés avec
+**slaylefrancais@gmail.com**. Si le script répond « Modèle inaccessible », c'est
+qu'il tourne sous un autre compte : refais l'étape 3 depuis le bon, ou demande à
+Maël de partager le classeur avec le compte utilisé.
 
 ### Où tu les retrouves
 
@@ -197,6 +205,17 @@ Dans Discord, s'il a l'étape 4, un message l'attend avec trois boutons :
 réponse n'est visible que de lui.
 
 ---
+
+## Installé le 28 août 2026
+
+Le script tourne sous **slaylefrancais@gmail.com**, déploiement
+« Copie du classeur de correction par bac blanc », version 1. Testé en réel : la
+copie « Bac blanc — Mathématiques — 13 septembre 2026 — Cindy Moreira » a bien
+été créée, partagée et archivée.
+
+Un premier projet avait été créé par erreur sous **cindyoce2002@gmail.com** : il
+ne sert plus, et peut être supprimé depuis https://script.google.com (compte
+cindyoce2002) → menu du projet → Supprimer.
 
 ## En cas de doute
 

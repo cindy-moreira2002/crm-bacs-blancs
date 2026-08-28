@@ -18,10 +18,9 @@
  *  2. Colle ce fichier entier (remplace tout ce qu'il y a).
  *  3. Remplace JETON_A_REMPLACER par une longue chaîne au hasard (30 caractères
  *     ou plus). Garde-la : c'est la variable Vercel CLASSEURS_WEBAPP_TOKEN.
- *  4. Facultatif : crée un dossier Drive « Classeurs de correction », ouvre-le,
- *     et copie l'identifiant qui est dans l'adresse
- *     (drive.google.com/drive/folders/ICI). Colle-le dans DOSSIER_ID.
- *     Laissé vide, les copies atterrissent à la racine de ton Drive.
+ *  4. Rien à faire : le script range les copies dans un dossier Drive
+ *     « Classeurs de correction », qu'il crée tout seul au premier usage.
+ *     (Pour en imposer un autre, colle son identifiant dans DOSSIER_ID.)
  *  5. Déployer → Nouveau déploiement → Type « Application web »
  *       - Exécuter en tant que : moi
  *       - Qui a accès : tout le monde
@@ -43,8 +42,12 @@
 
 var JETON = 'JETON_A_REMPLACER';
 
-// Identifiant du dossier Drive où ranger les copies. Vide = racine du Drive.
+// Où ranger les copies. Laissé vide, le script crée (une fois) un dossier
+// « Classeurs de correction » à la racine du Drive et s'en sert ensuite : c'est
+// une adresse de moins à aller chercher à la main, et les copies ne se
+// dispersent jamais à la racine.
 var DOSSIER_ID = '';
+var DOSSIER_NOM = 'Classeurs de correction';
 
 function doGet() {
   return json({ ok: true, message: 'Classeurs de correction — prêt.' });
@@ -80,12 +83,7 @@ function doPost(e) {
 
     var nom = String(demande.nom || 'Bac blanc — classeur de correction').slice(0, 150);
 
-    var copie;
-    if (DOSSIER_ID) {
-      copie = modele.makeCopy(nom, DriveApp.getFolderById(DOSSIER_ID));
-    } else {
-      copie = modele.makeCopy(nom);
-    }
+    var copie = modele.makeCopy(nom, dossierCible());
 
     // Le professeur doit pouvoir écrire dedans : sans ce partage, il ouvrirait
     // sa propre grille et lirait « Demander l'accès » le matin de l'épreuve.
@@ -107,6 +105,20 @@ function doPost(e) {
   } catch (err) {
     return json({ ok: false, erreur: String(err) });
   }
+}
+
+/**
+ * Le dossier où déposer les copies.
+ *
+ * DOSSIER_ID s'il est renseigné ; sinon le dossier « Classeurs de correction »,
+ * retrouvé par son nom, et créé au premier appel s'il n'existe pas encore.
+ */
+function dossierCible() {
+  if (DOSSIER_ID) return DriveApp.getFolderById(DOSSIER_ID);
+
+  var existants = DriveApp.getFoldersByName(DOSSIER_NOM);
+  if (existants.hasNext()) return existants.next();
+  return DriveApp.createFolder(DOSSIER_NOM);
 }
 
 /** « .../spreadsheets/d/ABC123/edit » → « ABC123 ». */
