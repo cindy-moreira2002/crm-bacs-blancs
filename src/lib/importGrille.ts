@@ -1,8 +1,23 @@
 /**
  * Import de la grille de correction exportée du Google Sheet.
  *
- * Le prof remplit un Sheet — une ligne par élève, une colonne par critère — puis
- * exporte la page en CSV et la dépose ici. Ce module :
+ * TROIS MISES EN PAGE SONT ACCEPTÉES, et c'est volontaire :
+ *
+ *   • le classeur guideline de la matière, élèves EN COLONNES — le barème à
+ *     gauche, puis deux colonnes par élève (« niveau ? » et « commentaire ») ;
+ *   • le classeur guideline, élèves EN BLOCS — un bloc de lignes par élève ;
+ *   • la grille à plat — une ligne par élève, une colonne par critère (l'ancien
+ *     classeur `Grilles_correction_MatineesDuBac`).
+ *
+ * Dans les deux premières, la note n'est pas saisie : elle est ADDITIONNÉE à
+ * partir des paliers cochés (voir `guidelineSheet.ts`).
+ *
+ * Le prof ne choisit rien : la mise en page est reconnue à la lecture, et les
+ * trois ressortent sous la MÊME forme (`RapportImport`). Tout ce qui suit —
+ * écran de relecture, enregistrement, génération des dossiers — n'en connaît
+ * qu'une.
+ *
+ * Ce module :
  *   1. lit le CSV (virgule ou point-virgule, guillemets, BOM Excel) ;
  *   2. reconnaît les colonnes, y compris les critères qu'on ne connaît pas
  *      d'avance : ils deviennent les champs du formulaire de correction ;
@@ -13,6 +28,13 @@
  * puisse relire et corriger avant de valider.
  */
 import type { EleveSession } from '@/lib/espaceProf';
+import {
+  estFeuilleACocher,
+  estGuidelineACorriger,
+  lireFeuilleACocher,
+  lireGuidelineCorrigee,
+  type CopieCochee,
+} from '@/lib/guidelineSheet';
 
 // --- Lecture du CSV ---------------------------------------------------
 
@@ -131,6 +153,49 @@ function memeNom(a: string, b: string): boolean {
   return mots(a) === mots(b) && mots(a) !== '';
 }
 
+/**
+ * Retrouve l'élève d'une ligne : e-mail d'abord (fiable), nom ensuite, prénom
+ * seul en dernier recours — les feuilles à cocher ne portent souvent qu'un
+ * prénom. Un prénom porté par deux élèves n'est jamais tranché tout seul.
+ */
+function rapprocher(
+  eleves: EleveSession[],
+  nomBrut: string,
+  emailBrut: string,
+): { eleve: EleveSession | null; probleme: string | null } {
+  if (emailBrut) {
+    const parMail = eleves.find((e) => (e.email ?? '').toLowerCase() === emailBrut);
+    if (parMail) return { eleve: parMail, probleme: null };
+  }
+  if (!nomBrut) {
+    return { eleve: null, probleme: 'Ligne sans nom ni e-mail d’élève.' };
+  }
+
+  const exact = eleves.find((e) => memeNom(e.nom, nomBrut));
+  if (exact) return { eleve: exact, probleme: null };
+
+  const mots = normaliser(nomBrut).split(' ').filter(Boolean);
+  if (mots.length === 1) {
+    const homonymes = eleves.filter((e) =>
+      normaliser(e.nom).split(' ').includes(mots[0]),
+    );
+    if (homonymes.length === 1) return { eleve: homonymes[0], probleme: null };
+    if (homonymes.length > 1) {
+      return {
+        eleve: null,
+        probleme: `Plusieurs élèves s’appellent « ${nomBrut} » (${homonymes
+          .map((e) => e.nom)
+          .join(', ')}). Écris le nom complet dans le classeur.`,
+      };
+    }
+  }
+
+  return {
+    eleve: null,
+    probleme: `« ${nomBrut} » ne correspond à aucun élève inscrit à cette session.`,
+  };
+}
+
 export type LigneImportee = {
   numero: number;
   nomBrut: string;
@@ -143,6 +208,8 @@ export type LigneImportee = {
 };
 
 export type RapportImport = {
+  /** `plat` = une ligne par élève ; `cochee` = la feuille des guidelines. */
+  format: 'plat' | 'cochee';
   colonnes: Colonne[];
   lignes: LigneImportee[];
   elevesSansLigne: { id: string; nom: string }[];
@@ -163,8 +230,20 @@ export function analyserGrille(csv: string, eleves: EleveSession[]): RapportImpo
   const erreursFichier: string[] = [];
   const table = lireCsv(csv);
 
+  // Les classeurs guideline passent par un autre lecteur, qui rend exactement
+  // la même chose. Deux mises en page existent : les élèves en colonnes (la
+  // plus récente, barème et correction sur la même page) et les élèves en
+  // blocs de lignes.
+  if (estGuidelineACorriger(table)) {
+    return analyserFeuilleCochee(lireGuidelineCorrigee(table).copies, eleves);
+  }
+  if (estFeuilleACocher(table)) {
+    return analyserFeuilleCochee(lireFeuilleACocher(table), eleves);
+  }
+
   if (table.length < 2) {
     return {
+      format: 'plat',
       colonnes: [],
       lignes: [],
       elevesSansLigne: eleves.map((e) => ({ id: e.id, nom: e.nom })),
@@ -201,18 +280,10 @@ export function analyserGrille(csv: string, eleves: EleveSession[]): RapportImpo
     const problemes: string[] = [];
 
     // Rapprochement : e-mail d'abord (fiable), nom ensuite (tolérant).
-    let eleve =
-      (emailBrut && eleves.find((e) => (e.email ?? '').toLowerCase() === emailBrut)) || null;
-    if (!eleve && nomBrut) {
-      eleve = eleves.find((e) => memeNom(e.nom, nomBrut)) ?? null;
-    }
+    const { eleve, probleme } = rapprocher(eleves, nomBrut, emailBrut);
 
     if (!eleve) {
-      problemes.push(
-        nomBrut || emailBrut
-          ? `« ${nomBrut || emailBrut} » ne correspond à aucun élève inscrit à cette session.`
-          : 'Ligne sans nom ni e-mail d’élève.',
-      );
+      problemes.push(probleme ?? 'Élève non reconnu.');
     } else if (dejaPris.has(eleve.id)) {
       problemes.push(`${eleve.nom} apparaît sur plusieurs lignes : garde une seule ligne par élève.`);
     } else {
@@ -266,6 +337,106 @@ export function analyserGrille(csv: string, eleves: EleveSession[]): RapportImpo
     .map((e) => ({ id: e.id, nom: e.nom }));
 
   return {
+    format: 'plat',
+    colonnes,
+    lignes,
+    elevesSansLigne,
+    resume: {
+      total: lignes.length,
+      pretes: lignes.filter((l) => l.prete).length,
+      nonReconnues: lignes.filter((l) => !l.eleveId).length,
+      incompletes: lignes.filter((l) => l.eleveId && !l.prete).length,
+    },
+    erreursFichier,
+  };
+}
+
+// --- La feuille à cocher des guidelines -------------------------------
+
+/** Le libellé d'un critère tel qu'il s'affiche au prof : « Analyse du sujet /1 ». */
+function enteteCritere(c: CopieCochee['criteres'][number]): string {
+  return `${c.libelle} /${String(c.max).replace('.', ',')}`;
+}
+
+/** Ce qu'on garde d'un critère coché : le palier retenu, puis le commentaire. */
+function valeurCritere(c: CopieCochee['criteres'][number]): string {
+  const points = c.points === null ? '—' : String(c.points).replace('.', ',');
+  const morceaux = [`${points} / ${String(c.max).replace('.', ',')}`];
+  if (c.niveau && !/^\d/.test(c.niveau)) morceaux.push(c.niveau);
+  if (c.commentaire) morceaux.push(c.commentaire);
+  return morceaux.join(' — ');
+}
+
+/**
+ * Lit la feuille à cocher d'une guideline et la rend sous la forme habituelle.
+ *
+ * La note n'est pas saisie : elle est CALCULÉE en additionnant les paliers
+ * cochés. Si le barème de la feuille ne fait pas 20 (une seule partie d'épreuve
+ * corrigée, par exemple), la note est ramenée sur 20 et la conversion est
+ * écrite noir sur blanc — le prof la voit et peut la corriger à l'écran.
+ */
+function analyserFeuilleCochee(copies: CopieCochee[], eleves: EleveSession[]): RapportImport {
+  const erreursFichier: string[] = [];
+
+  if (copies.length === 0) {
+    erreursFichier.push(
+      'Aucun élève trouvé dans le classeur : il faut une colonne « niveau ? » par élève (avec son nom au-dessus), ou un bloc par élève commençant par son nom.',
+    );
+  }
+
+  // Les critères de la première copie donnent les colonnes : dans une même
+  // feuille, tous les élèves sont notés sur la même grille.
+  const modele = copies[0]?.criteres ?? [];
+  const colonnes: Colonne[] = modele.map((c, index) => ({
+    index,
+    entete: enteteCritere(c),
+    cle: c.code,
+    role: 'critere' as RoleColonne,
+  }));
+
+  const dejaPris = new Set<string>();
+  const lignes: LigneImportee[] = copies.map((copie, i) => {
+    const problemes: string[] = [...copie.avertissements];
+    const { eleve, probleme } = rapprocher(eleves, copie.eleve, '');
+
+    if (!eleve) problemes.push(probleme ?? 'Élève non reconnu.');
+    else if (dejaPris.has(eleve.id)) {
+      problemes.push(`${eleve.nom} apparaît dans plusieurs blocs : garde un seul bloc par élève.`);
+    } else dejaPris.add(eleve.id);
+
+    let note: number | null = copie.bareme > 0 ? copie.total : null;
+    if (copie.bareme <= 0) {
+      problemes.push('Aucun critère lu dans ce bloc : la note ne peut pas être calculée.');
+    } else if (Math.abs(copie.bareme - 20) > 0.01) {
+      note = Math.round((copie.total * 20) / copie.bareme * 100) / 100;
+      problemes.push(
+        `Barème de la feuille : ${String(copie.bareme).replace('.', ',')} points. ` +
+          `Note ramenée sur 20 (${String(copie.total).replace('.', ',')} → ${String(note).replace('.', ',')}). ` +
+          'Corrige-la ci-dessous si l’épreuve se note autrement.',
+      );
+    }
+
+    const criteres: Record<string, string> = {};
+    for (const c of copie.criteres) criteres[c.code] = valeurCritere(c);
+
+    return {
+      numero: i + 1,
+      nomBrut: copie.eleve,
+      eleveId: eleve?.id ?? null,
+      eleveNom: eleve?.nom ?? null,
+      note,
+      criteres,
+      problemes,
+      prete: problemes.length === 0,
+    };
+  });
+
+  const elevesSansLigne = eleves
+    .filter((e) => !dejaPris.has(e.id))
+    .map((e) => ({ id: e.id, nom: e.nom }));
+
+  return {
+    format: 'cochee',
     colonnes,
     lignes,
     elevesSansLigne,

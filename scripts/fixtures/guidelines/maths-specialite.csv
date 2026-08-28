@@ -1,0 +1,63 @@
+BARÈME — ÉPREUVE DE SPÉCIALITÉ MATHÉMATIQUES — CLASSE DE TERMINALE,,
+,,
+"Grille analytique construite à partir du cadrage officiel de l'épreuve terminale de spécialité mathématiques (baccalauréat général).
+ La notation est globale sur 20 : cette grille sert à homogénéiser la correction entre plusieurs correcteurs et ne constitue pas un barème national figé, les exercices variant à chaque sujet.",,
+,,
+,,
+Cadre général de l'épreuve,,
+"•  Épreuve écrite de 4h, coefficient 16, notée sur 20 — calculatrice autorisée en mode examen (ou calculatrice sans mémoire de type collège).",,
+"•  Le sujet comporte 4 exercices indépendants (environ 4 à 7 points chacun), traitables dans l'ordre choisi par le candidat, couvrant l'ensemble du programme de terminale : 
+analyse (fonctions, dérivation, exponentielle/logarithme, intégration — environ 50 % des points), suites numériques, probabilités, géométrie dans l'espace, et algorithmique.",,
+"•  Un ou plusieurs exercices peuvent comporter une question « à prise d'initiative » (démarche non guidée), évaluée selon des modalités spécifiques — voir l'encadré dédié ci-dessous.",,
+,,
+Critère,Barème,Descripteur de performance
+EXERCICES : COMPÉTENCES MATHÉMATIQUES,,— /20
+1. Chercher,— /3,
+,0–1,"Aucune tentative pertinente ; candidat bloqué dès le départ, aucune piste engagée."
+,"1,5","Piste engagée mais démarche peu pertinente, abandonnée ou incomplète."
+,2,"Démarche de recherche pertinente, plusieurs éléments de l'énoncé exploités correctement."
+,3,"Recherche autonome et efficace, stratégie pertinente adoptée y compris sur les questions ouvertes ou à prise d'initiative."
+2. Modéliser,— /3,
+,0–1,"Situation non traduite en objet mathématique, ou traduction erronée."
+,"1,5",Modélisation amorcée mais incomplète ou partiellement inexacte.
+,2,"Situation correctement modélisée (équation, fonction, suite, variable aléatoire...)."
+,3,"Modélisation rigoureuse et adaptée, hypothèses et domaine de validité explicités."
+3. Représenter,— /2,
+,"0–0,5","Représentations absentes, erronées ou inexploitées (graphique, tableau, arbre, figure dans l'espace...)."
+,1,Représentation partiellement correcte ou incomplète.
+,"1,5",Représentation correcte et adaptée à la situation.
+,2,"Représentation précise et rigoureuse, mobilisée à bon escient pour appuyer le raisonnement."
+4. Raisonner,— /5,
+,0–1,"Raisonnement absent, incohérent ou contredit par le résultat obtenu."
+,2,"Raisonnement engagé mais lacunaire, plusieurs étapes non justifiées ou logique défaillante."
+,"3,5","Raisonnement globalement cohérent et justifié, quelques imprécisions possibles."
+,5,"Raisonnement rigoureux et complet, démonstration bien conduite, résultats validés avec méthode."
+5. Calculer,— /5,
+,0–1,Calculs faux ou méthode inadaptée ; résultats incohérents avec le contexte.
+,2,"Calculs partiellement corrects, erreurs de méthode ou de technique."
+,"3,5","Calculs corrects dans l'ensemble, méthode adaptée, résultat cohérent, quelques erreurs isolées possibles."
+,5,"Calculs exacts et maîtrisés (dérivation, intégration, algèbre, probabilités...), méthode efficace et résultat vérifié."
+6. Communiquer,— /2,
+,"0–0,5",Rédaction absente ou incompréhensible ; résultat donné sans justification écrite.
+,1,"Explications présentes mais formulation imprécise, notations mathématiques fautives."
+,"1,5","Rédaction claire, notations et vocabulaire mathématiques corrects."
+,2,"Rédaction rigoureuse et bien structurée, notations précises, résultats clairement mis en évidence et interprétés dans le contexte du problème."
+,,
+Questions à prise d'initiative — traitement spécifique,,
+"•  Ces questions n'imposent pas de méthode : le candidat doit construire seul sa démarche. Toute trace de recherche cohérente est valorisée, même si la démarche n'aboutit pas à un résultat correct ou complet.",,
+"•  Ne pas exiger la solution experte : une méthode plus longue mais juste, ou une approche par essais/conjecture correctement exploitée, doit être valorisée au même titre qu'une méthode optimale.",,
+•  Une réponse juste sans démarche visible ne peut pas obtenir la totalité des points ; une démarche pertinente non aboutie doit être mieux valorisée qu'une absence totale de recherche.,,
+,,
+"💡 À adapter par exercice — Le sujet comporte 4 exercices indépendants pour un total de 20 points, chacun avec un barème propre selon les notions testées (environ 4 à 7 points par exercice). Dupliquez cette grille par compétence (Chercher, Modéliser, Représenter, Raisonner, Calculer, Communiquer) pour chaque exercice du bac blanc, en réajustant les points maximum de chaque compétence pour qu'ils totalisent le barème réel de l'exercice (les valeurs ci-dessus — 3/3/2/5/5/2 — sont une répartition indicative par défaut, qui accentue le poids du raisonnement et du calcul par rapport à l'épreuve de première).",,
+,,
+,,
+Vérification du barème (indicatif),,
+Chercher,3,
+Modéliser,3,
+Représenter,2,
+Raisonner,5,
+Calculer,5,
+Communiquer,2,
+TOTAL ÉPREUVE,20,Doit être égal à 20
+,,
+"⚠️ IMPORTANT — Comme pour l'épreuve de première, le contenu mathématique des exercices change à chaque sujet de bac blanc : cette grille propose un cadre de compétences stable (le référentiel national chercher / modéliser / représenter / raisonner / calculer / communiquer) mais les points par compétence doivent être réajustés par le correcteur en fonction du barème réel de chaque exercice proposé, en particulier pour les questions à prise d'initiative.",,

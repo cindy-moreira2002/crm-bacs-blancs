@@ -172,7 +172,7 @@ RÈGLES DE SORTIE ABSOLUES :
 - Tout le contenu est enveloppé dans : <div class="page"> … la couverture … <div class="wrap"> … les sections … </div></div>.
 
 CHARTE DES DONNÉES (à respecter, ne jamais réinventer) :
-- La NOTE et le BARÈME viennent EXACTEMENT de la correction fournie (result_json). Tu ne recorriges pas, tu ne changes aucun score.
+- La NOTE et le BARÈME viennent EXACTEMENT de la correction fournie (result_json). Tu ne recorriges pas, tu ne changes aucun score. EXCEPTION : si les données contiennent une correction du professeur (correction_professeur), c'est SA note et SON jugement qui font foi — la consigne jointe aux données dit alors précisément quoi reprendre de lui.
 - UN SEUL ENDROIT DONNE DES POINTS : le tableau du barème, en page 1. Tout autre chiffre du dossier (radar sur 10, pourcentages) est une RELECTURE des mêmes critères, jamais un point de plus. Chaque fois qu'un chiffre apparaît ailleurs que dans le barème, tu dis dans la même phrase qu'il ne compte pas dans la note.
 - Le barème du dossier reprend les critères de la grille fournie, avec LEURS maximums réels (par exemple « Compréhension et interprétation … / 4 »). Tu n'inventes ni critère ni maximum, et tu ne présentes jamais un critère qui n'est pas dans la grille.
 - Les CITATIONS de la copie viennent EXCLUSIVEMENT de la transcription fournie. N'invente jamais une phrase d'élève.
@@ -289,14 +289,56 @@ Deno.serve(async (req: Request) => {
 
     // 6. Appel Claude : system = guide marque + sections de la matière
     const { apiKey, model } = getAnthropicConfig();
+    // LA CORRECTION DU PROFESSEUR EST LA BASE (SQL 50). Quand un professeur a
+    // corrigé la copie dans le classeur de sa matière, le CRM recopie ici sa
+    // grille : note, critères, palier retenu par critère, commentaires. Le
+    // dossier se construit sur elle — l'IA développe et illustre, elle ne
+    // renote pas et ne réorganise pas les critères. Sans grille prof, le
+    // dossier reste 100 % IA, comme avant.
+    const grilleProf = correction.grille_prof ?? null;
     const dataPayload = {
       identite: {
         eleve: correction.student_name ?? correction.eleve ?? "Élève",
       },
       sujet: subject?.card_json ?? subject ?? null,
       correction: correction.result_json,
+      correction_professeur: grilleProf,
       transcription: transcriptionRow?.transcription_json ?? null,
     };
+    // La grille du professeur n'est pas un complément : c'est la BASE du
+    // dossier. Elle vient du classeur de correction de la matière, où le prof
+    // a coché un palier par critère et écrit ses commentaires. Le dossier
+    // reprend SES critères, dans SON ordre, avec SES points — l'IA développe,
+    // explique et illustre, elle ne renote jamais.
+    const criteresProf = grilleProf?.criteres ?? {};
+    const listeCriteres = Object.entries(criteresProf)
+      .map(([cle, valeur]) => {
+        const entete = (grilleProf?.colonnes ?? []).find(
+          (c: { cle?: string; entete?: string }) => c?.cle === cle,
+        )?.entete;
+        return `  • ${entete ?? cle} → ${valeur}`;
+      })
+      .join("\n");
+
+    const consigneHybride = grilleProf
+      ? "\n\n=== LA CORRECTION DU PROFESSEUR EST LA BASE DU DOSSIER ===\n" +
+        "Cette copie a été corrigée par un professeur dans le classeur de correction de la matière. Sa correction est dans `correction_professeur` : critère par critère, le palier qu'il a retenu (points obtenus / points du critère, puis le descripteur du palier) et, quand il en a écrit un, son commentaire.\n" +
+        (listeCriteres ? `Ses critères, dans l'ordre :\n${listeCriteres}\n` : "") +
+        "\nCe que tu dois en faire :\n" +
+        "- La NOTE du dossier est la sienne" +
+        (grilleProf.note == null
+          ? " si elle est présente ; sinon seulement, garde celle de `correction`"
+          : ` : ${grilleProf.note}/20`) +
+        ". Jamais de fourchette, jamais de recalcul, jamais un autre chiffre ailleurs dans le dossier.\n" +
+        "- La STRUCTURE d'analyse est la sienne : une section par critère de `correction_professeur`, dans son ordre, avec ses points affichés tels quels (par exemple « 0,75 / 1 »). N'ajoute aucun critère qu'il n'a pas, n'en supprime aucun, ne redistribue aucun point.\n" +
+        "- Son commentaire de critère est cité en tête de la section, attribué (« Votre professeur note : … »), puis développé : ce que cela veut dire concrètement, ce qui l'a coûté dans la copie, comment faire autrement la prochaine fois.\n" +
+        "- Un critère sans commentaire du professeur s'explique à partir du descripteur du palier coché et de la copie elle-même — sans jamais laisser entendre qu'il vaut plus ou moins de points que ce qu'il a mis.\n" +
+        "- `correction` (la lecture IA de la copie) et `transcription` servent au DÉTAIL et à la pédagogie : citations exactes du devoir, erreurs précises, reformulations, exemples de rédaction attendue. Elles ne contredisent jamais le professeur ; en cas de désaccord, c'est lui qui a raison et tu adaptes le commentaire.\n" +
+        "- Le dossier reste beaucoup plus détaillé que la grille : c'est justement le travail attendu — partir de son jugement et le transformer en explication complète, exercices et plan de progression.\n" +
+        "- Mentionne sur la couverture que la copie a été corrigée par le professeur" +
+        (grilleProf.professeur?.nom ? ` (${grilleProf.professeur.nom})` : "") +
+        ", dossier mis en forme par Les Matinées du Bac."
+      : "";
 
     const anthropicPayload = await callAnthropic(apiKey, {
       model,
@@ -324,6 +366,7 @@ Deno.serve(async (req: Request) => {
               text:
                 "DONNÉES DE LA COPIE (à mettre en page selon la structure ci-dessus, sans rien réinventer) :\n" +
                 JSON.stringify(dataPayload) +
+                consigneHybride +
                 "\n\nProduis maintenant le corps HTML complet du dossier (uniquement le contenu de <body>).",
             },
           ],

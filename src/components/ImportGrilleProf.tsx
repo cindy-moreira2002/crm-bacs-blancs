@@ -14,6 +14,8 @@ type Resultat = {
   enregistrees: number;
   generes: string[];
   sansCopie: string[];
+  /** Élèves ayant plusieurs copies : la note du prof n'a pas été posée d'office. */
+  noteNonAppliquee?: string[];
   pipelineIndisponible: string | null;
 };
 
@@ -131,7 +133,9 @@ export function ImportGrilleProf({
         <h2 className="font-bold text-gray-900 mb-1">Dépose le fichier exporté</h2>
         <p className="text-sm text-gray-600 mb-4">
           Dans le Google Sheet : <strong>Fichier → Télécharger → Valeurs séparées par des virgules
-          (.csv)</strong>. Une ligne par élève, une colonne par critère.
+          (.csv)</strong>. Les deux formats sont acceptés, sans rien avoir à choisir : la page de
+          correction du classeur de la matière (un bloc par élève, une case cochée par critère) ou
+          une grille à plat (une ligne par élève, une colonne par critère).
         </p>
         <input
           type="file"
@@ -163,6 +167,14 @@ export function ImportGrilleProf({
           {resultat.pipelineIndisponible && (
             <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
               {resultat.pipelineIndisponible}
+            </div>
+          )}
+          {(resultat.noteNonAppliquee?.length ?? 0) > 0 && (
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
+              <strong>Note non reportée automatiquement pour :</strong>{' '}
+              {resultat.noteNonAppliquee!.join(', ')}. Ces élèves ont plusieurs copies dans cette
+              matière (deux exercices d’une même épreuve, par exemple) : ta correction est bien
+              transmise et sert au dossier, mais la note par exercice reste celle du pipeline.
             </div>
           )}
           {!resultat.pipelineIndisponible && resultat.sansCopie.length > 0 && (
@@ -211,7 +223,14 @@ export function ImportGrilleProf({
 
           {/* Colonnes reconnues */}
           <section className="mb-6 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <h2 className="font-bold text-gray-900 mb-3">Colonnes reconnues</h2>
+            <h2 className="font-bold text-gray-900 mb-1">
+              {rapport.format === 'cochee' ? 'Critères reconnus' : 'Colonnes reconnues'}
+            </h2>
+            <p className="text-xs text-gray-500 mb-3">
+              {rapport.format === 'cochee'
+                ? 'Fichier lu comme une page de correction à cocher (guideline de la matière).'
+                : 'Fichier lu comme une grille à plat.'}
+            </p>
             <div className="flex flex-wrap gap-2">
               {rapport.colonnes.map((c) => (
                 <span key={c.cle}
@@ -230,8 +249,9 @@ export function ImportGrilleProf({
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-3">
-              Les critères deviennent les champs du formulaire de correction ci-dessous : ils sont
-              exactement calqués sur les colonnes de ta grille.
+              {rapport.format === 'cochee'
+                ? 'Ces critères sont ceux de la guideline de la matière : la note ci-dessous est la somme des niveaux que tu as cochés, pas une note saisie.'
+                : 'Les critères deviennent les champs du formulaire de correction ci-dessous : ils sont exactement calqués sur les colonnes de ta grille.'}
             </p>
           </section>
 
@@ -248,7 +268,9 @@ export function ImportGrilleProf({
                       <h3 className="font-bold text-gray-900">
                         {l.eleveNom ?? (l.nomBrut || `Ligne ${l.numero}`)}
                       </h3>
-                      <p className="text-xs text-gray-400">Ligne {l.numero} du fichier</p>
+                      <p className="text-xs text-gray-400">
+                        {rapport.format === 'cochee' ? 'Bloc' : 'Ligne'} {l.numero} du fichier
+                      </p>
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
                       ok ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
@@ -278,7 +300,7 @@ export function ImportGrilleProf({
                     <label className="block">
                       <span className="text-sm font-medium text-gray-700">Note /20</span>
                       <input
-                        type="number" min={0} max={20} step={0.5}
+                        type="number" min={0} max={20} step={0.25}
                         value={l.note ?? ''}
                         onChange={(e) => modifier(l.numero, '__note', e.target.value)}
                         className="mt-1 w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
