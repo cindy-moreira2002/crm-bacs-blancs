@@ -6,8 +6,9 @@
  *
  * Ce qui a changé, et pourquoi :
  *  · les trois adresses qu'il ouvrait à la main (bloc Discord, grille de
- *    correction, dossier des copies) sont en haut, toujours visibles, et non
- *    plus dispersées dans trois onglets ;
+ *    correction, dossier des copies) sont en haut, toujours visibles ;
+ *  · UN écran, sans onglets, et chaque chose une seule fois : une seule liste
+ *    d'élèves, qui porte tout — la salle, la copie, le statut, la note ;
  *  · la grille n'est plus un lien de démonstration : c'est le classeur commun,
  *    et quand il n'est pas renseigné l'écran le DIT au lieu d'afficher un lien
  *    qui ne mène nulle part ;
@@ -26,15 +27,6 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { IconeDiscord, LiaisonDiscord } from '@/components/LiaisonDiscord';
 import { SujetEtRetour } from '@/components/SujetEtRetour';
 import type { EleveSession, SessionEnrichie } from '@/lib/espaceProf';
-
-type Onglet = 'surveillance' | 'copies' | 'corrections' | 'sujet';
-
-const ONGLETS: { cle: Onglet; label: string; emoji: string }[] = [
-  { cle: 'surveillance', label: 'Surveillance', emoji: '👀' },
-  { cle: 'copies', label: 'Copies', emoji: '📄' },
-  { cle: 'corrections', label: 'Corrections', emoji: '✍️' },
-  { cle: 'sujet', label: 'Sujet et retour', emoji: '📝' },
-];
 
 /** Toutes les dix secondes : assez pour ne pas faire attendre un élève. */
 const CADENCE_APPELS_MS = 10_000;
@@ -309,7 +301,6 @@ export function SessionProf({
   dateLisible: string;
   creneau: string;
 }) {
-  const [onglet, setOnglet] = useState<Onglet>('surveillance');
   const [eleves, setEleves] = useState(elevesInitiaux);
 
   // La grille vit dans un état local : créer sa copie doit changer le bouton
@@ -522,7 +513,7 @@ export function SessionProf({
         )}
       </header>
 
-      {/* Les mains levées : au-dessus de tout le reste, et sur tous les onglets.
+      {/* Les mains levées : au-dessus de tout le reste.
           Un élève qui attend passe avant ce que le prof était en train de faire. */}
       {appels.length > 0 && (
         <section className="mb-5 rounded-2xl border-2 border-red-300 bg-red-50 p-4">
@@ -576,225 +567,136 @@ export function SessionProf({
         <LiaisonDiscord pourquoi="C’est ce qui t’ouvre la zone Équipe et les salles de tes élèves : sans compte relié, tu vois les liens mais tu ne peux pas entrer." />
       </div>
 
-      {/* Onglets */}
-      <div className="flex gap-1 mb-5 overflow-x-auto border-b border-gray-200">
-        {ONGLETS.map((o) => (
-          <button key={o.cle} onClick={() => setOnglet(o.cle)}
-            className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition ${
-              onglet === o.cle
-                ? 'text-purple-700 border-purple-600'
-                : 'text-gray-500 border-transparent hover:text-gray-700'
-            }`}>
-            <span aria-hidden className="mr-1.5">{o.emoji}</span>{o.label}
-          </button>
-        ))}
-      </div>
+      {/* --- Mes élèves : UNE seule liste, et tout y est ---------------
+          Il y avait un onglet « Copies » qui reprenait les mêmes élèves avec
+          les mêmes liens : deux endroits pour la même chose, donc deux endroits
+          à consulter et un doute sur lequel fait foi. La note et la copie
+          déposée ont rejoint la ligne de l'élève, et l'onglet a disparu. */}
+      <section className="mb-6">
+        {/* Pas de compteurs ici : ils sont déjà dans l'en-tête, trois lignes
+            plus haut. Les répéter n'ajoute rien et fait douter de la source. */}
+        <h2 className="font-bold text-gray-900 mb-3">Mes élèves</h2>
 
-      {eleves.length === 0 && onglet !== 'sujet' && onglet !== 'corrections' && (
-        <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-8 text-center text-gray-400 text-sm">
-          Aucun élève inscrit sur ce bac blanc pour l’instant.
-        </div>
-      )}
-
-      {/* --- Surveillance : une ligne par élève, tout à portée de clic --- */}
-      {onglet === 'surveillance' && eleves.length > 0 && (
-        <div className="space-y-3">
-          {eleves.map((e) => {
-            const s = statutEleve(e);
-            const appel = appelParEleve.get(e.id);
-            return (
-              <div
-                key={e.id}
-                className={`bg-white rounded-xl border shadow-sm p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${
-                  appel ? 'border-red-300 ring-2 ring-red-100' : 'border-gray-200'
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900">
-                    {appel && <span className="mr-1.5">{appel.motif === 'technique' ? '🛠️' : '✋'}</span>}
-                    {e.nom}
-                  </p>
-                  <p className="text-xs text-gray-400 truncate">{e.email || '—'}</p>
-                </div>
-
-                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${s.classe}`}>
-                  {s.texte}
-                </span>
-
-                <LienEcriture eleve={e} />
-
-                <DocEleve
-                  eleve={e}
-                  sessionId={session.id}
-                  onChange={(url) =>
-                    setEleves((liste) =>
-                      // On recalcule aussi ce que le bouton ouvre : sans ça, la
-                      // ligne garderait l'ancien lien jusqu'au rechargement.
-                      liste.map((x) =>
-                        x.id === e.id
-                          ? {
-                              ...x,
-                              copie_doc_url: url,
-                              doc_url: url ?? x.ecriture_url,
-                              doc_origine: url ? 'colle' : x.ecriture_url ? 'ecriture' : 'aucun',
-                            }
-                          : x,
-                      ),
-                    )
-                  }
-                />
-
-                {/* Pas de salle attribuée = pas de lien. Un bouton qui ouvre une
-                    page Discord vide vaut moins qu'une phrase qui dit pourquoi. */}
-                {e.salon_url ? (
-                  <a
-                    href={e.salon_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 flex-shrink-0"
-                  >
-                    <IconeDiscord />
-                    Sa salle
-                  </a>
-                ) : (
-                  <span className="text-xs text-gray-400 flex-shrink-0" title="Les salles se créent depuis l’administration, avant l’épreuve.">
-                    Salle pas encore créée
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* --- Copies --- */}
-      {onglet === 'copies' && eleves.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead className="bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="text-left px-5 py-2.5 font-medium">Élève</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Son Doc</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Son écriture</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Copie déposée</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Note</th>
-                  <th className="text-left px-5 py-2.5 font-medium">Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                {eleves.map((e) => {
-                  const s = statutEleve(e);
-                  return (
-                    <tr key={e.id} className="border-t border-gray-100 hover:bg-gray-50">
-                      <td className="px-5 py-3 font-medium text-gray-800">{e.nom}</td>
-                      <td className="px-5 py-3">
-                        {e.copie_doc_url ? (
-                          <a href={e.copie_doc_url} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">
-                            📄 Ouvrir
-                          </a>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3">
-                        {e.ecriture_url ? (
-                          <a href={e.ecriture_url} target="_blank" rel="noreferrer" className="text-green-700 hover:underline">
-                            ✍️ Ouvrir
-                          </a>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3">
-                        {e.copie?.fichier_nom ? (
-                          <a href={`/api/copies/fichier?id=${e.copie.id}`} target="_blank" rel="noreferrer"
-                            className="text-purple-600 hover:underline">
-                            Ouvrir la copie
-                          </a>
-                        ) : (
-                          <span className="text-gray-300">Pas encore déposée</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-gray-700">
-                        {e.copie?.note != null ? `${e.copie.note}/20` : '—'}
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${s.classe}`}>
-                          {s.texte}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        {eleves.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-8 text-center text-gray-400 text-sm">
+            Aucun élève inscrit sur ce bac blanc pour l’instant.
           </div>
+        ) : (
+          <div className="space-y-3">
+            {eleves.map((e) => {
+              const s = statutEleve(e);
+              const appel = appelParEleve.get(e.id);
+              return (
+                <div
+                  key={e.id}
+                  className={`bg-white rounded-xl border shadow-sm p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${
+                    appel ? 'border-red-300 ring-2 ring-red-100' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900">
+                      {appel && <span className="mr-1.5">{appel.motif === 'technique' ? '🛠️' : '✋'}</span>}
+                      {e.nom}
+                      {e.copie?.note != null && (
+                        <span className="ml-2 text-sm font-bold text-purple-700">{e.copie.note}/20</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {e.email || '—'}
+                      {e.copie?.fichier_nom && (
+                        <>
+                          {' · '}
+                          <a
+                            href={`/api/copies/fichier?id=${e.copie.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-purple-500 hover:underline"
+                          >
+                            copie déposée
+                          </a>
+                        </>
+                      )}
+                    </p>
+                  </div>
+
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${s.classe}`}>
+                    {s.texte}
+                  </span>
+
+                  <LienEcriture eleve={e} />
+
+                  <DocEleve
+                    eleve={e}
+                    sessionId={session.id}
+                    onChange={(url) =>
+                      setEleves((liste) =>
+                        // On recalcule aussi ce que le bouton ouvre : sans ça, la
+                        // ligne garderait l'ancien lien jusqu'au rechargement.
+                        liste.map((x) =>
+                          x.id === e.id
+                            ? {
+                                ...x,
+                                copie_doc_url: url,
+                                doc_url: url ?? x.ecriture_url,
+                                doc_origine: url ? 'colle' : x.ecriture_url ? 'ecriture' : 'aucun',
+                              }
+                            : x,
+                        ),
+                      )
+                    }
+                  />
+
+                  {/* Pas de salle attribuée = pas de lien. Un bouton qui ouvre une
+                      page Discord vide vaut moins qu'une phrase qui dit pourquoi. */}
+                  {e.salon_url ? (
+                    <a
+                      href={e.salon_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 flex-shrink-0"
+                    >
+                      <IconeDiscord />
+                      Sa salle
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-400 flex-shrink-0" title="Les salles se créent depuis l’administration, avant l’épreuve.">
+                      Salle pas encore créée
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* --- Le sujet, puis le questionnaire de fin de session ----------- */}
+      <SujetEtRetour sessionId={session.id} />
+
+      {/* --- Après l'épreuve ---------------------------------------------
+          Trois liens, discrets : on ne remet PAS le bouton de la grille ici,
+          il est déjà en haut de l'écran. Chaque chose une fois. */}
+      <section className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+        <h2 className="font-bold text-gray-900 mb-1">Après l’épreuve</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Ta grille remplie se dépose ici en CSV : les élèves et les critères sont reconnus
+          tout seuls, et les corrections sont préremplies.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <a href={`/espace-prof/session/${session.id}/import`}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700">
+            📥 Importer ma grille remplie
+          </a>
+          <a href="/espace-prof/deposer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
+            📄 Déposer une copie
+          </a>
+          <a href="/espace-prof/corrections"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
+            🗂️ Suivi des dossiers
+          </a>
         </div>
-      )}
-
-      {/* --- Corrections --- */}
-      {onglet === 'corrections' && (
-        <div className="space-y-5">
-          <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <h2 className="font-bold text-gray-900 mb-1">1. Remplir la grille de correction</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              <strong>Un seul classeur pour toute ta matinée</strong> : le barème d’un côté, tes
-              élèves de l’autre, et tu coches. Tu ne changes pas de fichier entre deux élèves.
-            </p>
-
-            {grille.url ? (
-              <a href={grille.url} target="_blank" rel="noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-600 text-white text-sm font-semibold hover:bg-green-700">
-                📊 Ouvrir la grille de correction
-              </a>
-            ) : (
-              <div className="flex gap-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200">
-                <span aria-hidden>⚠️</span>
-                <p className="text-xs text-amber-900 leading-relaxed">
-                  <strong>Le classeur de correction de cette matière n’existe pas encore.</strong>{' '}
-                  Chaque matière a le sien (barème + page à cocher). En attendant, un classeur
-                  de secours peut être posé dans l’administration →{' '}
-                  <strong>Bacs blancs</strong> → <strong>Réglages du jour J</strong>.
-                </p>
-              </div>
-            )}
-          </section>
-
-          <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <h2 className="font-bold text-gray-900 mb-1">2. Importer la grille remplie</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Exporte la page du Sheet en CSV (Fichier → Télécharger → CSV), puis dépose-la ici.
-              Les élèves et les colonnes sont reconnus automatiquement, et les formulaires de
-              correction sont préremplis — tu n’as rien à recopier.
-            </p>
-            <a href={`/espace-prof/session/${session.id}/import`}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700">
-              📥 Importer la grille
-            </a>
-          </section>
-
-          <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <h2 className="font-bold text-gray-900 mb-1">3. Correction copie par copie</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Pour déposer une copie et lancer la correction automatique d’un élève.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <a href="/espace-prof/deposer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
-                📄 Déposer une copie
-              </a>
-              <a href="/espace-prof/corrections"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
-                🗂️ Suivi des dossiers
-              </a>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* --- Sujet et questionnaire de fin de session --- */}
-      {onglet === 'sujet' && <SujetEtRetour sessionId={session.id} />}
+      </section>
     </div>
   );
 }
