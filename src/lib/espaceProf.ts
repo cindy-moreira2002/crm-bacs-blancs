@@ -14,6 +14,7 @@ import { classeursDuProf } from '@/lib/classeurs';
 import { codeCopie } from '@/lib/codeCopie';
 import { lienEcritureCopie } from '@/lib/liens';
 import { adresseRetenue, chargerReglagesConsole } from '@/lib/reglagesConsole';
+import { pipelineDb, pipelineManquant } from '@/lib/pipeline';
 
 export type Session = {
   id: string;
@@ -100,6 +101,12 @@ export type EleveSession = {
    */
   ecriture_url: string | null;
   /**
+   * Quand l'élève a rendu sa copie manuscrite, ou null tant qu'il écrit. C'est
+   * le geste « Rendre ma copie » de l'application d'écriture : le professeur
+   * n'a plus à demander si c'est fini.
+   */
+  copie_rendue_le: string | null;
+  /**
    * Ce que le bouton « Sa copie » ouvre vraiment : le document collé à la main
    * s'il y en a un, sinon la copie de l'application d'écriture.
    */
@@ -117,6 +124,29 @@ export type EleveSession = {
     fichier_nom: string | null;
     pdf_pret: boolean;
     envoye: boolean;
+  } | null;
+  /**
+   * La copie de cet élève dans le PIPELINE de correction — celle qui a été
+   * déposée depuis « Déposer une copie », transcrite, corrigée, et dont le
+   * dossier est fabriqué.
+   *
+   * C'est une autre base que `copie` ci-dessus, qui vient de la table `copies`
+   * du CRM (l'ancien dépôt manuel). Les deux ont coexisté sans se connaître :
+   * une copie corrigée par le pipeline affichait « Copie attendue » pour
+   * toujours, et le professeur n'avait AUCUN écran où récupérer le dossier
+   * qu'il venait de faire produire. C'est ce champ qui les relie.
+   */
+  correction: {
+    id: string;
+    statut: string;
+    /** La note affichée : celle du professeur si elle a été posée. */
+    note: number | null;
+    /** `professeur` quand la note vient de sa grille, sinon l'IA. */
+    note_source: string | null;
+    /** Le dossier de l'élève est fabriqué et lisible. */
+    dossier_pret: boolean;
+    /** L'adresse du dossier — la même page que celle envoyée à l'élève. */
+    dossier_url: string | null;
   } | null;
 };
 
@@ -334,6 +364,72 @@ export async function chargerRevenus(prof: Professeur): Promise<Revenus> {
   return revenus;
 }
 
+/** Ce qu'on retient d'une copie du pipeline pour l'afficher au professeur. */
+type CorrectionPipeline = {
+  id: string;
+  student_name: string | null;
+  student_email: string | null;
+  status: string;
+  result_json: { note_finale?: number | null; note_source?: string | null } | null;
+};
+
+/**
+ * Les copies du pipeline pour une matière, avec l'état de leur dossier.
+ *
+ * Lecture SEULE et facultative : si le pipeline n'est pas configuré sur ce
+ * déploiement, ou s'il répond une erreur, on rend une liste vide. La console du
+ * professeur doit s'afficher entière même quand la correction automatique est
+ * en panne — c'est son écran du jour J.
+ */
+async function chargerCorrectionsPipeline(matiereSession: string): Promise<
+  Map<string, EleveSession['correction']>
+> {
+  const par: Map<string, EleveSession['correction']> = new Map();
+  if (pipelineManquant().length) return par;
+
+  try {
+    const pipeline = pipelineDb();
+    const matieres = [...new Set([cleMatiere(matiereSession), matiereSession].filter(Boolean))] as string[];
+
+    const { data, error } = await pipeline
+      .from('corrections')
+      .select('id, student_name, student_email, status, result_json')
+      .in('matiere', matieres)
+      .order('created_at', { ascending: false });
+    if (error || !data?.length) return par;
+
+    const lignes = data as CorrectionPipeline[];
+    // Un seul aller-retour pour savoir lesquelles ont leur dossier, plutôt
+    // qu'une requête par élève.
+    const { data: dossiers } = await pipeline
+      .from('dossiers')
+      .select('correction_id')
+      .in('correction_id', lignes.map((c) => c.id));
+    const avecDossier = new Set(
+      ((dossiers ?? []) as { correction_id: string }[]).map((d) => d.correction_id),
+    );
+
+    // Les plus récentes d'abord : la première rencontrée pour une clé donnée
+    // est la bonne, les dépôts plus anciens du même élève ne l'écrasent pas.
+    for (const c of lignes) {
+      const etat: EleveSession['correction'] = {
+        id: c.id,
+        statut: c.status,
+        note: c.result_json?.note_finale ?? null,
+        note_source: c.result_json?.note_source ?? null,
+        dossier_pret: avecDossier.has(c.id),
+        dossier_url: avecDossier.has(c.id) ? `/dossier/${c.id}` : null,
+      };
+      for (const cle of [norm(c.student_email), norm(c.student_name)]) {
+        if (cle && !par.has(cle)) par.set(cle, etat);
+      }
+    }
+  } catch {
+    // Volontairement silencieux : voir le commentaire de la fonction.
+  }
+  return par;
+}
+
 /**
  * Élèves d'une session, avec leur copie si elle est déjà déposée.
  * Les copies sont rattachées par e-mail, sinon par nom + matière — c'est le
@@ -379,6 +475,33 @@ export async function chargerElevesSession(session: Session): Promise<EleveSessi
 
   const appelParEleve = new Map(appels.map((a) => [a.inscription_id, a]));
 
+  // Les copies passées par le PIPELINE de correction. Elles vivent dans une
+  // autre base, et la matière ne s'y écrit pas pareil : le CRM garde le
+  // libellé (« Français »), le pipeline la clé (« francais »). On interroge
+  // les deux écritures — c'est exactement l'oubli qui empêchait la génération
+  // des dossiers de rapprocher quoi que ce soit.
+  //
+  // Pipeline absent ou muet : on n'affiche rien de plus, la console reste
+  // celle d'avant. Jamais d'erreur à l'écran pour une information secondaire.
+  const corrections = await chargerCorrectionsPipeline(session.matiere);
+
+  // Copies manuscrites rendues. Une seule requête pour toute la session, et un
+  // repli silencieux : tant que le script SQL de l'écriture n'est pas passé, la
+  // console s'affiche exactement comme avant.
+  const codes = (inscrits ?? [])
+    .map((i) => codeCopie((i as { nom: string }).nom, (i as { matiere: string }).matiere))
+    .filter((c): c is string => Boolean(c));
+  const rendues = new Map<string, string>();
+  if (codes.length > 0) {
+    const { data } = await db
+      .from('ecriture_copies')
+      .select('id, rendue_le')
+      .in('id', codes);
+    for (const r of (data ?? []) as { id: string; rendue_le: string | null }[]) {
+      if (r.rendue_le) rendues.set(r.id, r.rendue_le);
+    }
+  }
+
   return (inscrits ?? []).map((i) => {
     const { discord_salon_id, copie_doc_url, ...eleve } = i as unknown as Omit<
       EleveSession,
@@ -395,17 +518,25 @@ export async function chargerElevesSession(session: Session): Promise<EleveSessi
       );
     });
     const appel = appelParEleve.get(eleve.id);
-    const ecriture = lienEcritureCopie(codeCopie(eleve.nom, eleve.matiere), eleve.matiere);
+    const code = codeCopie(eleve.nom, eleve.matiere);
+    const ecriture = lienEcritureCopie(code, eleve.matiere);
     const doc = (copie_doc_url ?? '').trim() || ecriture;
     return {
       ...eleve,
       salon_url: lienSalon(discord_salon_id),
       copie_doc_url: copie_doc_url ?? null,
       ecriture_url: ecriture,
+      copie_rendue_le: (code && rendues.get(code)) || null,
       doc_url: doc,
       doc_origine: (copie_doc_url ?? '').trim() ? 'colle' : ecriture ? 'ecriture' : 'aucun',
       appel: appel ? { id: appel.id, motif: appel.motif, cree_le: appel.cree_le } : null,
       copie: (copie as EleveSession['copie']) ?? null,
+      // L'e-mail d'abord : deux élèves peuvent porter le même nom, jamais la
+      // même adresse.
+      correction:
+        (eleve.email && corrections.get(norm(eleve.email))) ||
+        corrections.get(norm(eleve.nom)) ||
+        null,
     };
   });
 }

@@ -166,6 +166,92 @@ test('SQL — l’heure de début est calculée en heure de Paris', () => {
   assert.match(SQL, /at time zone 'Europe\/Paris'/);
 });
 
+// --- Le sujet de l'épreuve EST le sujet de correction ------------------
+//
+// Règle posée par Cindy le 5 septembre 2026 : la copie se corrige sur le sujet
+// déposé pour le bac blanc, jamais sur un autre. Elle tient à trois endroits —
+// le rattachement en base (`session_sujets.subject_card_id`), le menu qui le
+// pose côté administration, et le refus au dépôt d'une copie. On vérifie les
+// trois : sans le dernier, la règle ne serait qu'un confort d'écran.
+
+const DEPOSER = readFileSync(
+  join(process.cwd(), 'src/app/api/pipeline/deposer/route.ts'),
+  'utf8',
+);
+const ADMIN_SUJETS = readFileSync(
+  join(process.cwd(), 'src/app/admin/bacs-blancs/TableauBacsBlancs.tsx'),
+  'utf8',
+);
+const LIB = readFileSync(join(process.cwd(), 'src/lib/bacsBlancs.ts'), 'utf8');
+
+test('le dépôt d’une copie refuse un autre sujet que celui du bac blanc', () => {
+  assert.match(DEPOSER, /sujetDeCorrection/);
+  assert.match(DEPOSER, /status:\s*409/);
+});
+
+test('l’administration propose de relier le sujet à sa fiche de correction', () => {
+  assert.match(ADMIN_SUJETS, /Sujet de correction/);
+  assert.match(ADMIN_SUJETS, /subject_card_id/);
+});
+
+test('un bac blanc à deux sujets rattachés ne tranche pas tout seul', () => {
+  // `sujetDeCorrection` ne renvoie une fiche que si UNE seule fait foi :
+  // en choisir une au hasard corrigerait la moitié des copies sur le mauvais
+  // énoncé, sans que rien ne le signale.
+  assert.match(LIB, /fiches\.length === 1 \? fiches\[0\] : null/);
+});
+
+// --- Les deux bases n'écrivent pas la matière pareil -------------------
+//
+// Vécu le 5 septembre 2026 : le CRM range « Français », le pipeline
+// « francais ». La route qui génère les dossiers comparait les deux tels
+// quels — aucune copie ne se rapprochait jamais, tous les élèves
+// ressortaient « sans copie », et AUCUN dossier n'était produit. Le bug ne
+// se voyait pas : la route répondait `success: true`.
+
+const GENERER = readFileSync(
+  join(process.cwd(), 'src/app/api/prof/sessions/[id]/generer/route.ts'),
+  'utf8',
+);
+
+test('la génération des dossiers cherche la copie sous les deux écritures de la matière', () => {
+  assert.match(GENERER, /cleMatiere\(session\.matiere\)/);
+  assert.match(GENERER, /\.in\('matiere', matieres\)/);
+  assert.doesNotMatch(GENERER, /\.eq\('matiere', session\.matiere\)/);
+});
+
+// --- Le professeur voit le dossier qu'il a fait produire ---------------
+//
+// Deux circuits coexistent : la table `copies` du CRM (ancien dépôt manuel) et
+// le pipeline de correction. La console ne lisait que la première — une copie
+// corrigée par le pipeline restait « Copie attendue » indéfiniment, et le
+// dossier n'était accessible par aucun écran.
+
+const ESPACE_PROF = readFileSync(join(process.cwd(), 'src/lib/espaceProf.ts'), 'utf8');
+const CONSOLE_PROF = readFileSync(join(process.cwd(), 'src/components/SessionProf.tsx'), 'utf8');
+
+test('la console lit aussi les copies du pipeline, sous les deux écritures de la matière', () => {
+  assert.match(ESPACE_PROF, /chargerCorrectionsPipeline/);
+  assert.match(ESPACE_PROF, /cleMatiere\(matiereSession\)/);
+  assert.match(ESPACE_PROF, /\.in\('matiere', matieres\)/);
+});
+
+test('un pipeline en panne ne casse pas la console du jour J', () => {
+  // La console est l'écran du professeur pendant l'épreuve : une correction
+  // automatique indisponible ne doit jamais l'empêcher de s'afficher.
+  assert.match(ESPACE_PROF, /if \(pipelineManquant\(\)\.length\) return par;/);
+  assert.match(ESPACE_PROF, /\} catch \{/);
+});
+
+test('le dossier de l’élève a un bouton dans la console', () => {
+  assert.match(CONSOLE_PROF, /Son dossier/);
+  assert.match(CONSOLE_PROF, /e\.correction\?\.dossier_url/);
+});
+
+test('les compteurs de l’en-tête comptent les deux circuits', () => {
+  assert.match(CONSOLE_PROF, /e\.copie \|\| e\.correction/);
+});
+
 // --- Exécution --------------------------------------------------------
 
 console.log('\n🧪 Publication du sujet aux élèves — tests hors ligne\n');
