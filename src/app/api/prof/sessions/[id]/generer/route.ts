@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { crmAdmin, profCourant } from '@/lib/authProf';
 import { chargerElevesSession, chargerSessionAutorisee } from '@/lib/espaceProf';
+import { cleMatiere } from '@/lib/matieres';
 import { pipelineDb, pipelineManquant } from '@/lib/pipeline';
 
 export const dynamic = 'force-dynamic';
@@ -104,10 +105,19 @@ export async function POST(req: NextRequest, { params }: Params) {
       const pipeline = pipelineDb();
       // Même matière que le bac blanc : sans ce filtre, une copie de français
       // pouvait être rapprochée d'une session d'HGGSP sur le seul nom.
+      //
+      // Les deux bases ne l'écrivent pas pareil : le CRM garde le libellé
+      // affiché (« Français », « Histoire-Géo »), le pipeline la clé
+      // (« francais », « histoire-geo »). Comparer les deux tels quels ne
+      // rapprochait JAMAIS rien — toutes les copies remontaient « sans copie »
+      // et aucun dossier ne se générait. On interroge donc sur les deux
+      // écritures ; le brevet, que `cleMatiere` ne traduit pas, passe par son
+      // libellé.
+      const matieres = [...new Set([cleMatiere(session.matiere), session.matiere].filter(Boolean))] as string[];
       const { data: corrections } = await pipeline
         .from('corrections')
         .select('id, student_name, status, result_json, created_at')
-        .eq('matiere', session.matiere)
+        .in('matiere', matieres)
         .order('created_at', { ascending: false });
 
       for (const ligne of retenues) {

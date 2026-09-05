@@ -372,6 +372,15 @@ Deno.serve(async (req: Request) => {
           ],
         },
       ],
+      // La réflexion adaptative est ACTIVE PAR DÉFAUT sur Sonnet 5. Sur un
+      // dossier de 22 000 jetons, elle allongeait assez la génération pour que
+      // l'Edge Function soit coupée avant la fin : HTTP 546
+      // WORKER_RESOURCE_LIMIT, aucun dossier écrit, et rien dans
+      // `corrections` pour le dire — la copie restait « corrigée » sans
+      // dossier. Même correctif que `correct-copy-redigee` : le gabarit dit
+      // déjà quoi écrire, le modèle n'a pas à délibérer.
+      thinking: { type: "disabled" },
+      output_config: { effort: "medium" },
     });
 
     const inner = cleanBody(extractText(anthropicPayload));
