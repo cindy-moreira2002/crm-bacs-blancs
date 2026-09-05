@@ -57,9 +57,13 @@ export const GUIDELINES: Record<string, Guideline> = {
     titre: 'Guideline correction épreuve bac SES V0',
   },
   hggsp: {
-    url: SHEET('1eQAWXh8pBaZI0wxlpMYpL3kmPvc6zKdGodAx__750cw'),
-    titre: 'Guideline correction épreuve bac HGGSP V0_2',
-    note: 'Dissertation /10 + étude critique /10. Remplace la V0, marquée « obsolète » dans le Drive.',
+    url: SHEET('1QbmMzkS8TtvxmmFvzmsRiOoYF1SLdM5liJCid9zk1Ec'),
+    titre: 'Guideline correction HGGSP V1',
+    note:
+      'Dissertation /10 + étude critique /10. Même barème que la V0_2, remis dans la mise en page ' +
+      'que le CRM lit sans erreur : une lettre chapeaute, un numéro se coche, et chaque critère a ' +
+      'un vrai palier 0. La page à cocher est « Correction HGGSP » ; l’onglet « Vérification du ' +
+      'barème » doit afficher 20,00 et un écart de 0.',
   },
   'histoire-geo': { url: null, titre: 'Guideline correction histoire-géographie' },
   hlp: { url: null, titre: 'Guideline correction HLP' },
