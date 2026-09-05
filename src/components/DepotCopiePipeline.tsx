@@ -89,12 +89,29 @@ function indexEtape(statut: string, dossierPret: boolean): number {
 }
 
 
+/**
+ * Le bac blanc d'où l'on vient (`?session=<id>`), avec le sujet que
+ * l'administration y a déposé — celui sur lequel les élèves ont composé.
+ */
+type BacBlancDOu = {
+  session_id: string;
+  matiere: string;
+  date_epreuve: string;
+  /** La fiche de correction reliée au sujet de l'épreuve, si elle l'est. */
+  subject_card_id: string | null;
+  titre_sujet: string | null;
+};
+
 export function DepotCopiePipeline() {
   const [sujets, setSujets] = useState<Sujet[]>([]);
   const [examens, setExamens] = useState<Examen[]>([]);
   const [sujetsErreur, setSujetsErreur] = useState<string | null>(null);
   /** `sujet:<id>` pour un exercice seul, `exam:<id>` pour un bac blanc complet. */
   const [choix, setChoix] = useState('');
+  /** Le bac blanc d'où l'on vient, et son sujet — voir `BacBlancDOu`. */
+  const [bacBlanc, setBacBlanc] = useState<BacBlancDOu | null>(null);
+  /** Le prof a demandé à sortir du sujet du bac blanc (cas rare, assumé). */
+  const [libre, setLibre] = useState(false);
 
   const [eleveNom, setEleveNom] = useState('');
   const [eleveEmail, setEleveEmail] = useState('');
@@ -137,6 +154,46 @@ export function DepotCopiePipeline() {
       .catch(() => !annule && setSujetsErreur('Impossible de charger les bacs blancs.'));
     return () => { annule = true; };
   }, []);
+
+  // --- Le bac blanc d'où l'on vient ----------------------------------------
+  //
+  // Arrivé depuis la console du jour J (`?session=<id>`), le prof ne choisit
+  // plus rien : la copie se corrige sur le sujet que l'administration a déposé
+  // pour CE bac blanc. Sans ce lien, il pouvait faire composer sur un sujet et
+  // corriger sur un autre. Le serveur revérifie (voir /api/pipeline/deposer) :
+  // ceci n'est que le confort, pas le garde-fou.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('session');
+    if (!id) return;
+    let annule = false;
+    fetch('/api/prof/bacs-blancs', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (annule || d.error) return;
+        type SujetBac = { type: string; subject_card_id: string | null; titre: string | null };
+        type BacProf = { session_id: string; matiere: string; date_epreuve: string; sujets: SujetBac[] };
+        const bac = (d.bacs_blancs as BacProf[] | undefined)?.find((b) => b.session_id === id);
+        if (!bac) return;
+        const sujet = bac.sujets.find((s) => s.type === 'sujet' && s.subject_card_id) ?? null;
+        setBacBlanc({
+          session_id: bac.session_id,
+          matiere: bac.matiere,
+          date_epreuve: bac.date_epreuve,
+          subject_card_id: sujet?.subject_card_id ?? null,
+          titre_sujet: sujet?.titre ?? null,
+        });
+      })
+      .catch(() => {});
+    return () => { annule = true; };
+  }, []);
+
+  // Le sujet du bac blanc s'impose dès qu'il est connu ET déposable.
+  const imposeeParLeBac = !libre && Boolean(bacBlanc?.subject_card_id);
+  useEffect(() => {
+    if (!imposeeParLeBac || !bacBlanc?.subject_card_id) return;
+    if (!sujets.some((s) => s.id === bacBlanc.subject_card_id)) return;
+    setChoix(`sujet:${bacBlanc.subject_card_id}`);
+  }, [imposeeParLeBac, bacBlanc, sujets]);
 
   // --- Ce qui a été choisi --------------------------------------------------
   const examen = choix.startsWith('exam:') ? examens.find((e) => e.id === choix.slice(5)) ?? null : null;
@@ -259,6 +316,9 @@ export function DepotCopiePipeline() {
           eleve_nom: eleveNom,
           eleve_email: eleveEmail,
           prof_email: profEmail,
+          // Le bac blanc d'où vient la copie : c'est lui qui dit sur quel
+          // sujet elle doit être corrigée. Le serveur refuse tout autre sujet.
+          session_id: bacBlanc?.session_id ?? null,
           ...(groupe ?? {}),
         }),
       }).then((r) => r.json());
@@ -266,7 +326,7 @@ export function DepotCopiePipeline() {
       if (dep.error) setErreur(dep.error);
       return dep.correction_id as string;
     },
-    [eleveNom, eleveEmail, profEmail],
+    [eleveNom, eleveEmail, profEmail, bacBlanc],
   );
 
   const deposer = useCallback(async () => {
@@ -549,7 +609,37 @@ export function DepotCopiePipeline() {
       <div className="space-y-5">
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1.5">Bac blanc</label>
-          <select value={choix} onChange={(e) => setChoix(e.target.value)} className={champ}>
+
+          {/* Venu de la console du jour J : le sujet est celui de l'épreuve. */}
+          {bacBlanc && imposeeParLeBac && (
+            <div className="mb-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-900">
+              Copie corrigée sur le sujet du bac blanc de {bacBlanc.matiere.toLowerCase()}
+              {bacBlanc.titre_sujet ? ` — « ${bacBlanc.titre_sujet} »` : ''}. C’est celui que les
+              élèves ont eu.{' '}
+              <button
+                type="button"
+                onClick={() => setLibre(true)}
+                className="underline hover:no-underline"
+              >
+                choisir un autre sujet
+              </button>
+            </div>
+          )}
+
+          {bacBlanc && !bacBlanc.subject_card_id && (
+            <div className="mb-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
+              Ce bac blanc n’a pas de sujet relié à la correction : personne ne peut garantir que
+              la copie sera corrigée sur le sujet que les élèves ont eu. À relier dans
+              l’administration, bloc « Sujet de l’épreuve ».
+            </div>
+          )}
+
+          <select
+            value={choix}
+            onChange={(e) => setChoix(e.target.value)}
+            disabled={imposeeParLeBac}
+            className={`${champ} disabled:bg-gray-100 disabled:text-gray-500`}
+          >
             <option value="">— Choisir —</option>
             {examens.length > 0 && (
               <optgroup label="Bacs blancs complets (plusieurs exercices, une note finale)">

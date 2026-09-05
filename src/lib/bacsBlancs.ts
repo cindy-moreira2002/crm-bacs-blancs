@@ -624,6 +624,36 @@ export async function preparerDepotSujet(
   return { path, signed_url: data.signedUrl, token: data.token };
 }
 
+/**
+ * La fiche de correction du sujet de CE bac blanc, ou null s'il n'y en a pas.
+ *
+ * C'est la traduction en une ligne de la règle : « le sujet que j'upload pour
+ * le bac blanc doit être celui sur lequel le logiciel corrige ». Le dépôt d'une
+ * copie s'y réfère (voir /api/pipeline/deposer) ; tant qu'aucun sujet n'est
+ * relié, on ne bloque rien — on le dit à l'écran, et la copie passe.
+ *
+ * Un seul sujet peut faire foi : si l'épreuve en porte plusieurs de type
+ * « sujet » (un par exercice, par exemple), le rattachement ne tranche plus et
+ * la fonction renvoie null plutôt que d'en choisir un au hasard.
+ */
+export async function sujetDeCorrection(sessionId: string): Promise<string | null> {
+  const { data, error } = await crmAdmin()
+    .from('session_sujets')
+    .select('subject_card_id')
+    .eq('session_id', sessionId)
+    .eq('type', 'sujet')
+    .not('subject_card_id', 'is', null);
+  if (error) return null;
+  const fiches = [
+    ...new Set(
+      ((data ?? []) as { subject_card_id: string | null }[])
+        .map((s) => s.subject_card_id)
+        .filter((x): x is string => Boolean(x)),
+    ),
+  ];
+  return fiches.length === 1 ? fiches[0] : null;
+}
+
 export async function enregistrerSujet(entree: {
   session_id: string;
   type?: string;

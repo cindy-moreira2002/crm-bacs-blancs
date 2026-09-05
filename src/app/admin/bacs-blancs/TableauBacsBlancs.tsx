@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { BacBlanc, EtatBacsBlancs, ProfLite, RetourSession, SujetSession } from '@/lib/bacsBlancs';
+import { cleMatiere } from '@/lib/matieres';
 import { ModaleNouveauBacBlanc } from './ModaleNouveauBacBlanc';
 
 const TYPES_SUJET = [
@@ -18,6 +19,85 @@ const TYPES_SUJET = [
   { cle: 'bareme', label: 'Barème' },
   { cle: 'annexe', label: 'Annexe' },
 ];
+
+// --- Le sujet donné aux élèves ET celui sur lequel on corrige --------------
+//
+// Deux choses vivaient côte à côte sans se connaître : le PDF déposé ici, que
+// lisent l'élève et le professeur, et la fiche de correction du pipeline
+// (`subject_cards`), choisie au moment où l'on dépose une copie. Résultat, on
+// pouvait faire plancher une salle sur un sujet et corriger les copies sur un
+// autre. Le menu ci-dessous relie les deux, et le dépôt d'une copie suit ce
+// lien (voir DepotCopiePipeline et /api/pipeline/deposer).
+
+type FicheCorrection = {
+  id: string;
+  matiere: string | null;
+  exercise_type: string;
+  track: string;
+  libelle: string;
+  rubric_id: string | null;
+};
+
+/** Un seul chargement pour toute la page, quel que soit le nombre de bacs blancs. */
+let fichesEnCours: Promise<FicheCorrection[]> | null = null;
+function chargerFiches(): Promise<FicheCorrection[]> {
+  if (!fichesEnCours) {
+    fichesEnCours = fetch('/api/pipeline/sujets', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => (d.sujets ?? []) as FicheCorrection[])
+      .catch(() => []);
+  }
+  return fichesEnCours;
+}
+
+function useFichesCorrection(matiere: string): FicheCorrection[] {
+  const [fiches, setFiches] = useState<FicheCorrection[]>([]);
+  useEffect(() => {
+    let annule = false;
+    chargerFiches().then((f) => {
+      if (annule) return;
+      const cle = cleMatiere(matiere);
+      setFiches(cle ? f.filter((x) => x.matiere === cle) : []);
+    });
+    return () => { annule = true; };
+  }, [matiere]);
+  return fiches;
+}
+
+/** Le nom lisible d'une fiche, ou son code si la liste n'est pas encore chargée. */
+function libelleFiche(fiches: FicheCorrection[], id: string): string {
+  return fiches.find((f) => f.id === id)?.libelle ?? id;
+}
+
+/** Le menu « Sujet de correction », partagé par le dépôt et la reprise après coup. */
+function ChoixFiche({
+  fiches,
+  valeur,
+  onChange,
+  disabled,
+}: {
+  fiches: FicheCorrection[];
+  valeur: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <select
+      value={valeur}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      className="block mt-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm max-w-xs"
+    >
+      <option value="">— Aucune —</option>
+      {fiches.map((f) => (
+        <option key={f.id} value={f.id} disabled={!f.rubric_id}>
+          {f.libelle}
+          {f.rubric_id ? '' : ' (pas de grille active)'}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 const LIBELLES_RETOUR: Record<string, Record<string, string>> = {
   deroulement: { tres_bien: 'Très bien', bien: 'Bien', moyen: 'Moyen', difficile: 'Difficile' },
@@ -185,6 +265,8 @@ function BlocSujets({
   const [visible, setVisible] = useState(false);
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  const fiches = useFichesCorrection(bac.matiere);
+  const [fiche, setFiche] = useState('');
 
   const deposer = async () => {
     if (!fichier) return;
@@ -215,10 +297,14 @@ function BlocSujets({
         fichier_nom: fichier.name,
         fichier_octets: fichier.size,
         visible_prof: visible,
+        // Seul un « sujet » se corrige : un corrigé ou une annexe n'a rien à
+        // relier au pipeline.
+        subject_card_id: type === 'sujet' ? fiche || null : null,
       });
       setFichier(null);
       setTitre('');
       setVisible(false);
+      setFiche('');
     } catch (e) {
       setErreur(e instanceof Error ? e.message : 'Erreur inconnue');
     } finally {
@@ -254,9 +340,12 @@ function BlocSujets({
               ) : (
                 <Pastille ton="orange">masqué</Pastille>
               )}
-              {s.subject_card_id && (
-                <span className="text-xs text-gray-400 font-mono">{s.subject_card_id}</span>
-              )}
+              {s.type === 'sujet' &&
+                (s.subject_card_id ? (
+                  <Pastille ton="vert">corrigé sur : {libelleFiche(fiches, s.subject_card_id)}</Pastille>
+                ) : (
+                  <Pastille ton="rouge">pas relié à la correction</Pastille>
+                ))}
               <span className="ml-auto flex items-center gap-2">
                 {s.fichier_path && (
                   <button
@@ -289,6 +378,25 @@ function BlocSujets({
                   supprimer
                 </button>
               </span>
+
+              {s.type === 'sujet' && (
+                <label className="w-full text-xs text-gray-600 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 mt-1">
+                  Sujet de correction
+                  <ChoixFiche
+                    fiches={fiches}
+                    valeur={s.subject_card_id ?? ''}
+                    disabled={occupe}
+                    onChange={(v) =>
+                      agir({ action: 'maj-sujet', sujet_id: s.id, subject_card_id: v || null })
+                    }
+                  />
+                  {!s.subject_card_id && (
+                    <span className="text-red-600">
+                      tant que c’est vide, les copies peuvent partir sur un autre sujet
+                    </span>
+                  )}
+                </label>
+              )}
 
               {s.type === 'sujet' && (
                 <PublicationEleves bac={bac} sujet={s} agir={agir} occupe={occupe} />
@@ -334,6 +442,12 @@ function BlocSujets({
             ))}
           </select>
         </label>
+        {type === 'sujet' && (
+          <label className="text-xs text-gray-600">
+            Sujet de correction
+            <ChoixFiche fiches={fiches} valeur={fiche} onChange={setFiche} disabled={bloque} />
+          </label>
+        )}
         <label className="text-xs text-gray-600 flex items-center gap-1.5 pb-2">
           <input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} disabled={bloque} />
           visible du prof tout de suite

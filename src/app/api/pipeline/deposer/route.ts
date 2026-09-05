@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pipelineDb, pipelineManquant, MATIERE_PAR_DEFAUT } from '@/lib/pipeline';
 import { accesDepot, verifierQuotaDepot } from '@/lib/accesDepot';
+import { sujetDeCorrection } from '@/lib/bacsBlancs';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     const {
       path, subject_id, rubric_id, track, exercise_type,
       eleve_nom, eleve_email, prof_email, eleve_code, matiere,
-      exam_id, groupe_copie_id,
+      exam_id, groupe_copie_id, session_id,
     } = body;
 
     if (!path || !subject_id || !rubric_id || !track || !exercise_type) {
@@ -49,6 +50,26 @@ export async function POST(req: NextRequest) {
     }
     if (!eleve_nom || !String(eleve_nom).trim()) {
       return NextResponse.json({ error: "Nom de l'élève obligatoire." }, { status: 400 });
+    }
+
+    // --- Le sujet de la copie est celui du bac blanc --------------------
+    //
+    // La règle, posée par Cindy : le sujet déposé pour un bac blanc EST celui
+    // sur lequel les copies sont corrigées. Si la copie annonce un autre
+    // sujet, on refuse — corriger un devoir sur un énoncé qu'il n'a pas eu
+    // produirait une note fausse sans que rien ne le signale.
+    if (session_id) {
+      const attendu = await sujetDeCorrection(String(session_id));
+      if (attendu && attendu !== String(subject_id)) {
+        return NextResponse.json(
+          {
+            error:
+              'Ce n’est pas le sujet de ce bac blanc. Les copies se corrigent sur le sujet ' +
+              'déposé pour l’épreuve — corrige le rattachement dans l’administration si c’est lui qui est faux.',
+          },
+          { status: 409 },
+        );
+      }
     }
 
     const db = pipelineDb();

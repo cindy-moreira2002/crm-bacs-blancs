@@ -41,7 +41,25 @@ type AppelOuvert = {
   salon_url: string | null;
 };
 
+/**
+ * L'état de la copie d'un élève, UNE pastille pour deux circuits.
+ *
+ * Le pipeline de correction passe devant : c'est par lui que tout arrive
+ * aujourd'hui (dépôt, transcription, correction, dossier). La table `copies`
+ * du CRM, l'ancien dépôt manuel, reste consultée derrière — tant qu'elle sert
+ * encore, une copie qui n'est passée que par elle doit continuer de s'afficher.
+ *
+ * Avant, seule la seconde était lue : une copie corrigée par le pipeline
+ * restait « Copie attendue » indéfiniment sous les yeux du professeur.
+ */
 function statutEleve(e: EleveSession): { texte: string; classe: string } {
+  const c = e.correction;
+  if (c) {
+    if (c.dossier_pret) return { texte: 'Dossier prêt', classe: 'bg-blue-100 text-blue-800' };
+    if (c.statut.startsWith('corrected')) return { texte: 'Corrigée', classe: 'bg-purple-100 text-purple-800' };
+    if (c.statut.endsWith('_failed')) return { texte: 'Échec — à redéposer', classe: 'bg-red-100 text-red-700' };
+    return { texte: 'Correction en cours', classe: 'bg-amber-100 text-amber-800' };
+  }
   if (!e.copie) return { texte: 'Copie attendue', classe: 'bg-gray-100 text-gray-600' };
   if (e.copie.envoye) return { texte: 'Dossier envoyé', classe: 'bg-green-100 text-green-800' };
   if (e.copie.pdf_pret) return { texte: 'Dossier prêt', classe: 'bg-blue-100 text-blue-800' };
@@ -212,17 +230,40 @@ function DocEleve({
  */
 function LienEcriture({ eleve }: { eleve: EleveSession }) {
   if (!eleve.ecriture_url) return null;
+  // Copie rendue : le bouton le dit et l'heure aussi. C'est le seul endroit où
+  // le professeur a besoin de l'information — inutile d'en faire une liste de
+  // plus, la ligne de l'élève porte déjà tout.
+  const rendue = eleve.copie_rendue_le;
   return (
     <a
       href={eleve.ecriture_url}
       target="_blank"
       rel="noreferrer"
-      title="Sa copie dans l’application d’écriture, en direct."
-      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-green-300 bg-green-50 text-green-800 text-sm font-semibold hover:bg-green-100 flex-shrink-0"
+      title={
+        rendue
+          ? `Copie rendue à ${heureCourte(rendue)} — à relire et annoter.`
+          : 'Sa copie dans l’application d’écriture, en direct.'
+      }
+      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-semibold flex-shrink-0 ${
+        rendue
+          ? 'border-green-600 bg-green-600 text-white hover:bg-green-700'
+          : 'border-green-300 bg-green-50 text-green-800 hover:bg-green-100'
+      }`}
     >
-      ✍️ Son écriture
+      {rendue ? `✅ Copie rendue · ${heureCourte(rendue)}` : '✍️ Son écriture'}
     </a>
   );
+}
+
+/** « 12 h 04 » — l'heure telle qu'on l'écrit sur une copie. */
+function heureCourte(iso: string): string {
+  try {
+    return new Date(iso)
+      .toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      .replace(':', ' h ');
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -418,8 +459,13 @@ export function SessionProf({
     document.title = appels.length ? `(${appels.length}) ✋ ${base}` : base;
   });
 
-  const avecCopie = eleves.filter((e) => e.copie);
-  const corrigees = eleves.filter((e) => e.copie?.statut === 'corrigée');
+  // Les compteurs comptent les DEUX circuits, comme les pastilles des lignes :
+  // sinon l'en-tête annonçait « 0 copie déposée » au-dessus d'une liste
+  // d'élèves dont le dossier était prêt.
+  const avecCopie = eleves.filter((e) => e.copie || e.correction);
+  const corrigees = eleves.filter(
+    (e) => e.copie?.statut === 'corrigée' || e.correction?.statut.startsWith('corrected'),
+  );
   const appelParEleve = new Map(appels.map((a) => [a.inscription_id, a]));
 
   return (
@@ -597,8 +643,27 @@ export function SessionProf({
                     <p className="font-semibold text-gray-900">
                       {appel && <span className="mr-1.5">{appel.motif === 'technique' ? '🛠️' : '✋'}</span>}
                       {e.nom}
-                      {e.copie?.note != null && (
-                        <span className="ml-2 text-sm font-bold text-purple-700">{e.copie.note}/20</span>
+                      {/* La note du pipeline d'abord — et on dit d'où elle
+                          vient : « ta » note, ou celle que l'IA propose en
+                          attendant la grille du professeur. */}
+                      {e.correction?.note != null ? (
+                        <span
+                          className="ml-2 text-sm font-bold text-purple-700"
+                          title={
+                            e.correction.note_source === 'professeur'
+                              ? 'Note de ta grille — c’est elle qui fait foi.'
+                              : 'Note proposée par la correction automatique, en attendant ta grille.'
+                          }
+                        >
+                          {e.correction.note}/20
+                          {e.correction.note_source !== 'professeur' && (
+                            <span className="ml-1 font-normal text-gray-400">(provisoire)</span>
+                          )}
+                        </span>
+                      ) : (
+                        e.copie?.note != null && (
+                          <span className="ml-2 text-sm font-bold text-purple-700">{e.copie.note}/20</span>
+                        )
                       )}
                     </p>
                     <p className="text-xs text-gray-400 truncate">
@@ -622,6 +687,22 @@ export function SessionProf({
                   <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${s.classe}`}>
                     {s.texte}
                   </span>
+
+                  {/* Le dossier de l'élève, quand il est fabriqué : c'est
+                      exactement la page que l'élève reçoit, sujet compris. Sans
+                      ce bouton, le professeur faisait produire un dossier
+                      qu'aucun de ses écrans ne lui montrait. */}
+                  {e.correction?.dossier_url && (
+                    <a
+                      href={e.correction.dossier_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Le dossier de correction, tel que l’élève le voit."
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 flex-shrink-0"
+                    >
+                      📘 Son dossier
+                    </a>
+                  )}
 
                   <LienEcriture eleve={e} />
 
@@ -687,7 +768,7 @@ export function SessionProf({
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700">
             📥 Importer ma grille remplie
           </a>
-          <a href="/espace-prof/deposer"
+          <a href={`/espace-prof/deposer?session=${session.id}`}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
             📄 Déposer une copie
           </a>
