@@ -53,10 +53,22 @@ function arrondi(n: number): number {
 }
 
 const VRAI = new Set(['true', 'vrai', 'oui', 'x', '1', 'coche', 'coché']);
+const FAUX = new Set(['false', 'faux', 'non', '0']);
 
 /** Une case à cocher exportée par Sheets vaut « TRUE » / « FALSE ». */
 export function estCochee(brut: string): boolean {
   return VRAI.has(brut.trim().toLowerCase());
+}
+
+/**
+ * La cellule n'est-elle qu'une case à cocher ? Une case cochée ou décochée ne
+ * dit rien : ce n'est ni un critère, ni — surtout — le nom d'un élève. Sans ce
+ * garde, un « FALSE » posé entre le nom et l'en-tête devenait le nom de la
+ * colonne, et la copie ne se rapprochait plus d'aucun inscrit.
+ */
+function estCaseACocher(brut: string): boolean {
+  const n = brut.trim().toLowerCase();
+  return VRAI.has(n) || FAUX.has(n);
 }
 
 // --- Structure d'une guideline ---------------------------------------
@@ -508,7 +520,7 @@ export function repererElevesColonnes(table: string[][]): ColonneEleve[] {
       for (let k = i - 1; k >= 0 && !nom; k--) {
         const ligne = (table[k] ?? []).map((c) => (c ?? '').trim());
         const candidat = ligne[j] || '';
-        if (candidat && !ligneDeService(candidat)) nom = candidat;
+        if (candidat && !ligneDeService(candidat) && !estCaseACocher(candidat)) nom = candidat;
       }
       colonnes.push({
         nom: nom || `Élève ${colonnes.length + 1}`,

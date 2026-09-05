@@ -305,6 +305,26 @@ test('les colonnes d’élèves sont repérées avec leur nom', () => {
   assert.equal(estGuidelineACorriger(tableSes), true);
 });
 
+test('une case à cocher au-dessus de l’en-tête n’est pas un nom d’élève', () => {
+  // Vécu le 5 septembre 2026 : entre le nom de l'élève et la ligne
+  // « niveau ? », le classeur portait une ligne de cases. Le lecteur remontait
+  // jusqu'à la première cellule non vide et retenait « FALSE » comme nom —
+  // la copie ne se rapprochait alors d'aucun inscrit.
+  const table = [
+    ['', '', '', 'Elèves', ''],
+    ['', '', '', 'Camille Roux', ''],
+    ['', '', '', 'FALSE', ''],
+    ['Critère', 'Barème', 'Descripteur', 'niveau ?', 'commentaire (optionnel)'],
+    ['A. Compréhension', '', '— /2', 'FALSE', ''],
+    ['1. Sens global', '— /2', '', 'FALSE', ''],
+    ['', '0', 'Contresens.', 'FALSE', ''],
+    ['', '2', 'Sens compris.', 'TRUE', ''],
+  ];
+  const colonnes = repererElevesColonnes(table);
+  assert.equal(colonnes.length, 1);
+  assert.equal(colonnes[0].nom, 'Camille Roux');
+});
+
 test('les colonnes d’élèves ne sont pas lues comme du barème', () => {
   const { guideline } = lireGuidelineCorrigee(tableSes);
   assert.equal(guideline.total, 40);
