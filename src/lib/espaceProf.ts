@@ -519,7 +519,7 @@ export async function chargerElevesSession(session: Session): Promise<EleveSessi
     });
     const appel = appelParEleve.get(eleve.id);
     const code = codeCopie(eleve.nom, eleve.matiere);
-    const ecriture = lienEcritureCopie(code, eleve.matiere);
+    const ecriture = lienEcritureCopie(code, eleve.matiere, true);
     const doc = (copie_doc_url ?? '').trim() || ecriture;
     return {
       ...eleve,
