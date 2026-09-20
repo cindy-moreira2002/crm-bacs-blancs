@@ -22,7 +22,8 @@
  */
 import { useState } from 'react';
 import Link from 'next/link';
-import type { CaseEtat, LigneBac, ResumeDirection, Tache } from '@/lib/direction';
+import { useLive } from '@/components/direction/LiveDirection';
+import type { CaseEtat, LigneBac, ResumeDirection, Tache } from '@/lib/direction/resume';
 
 const TONS: Record<Tache['urgence'], { fond: string; texte: string; puce: string }> = {
   rouge: { fond: 'bg-red-50 border-red-200', texte: 'text-red-900', puce: '🔴' },
@@ -202,7 +203,60 @@ function GrilleBacs({
   ];
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* Sur téléphone : une carte par bac blanc. Le tableau, lui, ferait
+          1000 px de large — on le ferait défiler à l'aveugle avec le doigt. */}
+      <div className="space-y-3 px-4 pb-5 md:hidden">
+        {lignes.map((l) => {
+          const d = dateCourte(l.date_epreuve);
+          return (
+            <div key={l.id} className="rounded-xl border border-slate-200 p-3">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-slate-900">
+                    {l.matiere}
+                    <span className="ml-2 text-xs font-normal text-slate-400">
+                      {d.jourSemaine} {d.jour} {d.mois}
+                      {l.heure_debut ? ` · ${l.heure_debut}` : ''}
+                    </span>
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    {l.test ? 'essai' : compteARebours(l.jours)} · {l.nb_eleves} élève
+                    {l.nb_eleves > 1 ? 's' : ''}
+                  </p>
+                </div>
+                <Pastille c={{ etat: l.global.etat, libelle: l.global.libelle }} />
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {COLONNES.map((c) => {
+                  const etat = l[c.cle] as CaseEtat;
+                  // On ne montre au doigt que ce qui n'est pas en ordre : six
+                  // pastilles vertes n'apprennent rien, elles occupent l'écran.
+                  if (etat.etat === 'ok' || etat.etat === 'neutre') return null;
+                  return (
+                    <span
+                      key={c.titre}
+                      className={`rounded-lg border px-2 py-1 text-[11px] font-medium ${COULEUR_CASE[etat.etat]}`}
+                    >
+                      {c.titre} : {etat.libelle}
+                    </span>
+                  );
+                })}
+              </div>
+
+              <Link
+                href={l.action.href}
+                className="mt-2 inline-block text-xs font-semibold text-slate-700 underline"
+              >
+                {l.action.label} →
+              </Link>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
       <table className="w-full text-sm min-w-[1000px]">
         <thead className="bg-slate-50 text-slate-500">
           <tr>
@@ -255,7 +309,8 @@ function GrilleBacs({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -265,6 +320,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
   const [resume, setResume] = useState(initial);
   const [chargement, setChargement] = useState(false);
   const [toutAfficher, setToutAfficher] = useState(false);
+  const live = useLive();
 
   const actualiser = async () => {
     setChargement(true);
@@ -298,6 +354,31 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
         >
           {chargement ? 'Actualisation…' : '↻ Actualiser'}
         </button>
+      </div>
+
+      {/* --- Les trois gestes du téléphone, avant tout le reste. --- */}
+      <div className="grid grid-cols-3 gap-2 md:hidden">
+        {[
+          { href: '/direction/a-valider', emoji: '📬', label: 'À valider', valeur: live.aValider },
+          { href: '/direction/paiements', emoji: '💶', label: 'À encaisser', valeur: live.paiementsEnAttente },
+          { href: '/direction/correction', emoji: '🎛️', label: 'Bloquées', valeur: live.correctionsBloquees },
+        ].map((r) => (
+          <Link
+            key={r.href}
+            href={r.href}
+            className="rounded-xl border border-slate-200 bg-white p-3 text-center"
+          >
+            <p aria-hidden className="text-lg leading-none">{r.emoji}</p>
+            <p
+              className={`mt-1 text-xl font-bold tabular-nums leading-none ${
+                r.valeur ? 'text-red-600' : 'text-slate-300'
+              }`}
+            >
+              {r.valeur}
+            </p>
+            <p className="mt-1 text-[11px] leading-tight text-slate-500">{r.label}</p>
+          </Link>
+        ))}
       </div>
 
       {/* --- Les quatre chiffres du jour. Rien de plus. --- */}
@@ -421,7 +502,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
             </p>
           </div>
           <Link
-            href="/admin/bacs-blancs"
+            href="/direction/bacs-blancs"
             className="text-xs font-semibold text-slate-700 hover:underline whitespace-nowrap"
           >
             Tout ouvrir →
@@ -470,7 +551,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
             <p className="text-xs text-slate-500 mt-0.5">Les sessions vendues, et ce qui leur manque.</p>
           </div>
           <Link
-            href="/admin/bacs-blancs"
+            href="/direction/bacs-blancs"
             className="text-xs font-semibold text-slate-700 hover:underline whitespace-nowrap"
           >
             Tout ouvrir →
@@ -494,7 +575,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           <CarteSante
             emoji="📬"
             titre="E-mails"
-            href="/admin/emails"
+            href="/direction/emails"
             indisponible={emails.disponible ? undefined : { raison: emails.raison, manquants: emails.manquants }}
             alerte={
               emails.disponible && !emails.actif
@@ -538,7 +619,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           <CarteSante
             emoji="💶"
             titre="Paiements"
-            href="/admin/paiements"
+            href="/direction/paiements"
             indisponible={
               paiements.disponible ? undefined : { raison: paiements.raison, manquants: paiements.manquants }
             }
@@ -569,7 +650,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           <CarteSante
             emoji="🎙️"
             titre="Discord"
-            href="/admin/discord"
+            href="/direction/discord"
             indisponible={
               discord.configure
                 ? undefined
@@ -606,7 +687,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           <CarteSante
             emoji="👥"
             titre="Profs"
-            href="/admin/profs"
+            href="/direction/profs"
             indisponible={profs.disponible ? undefined : { raison: profs.raison, manquants: profs.manquants }}
           >
             {profs.disponible && (
@@ -629,7 +710,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           <CarteSante
             emoji="🎛️"
             titre="Correction"
-            href="/admin/correction"
+            href="/direction/correction"
             indisponible={
               correction.disponible ? undefined : { raison: correction.raison, manquants: correction.manquants }
             }
@@ -676,7 +757,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
           <CarteSante
             emoji="📅"
             titre="Bacs blancs & sujets"
-            href="/admin/bacs-blancs"
+            href="/direction/bacs-blancs"
             indisponible={bacs.disponible ? undefined : { raison: bacs.raison, manquants: bacs.manquants }}
           >
             {bacs.disponible && (
@@ -706,7 +787,7 @@ export function CockpitDirection({ resume: initial }: { resume: ResumeDirection 
             <strong>Correction</strong> — la chaîne qui lit une copie scannée, la corrige au barème
             et fabrique le dossier de l’élève. Le barème d’un sujet se saisit une fois, juste avant
             de corriger ce sujet-là, et se réutilise si le sujet revient.{' '}
-            <Link href="/admin/bareme" className="underline font-semibold">
+            <Link href="/direction/bareme" className="underline font-semibold">
               Ouvrir les barèmes
             </Link>
           </p>

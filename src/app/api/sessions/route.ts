@@ -8,7 +8,7 @@
  *
  * C'EST LE POINT DE BASCULE : les dates proposées aux familles venaient d'un
  * tableau écrit en dur dans `src/lib/sessions.ts`. Un bac blanc créé depuis
- * /admin/bacs-blancs n'y apparaissait donc jamais. Désormais la base fait foi,
+ * /direction/bacs-blancs n'y apparaissait donc jamais. Désormais la base fait foi,
  * et le tableau en dur n'est plus qu'un filet de secours côté navigateur.
  *
  * Ne sont servies que les sessions à venir, `statut = 'ouverte'` et non
@@ -16,7 +16,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import type { Session } from '@/lib/sessions';
+import { sansBrevet, type Session } from '@/lib/sessions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,12 +65,14 @@ export async function GET() {
     return NextResponse.json({ sessions: [], error: 'Sessions indisponibles.' }, { status: 500 });
   }
 
-  const sessions: Session[] = ((data ?? []) as Record<string, unknown>[]).map((s) => ({
+  // `sansBrevet` : tant que le brevet est éteint (`BREVET_ACTIF`), une session
+  // de brevet restée en base ne doit pas ressortir par l'API publique.
+  const sessions: Session[] = sansBrevet(((data ?? []) as Record<string, unknown>[]).map((s) => ({
     matiere: String(s.matiere ?? ''),
     date: String(s.date_epreuve),
     heure: plageHoraire((s.heure_debut as string) ?? null, (s.heure_fin as string) ?? null),
     places: Number(s.places ?? 0),
-  }));
+  })));
 
   return NextResponse.json({ sessions });
 }

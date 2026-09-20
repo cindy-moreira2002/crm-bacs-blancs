@@ -961,14 +961,10 @@ export function EspaceEleve() {
               </div>
             </div>
             {/* Guidage : que faire maintenant ? */}
-            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.25)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,.25)' }}>
               <p style={{ fontSize: '.85rem', opacity: .95 }}>
                 📋 Prépare ton jour J : <a href="#checklist" style={{ color: '#fff', fontWeight: 800 }}>check-list</a> et <a href="#faq" style={{ color: '#fff', fontWeight: 800 }}>questions fréquentes</a> plus bas.
               </p>
-              <a href={sessionsDispos.length > 0 ? '#sessions' : '/inscription'}
-                style={{ fontSize: '.85rem', fontWeight: 800, color: '#fff', background: 'rgba(255,255,255,.18)', padding: '8px 14px', borderRadius: 100, textDecoration: 'none' }}>
-                💪 Tu veux t&rsquo;entraîner plus ? Inscris-toi →
-              </a>
             </div>
           </div>
           {ECRITURE_URL && prochain.code_copie && (
@@ -1070,7 +1066,10 @@ export function EspaceEleve() {
         {/* ── FENÊTRE 3 : Calendrier à venir ── */}
         {aVenir.length > 0 && (
           <div style={cadre}>
-            {titreSection('📅 Mon calendrier à venir')}
+            {titreSection('📅 Mes bacs blancs réservés')}
+            <p style={{ fontSize: '.8rem', color: '#6B7280', margin: '-12px 0 16px', lineHeight: 1.5 }}>
+              Les épreuves auxquelles tu es <strong>déjà inscrit(e)</strong>. Ta place y est gardée.
+            </p>
 
             {Object.entries(parMois).sort().map(([mois, list]) => (
               <div key={mois} style={{ marginBottom: 16 }}>
@@ -1173,10 +1172,11 @@ export function EspaceEleve() {
         {sessionsDispos.length > 0 && (
           <div id="sessions" style={{ background: 'linear-gradient(135deg,#FFFBEB,#FEF3C7)', borderRadius: 20, padding: '24px 26px', border: '1px solid #FDE68A', boxShadow: '0 2px 12px rgba(0,0,0,.04)', scrollMarginTop: 20 }}>
             <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-              💪 Tu veux t&rsquo;entraîner plus ?
+              📣 Tous les prochains bacs blancs : inscris-toi dès maintenant
             </h3>
             <p style={{ fontSize: '.82rem', color: '#92400E', marginBottom: 18, lineHeight: 1.5 }}>
-              Chaque bac blanc en plus, c&rsquo;est des points en plus le jour J. Inscris-toi aux prochaines sessions :
+              Ceux-ci sont <strong>ouverts à l&rsquo;inscription</strong> — tu n&rsquo;y es pas encore inscrit(e).
+              Chaque bac blanc en plus, c&rsquo;est des points en plus le jour J.
             </p>
             {sessionsDispos.map(s => (
               <div key={s.matiere+s.date} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 0', borderBottom: '1px solid rgba(251,191,36,.3)' }}>

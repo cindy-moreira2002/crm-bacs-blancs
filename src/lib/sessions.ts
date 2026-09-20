@@ -6,6 +6,32 @@
 // réutilisent toute la mécanique du bac : seules les matières et les dates changent.
 export type Examen = 'bac' | 'brevet';
 
+/**
+ * L'INTERRUPTEUR DU BREVET.
+ *
+ * `false` : le brevet n'existe plus pour personne — ni sur le site, ni dans
+ * l'espace élève, ni dans l'espace prof, ni dans la Direction. Les moteurs de
+ * correction du DNB, leurs tables Supabase et leurs écrans restent en place,
+ * simplement inaccessibles : le jour où on relance les Matinées du Brevet,
+ * il suffit de repasser cette ligne à `true`.
+ *
+ * C'est le SEUL endroit à modifier. Tout ce qui parle du brevet ailleurs dans
+ * l'application passe par cette constante.
+ */
+// Type `boolean` écrit à la main, et non déduit : sans lui TypeScript fige la
+// valeur à `false` et déclare « mort » tout le code du brevet — or ce code doit
+// rester vivant et compilé, prêt pour le jour où on remet le brevet.
+export const BREVET_ACTIF: boolean = false;
+
+/**
+ * Retire les sessions de brevet d'une liste tant que le brevet est éteint.
+ * Les sessions arrivent aussi de Supabase (`/api/sessions`) : filtrer la seule
+ * liste écrite en dur ne suffirait pas.
+ */
+export function sansBrevet<T extends { matiere: string }>(liste: T[]): T[] {
+  return BREVET_ACTIF ? liste : liste.filter((s) => examenDeMatiere(s.matiere) === 'bac');
+}
+
 export type Session = {
   matiere: string;
   date: string;   // ISO 'YYYY-MM-DD'
@@ -14,7 +40,7 @@ export type Session = {
   examen?: Examen; // absent = bac (historique)
 };
 
-export const SESSIONS_PLATEFORME: Session[] = [
+const TOUTES_LES_SESSIONS: Session[] = [
   { matiere: 'Français',        date: '2026-09-06', heure: '9h — 13h', places: 8 },
   { matiere: 'Mathématiques',   date: '2026-09-13', heure: '9h — 12h', places: 6 },
   { matiere: 'Philosophie',     date: '2026-09-20', heure: '9h — 13h', places: 10 },
@@ -32,10 +58,14 @@ export const SESSIONS_PLATEFORME: Session[] = [
   { matiere: 'Mathématiques (brevet)', date: '2027-01-30', heure: '9h — 11h', places: 15, examen: 'brevet' },
 ];
 
+// Ce que le site propose vraiment. Tant que `BREVET_ACTIF` est à `false`,
+// les six lignes de brevet ci-dessus n'en sortent jamais.
+export const SESSIONS_PLATEFORME: Session[] = sansBrevet(TOUTES_LES_SESSIONS);
+
 // Matières qu'un prof peut déclarer enseigner à la candidature.
 // Volontairement plus large que SESSIONS_PLATEFORME : on veut pouvoir recruter
 // un prof de SVT avant d'avoir ouvert le premier bac blanc de SVT.
-export const MATIERES_ENSEIGNEES: string[] = [
+const TOUTES_LES_MATIERES_ENSEIGNEES: string[] = [
   'Français',
   'Philosophie',
   'Mathématiques',
@@ -49,6 +79,10 @@ export const MATIERES_ENSEIGNEES: string[] = [
   'Français (brevet)',
   'Mathématiques (brevet)',
 ];
+
+export const MATIERES_ENSEIGNEES: string[] = BREVET_ACTIF
+  ? TOUTES_LES_MATIERES_ENSEIGNEES
+  : TOUTES_LES_MATIERES_ENSEIGNEES.filter((m) => examenDeMatiere(m) === 'bac');
 
 // Examen auquel se rattache une matière (déduit du libellé : pas de colonne en base).
 export function examenDeMatiere(matiere: string): Examen {
@@ -70,7 +104,7 @@ export function matieresDisponibles(
 ): string[] {
   const today = new Date(ref); today.setHours(0, 0, 0, 0);
   const set = new Set<string>();
-  for (const s of liste) {
+  for (const s of sansBrevet(liste)) {
     if (new Date(s.date) < today) continue;
     if (examen && examenDeMatiere(s.matiere) !== examen) continue;
     set.add(s.matiere);
@@ -85,7 +119,7 @@ export function sessionsPourMatiere(
   liste: Session[] = SESSIONS_PLATEFORME,
 ): Session[] {
   const today = new Date(ref); today.setHours(0, 0, 0, 0);
-  return liste
+  return sansBrevet(liste)
     .filter(s => s.matiere === matiere && new Date(s.date) >= today)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
@@ -96,14 +130,15 @@ export function sessionsPourMatiere(
  * `SESSIONS_PLATEFORME` reste le filet de secours : si l'appel échoue (Supabase
  * indisponible), le formulaire d'inscription propose encore des dates plutôt
  * qu'un menu vide. La vérité, elle, est dans `sessions_bacs_blancs` : c'est là
- * qu'écrit /admin/bacs-blancs, et c'est ce que lit `/api/sessions`.
+ * qu'écrit /direction/bacs-blancs, et c'est ce que lit `/api/sessions`.
  */
 export async function chargerSessionsPubliques(): Promise<Session[]> {
   try {
     const r = await fetch('/api/sessions', { cache: 'no-store' });
     if (!r.ok) return SESSIONS_PLATEFORME;
     const d = (await r.json()) as { sessions?: Session[] };
-    return Array.isArray(d.sessions) && d.sessions.length ? d.sessions : SESSIONS_PLATEFORME;
+    const enBase = Array.isArray(d.sessions) ? sansBrevet(d.sessions) : [];
+    return enBase.length ? enBase : SESSIONS_PLATEFORME;
   } catch {
     return SESSIONS_PLATEFORME;
   }

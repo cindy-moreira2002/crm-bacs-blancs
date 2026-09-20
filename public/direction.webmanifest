@@ -1,0 +1,24 @@
+{
+  "id": "/direction",
+  "name": "Direction — Les Matinées du Bac",
+  "short_name": "Direction MDB",
+  "description": "Piloter les bacs blancs : valider les e-mails, suivre les paiements et les corrections.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/direction",
+  "scope": "/direction",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#2d1b4d",
+  "theme_color": "#2d1b4d",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/icons/direction-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/direction-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/direction-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "E-mails à valider", "short_name": "À valider", "url": "/direction/emails" },
+    { "name": "Ce qui bloque", "short_name": "À faire", "url": "/direction/a-faire" }
+  ]
+}

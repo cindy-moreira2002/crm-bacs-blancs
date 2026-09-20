@@ -118,61 +118,233 @@ const preinscription_recue: Modele = {
   }),
 };
 
+/**
+ * Le cadre de virement, identique dans la confirmation et dans le message
+ * d'expiration : titulaire, IBAN, BIC, montant et surtout la référence à
+ * recopier — sans elle, un virement arrive sans qu'on sache de quel élève il
+ * s'agit. Rien ne s'affiche tant que l'IBAN n'est pas renseigné dans
+ * /direction/emails : mieux vaut dire qu'on l'envoie que montrer un cadre vide.
+ */
+function cadreVirement(h: Aide): Contenu['blocs'] {
+  if (!h.a('payment_iban')) {
+    return [
+      {
+        type: 'paragraphe',
+        texte:
+          'Les coordonnées bancaires arrivent dans un message séparé, dans les minutes qui viennent.',
+      },
+    ];
+  }
+  const lignes: [string, string][] = [];
+  if (h.a('payment_holder')) lignes.push(['Titulaire', h.t('payment_holder')]);
+  lignes.push(['IBAN', `<span style="font-family:monospace">${h.t('payment_iban')}</span>`]);
+  if (h.a('payment_bic')) lignes.push(['BIC', h.t('payment_bic')]);
+  if (h.a('amount')) lignes.push(['Montant', `${h.t('amount')} €`]);
+  lignes.push(['Référence à indiquer', `<strong>${h.t('payment_reference')}</strong>`]);
+  const blocs: Contenu['blocs'] = [{ type: 'fiche', lignes }];
+  if (h.a('payment_instructions')) {
+    blocs.push({ type: 'petit', texte: h.t('payment_instructions') });
+  }
+  return blocs;
+}
+
+/**
+ * L'encadré du salon d'appel — une salle vocale Discord, attribuée à cet
+ * élève et à lui seul. Il n'existe pas encore le jour de l'inscription : la
+ * salle est créée quand le bac blanc se prépare. Plutôt qu'un bouton mort, on
+ * dit alors quand il arrivera et où le retrouver.
+ */
+function cadreSalon(h: Aide): Contenu['blocs'][number] {
+  if (h.a('video_room_url')) {
+    return {
+      type: 'encadre',
+      ton: 'neutre',
+      titre: '🎧 Ton salon d’appel (Discord)',
+      lignes: [
+        `<a href="${h.r('video_room_url')}" style="font-weight:700">Rejoindre mon salon →</a>`,
+        'C’est là que ton professeur te retrouve le jour de l’épreuve. Une salle vocale, rien qu’à toi.',
+        CONSIGNE_LIEN,
+        'Tu retrouveras toujours ce lien dans ton espace élève — inutile de garder cet e-mail.',
+      ],
+    };
+  }
+  return {
+    type: 'encadre',
+    ton: 'neutre',
+    titre: '🎧 Ton salon d’appel (Discord)',
+    lignes: [
+      'Ta salle vocale personnelle sera créée quelques jours avant l’épreuve.',
+      'Tu recevras son lien par e-mail, et il apparaîtra <strong>dans ton espace élève</strong> : c’est là qu’il faudra aller le chercher le jour J.',
+    ],
+  };
+}
+
+/**
+ * L'encadré de l'espace élève. C'est la chose la plus importante du message :
+ * tout le reste (salon, sujet, copie, correction) s'y retrouve, donc un élève
+ * qui ne retient qu'une adresse doit retenir celle-là.
+ */
+function cadreEspaceEleve(h: Aide): Contenu['blocs'][number] {
+  return {
+    type: 'encadre',
+    ton: 'succes',
+    titre: '🏠 Ton espace élève — tout est là',
+    lignes: [
+      `<a href="${h.r('student_space_url')}" style="font-weight:700">Ouvrir mon espace élève →</a>`,
+      'Tu y retrouves, à tout moment :',
+      '• <strong>le sujet de l’épreuve</strong>, qui s’ouvre 10 minutes avant le début',
+      '• <strong>le lien de ton salon d’appel</strong>',
+      '• <strong>ta copie</strong> et de quoi la rendre',
+      '• <strong>ton dossier de correction</strong> une fois l’épreuve corrigée',
+      '• tes anciens bacs blancs et l’évolution de tes notes',
+      'Tu te connectes avec ton adresse e-mail : un code à 6 caractères t’est envoyé, il n’y a pas de mot de passe à retenir.',
+    ],
+  };
+}
+
+/** Le bloc rouge : ce que la famille perd si elle ne règle pas. */
+function alertePaiement(h: Aide): Contenu['blocs'][number] {
+  const minutes = h.a('payment_deadline_minutes') ? h.t('payment_deadline_minutes') : '10';
+  return {
+    type: 'encadre',
+    ton: 'alerte',
+    titre: '⚠️ Paiement en attente — la place n’est pas encore réservée',
+    lignes: [
+      '<strong>Tant que vous n’aurez pas payé et validé le paiement, votre inscription ne sera pas enregistrée.</strong>',
+      `Vous avez <strong>${minutes} minutes</strong> pour effectuer le virement. Passé ce délai, l’inscription est annulée et la place est rendue à un autre élève.`,
+    ],
+  };
+}
+
 const inscription_confirmee: Modele = {
   type: 'inscription_confirmee',
   categorie: 'transactional',
   role: 'eleve',
   requises: ['first_name', 'subject_name', 'student_space_url'],
-  sujet: (h) => `Inscription confirmée — bac blanc de ${h.r('subject_name')}`,
+  sujet: (h) =>
+    h.r('payment_status') === 'paye' || h.r('payment_status') === 'offert'
+      ? `Inscription confirmée — bac blanc de ${h.r('subject_name')}`
+      : `⚠️ Inscription en attente de paiement — bac blanc de ${h.r('subject_name')}`,
+  contenu: (h) => {
+    const regle = h.r('payment_status') === 'paye' || h.r('payment_status') === 'offert';
+    return {
+      titre: regle ? 'Inscription confirmée 🎉' : 'Inscription confirmée — en attente de paiement',
+      blocs: [
+        // Le bloc rouge passe AVANT tout le reste : c'est la seule chose à
+        // faire dans l'heure, et un lecteur pressé ne lit que le haut.
+        ...(regle ? [] : [alertePaiement(h)]),
+        { type: 'paragraphe' as const, texte: `Bonjour ${h.t('first_name')},` },
+        {
+          type: 'paragraphe' as const,
+          texte: `L'inscription au <strong>bac blanc de ${h.t('subject_name')}</strong> est bien enregistrée.`,
+        },
+        h.a('session_date')
+          ? ficheSession(h)
+          : {
+              type: 'encadre' as const,
+              ton: 'attention' as const,
+              lignes: ['La date exacte sera confirmée très bientôt — tu recevras un e-mail dès qu’elle est fixée.'],
+            },
+        ...(regle
+          ? ([
+              {
+                type: 'encadre' as const,
+                ton: 'succes' as const,
+                titre: `Paiement : ${h.t('payment_status_label')}`,
+                lignes: ['Tout est réglé, il n’y a rien à faire de ce côté.'],
+              },
+            ] as Contenu['blocs'])
+          : ([
+              { type: 'paragraphe' as const, texte: '<strong>Comment régler — par virement :</strong>' },
+              ...cadreVirement(h),
+            ] as Contenu['blocs'])),
+        // Deux endroits distincts, deux encadrés distincts : le salon d'appel
+        // n'est PAS l'espace élève, et les confondre fait tourner en rond le
+        // matin de l'épreuve.
+        cadreSalon(h),
+        cadreEspaceEleve(h),
+        {
+          type: 'paragraphe' as const,
+          texte: 'Comment se passe la matinée :',
+        },
+        {
+          type: 'liste' as const,
+          items: [
+            'Tu composes <strong>depuis chez toi</strong>, dans les conditions de l’examen',
+            'Le sujet s’ouvre dans ton espace élève, <strong>10 minutes avant le début</strong>',
+            'Ton professeur te rejoint dans ton salon d’appel et reste joignable pendant l’épreuve',
+            'Après l’épreuve, tu déposes ta copie et tu reçois un <strong>dossier de correction complet</strong>',
+          ],
+        },
+      ],
+      bouton: { libelle: 'Ouvrir mon espace élève', url: h.r('student_space_url') },
+      apres: [
+        {
+          type: 'petit',
+          texte: 'Tes parents reçoivent ce message en copie.',
+        },
+        ...(regle
+          ? ([
+              {
+                type: 'petit' as const,
+                texte: 'Prochaine étape : les informations pratiques, quelques jours avant l’épreuve.',
+              },
+            ] as Contenu['blocs'])
+          : []),
+      ],
+    };
+  },
+};
+
+/**
+ * Le délai est passé sans règlement. Adressé au PARENT et à lui seul : c'est
+ * lui qui paie, et annoncer l'annulation à l'élève seul ne servirait à rien.
+ */
+const inscription_expiree: Modele = {
+  type: 'inscription_expiree',
+  categorie: 'transactional',
+  role: 'parent',
+  requises: ['student_name', 'subject_name', 'inscription_url'],
+  sujet: (h) => `Inscription annulée faute de règlement — ${h.r('subject_name')}`,
   contenu: (h) => ({
-    titre: 'Inscription confirmée 🎉',
+    titre: 'Inscription annulée — le règlement n’est pas arrivé',
     blocs: [
-      { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
-      {
-        type: 'paragraphe',
-        texte: `L'inscription au <strong>bac blanc de ${h.t('subject_name')}</strong> est bien enregistrée.`,
-      },
-      h.a('session_date')
-        ? ficheSession(h)
-        : {
-            type: 'encadre',
-            ton: 'attention',
-            lignes: ['La date exacte sera confirmée très bientôt — tu recevras un e-mail dès qu’elle est fixée.'],
-          },
       {
         type: 'encadre',
-        titre: h.a('payment_status_label') ? `Paiement : ${h.t('payment_status_label')}` : 'Paiement',
-        ton: h.r('payment_status') === 'paye' || h.r('payment_status') === 'offert' ? 'succes' : 'attention',
-        lignes:
-          h.r('payment_status') === 'paye' || h.r('payment_status') === 'offert'
-            ? ['Tout est réglé, il n’y a rien à faire de ce côté.']
-            : [
-                h.a('payment_instructions')
-                  ? h.t('payment_instructions')
-                  : 'Le règlement se fait par virement. On t’envoie les informations dans un e-mail séparé.',
-              ],
-      },
-      {
-        type: 'paragraphe',
-        texte: 'Comment ça se passe :',
-      },
-      {
-        type: 'liste',
-        items: [
-          'Le bac blanc se déroule <strong>en visio</strong>, depuis chez toi, dans les conditions de l’examen',
-          'Tu reçois un <strong>lien de salon personnel</strong> quelques jours avant',
-          'Un professeur passe dans ton salon pendant l’épreuve et reste joignable',
-          'Après l’épreuve, tu déposes ta copie et tu reçois un <strong>dossier de correction complet</strong>',
+        ton: 'alerte',
+        titre: '⚠️ La place n’a pas été retenue',
+        lignes: [
+          `Une inscription au bac blanc de <strong>${h.t('subject_name')}</strong> a été enregistrée pour <strong>${h.t('student_name')}</strong>, mais le règlement n’a pas été effectué dans le délai imparti.`,
+          '<strong>L’inscription a donc été annulée.</strong>',
         ],
       },
-    ],
-    bouton: { libelle: 'Voir mon espace élève', url: h.r('student_space_url') },
-    apres: [
+      { type: 'paragraphe', texte: 'Bonjour,' },
+      {
+        type: 'paragraphe',
+        texte:
+          'Rien n’est perdu : la place peut être reprise dès maintenant, dans la limite des places encore disponibles. Il suffit de refaire l’inscription et de procéder au règlement.',
+      },
+      ...(h.a('session_date')
+        ? ([
+            {
+              type: 'fiche' as const,
+              lignes: [
+                ['Élève', h.t('student_name')],
+                ['Matière', h.t('subject_name')],
+                ['Date envisagée', h.t('session_date')],
+              ] as [string, string][],
+            },
+          ] as Contenu['blocs'])
+        : []),
+      { type: 'paragraphe', texte: '<strong>Pour régler par virement :</strong>' },
+      ...cadreVirement(h),
       {
         type: 'petit',
-        texte: 'Prochaine étape : les informations pratiques, quelques jours avant l’épreuve.',
+        texte:
+          'Si le virement a déjà été effectué, ce message s’est croisé avec lui : répondez simplement à cet e-mail et nous rétablissons l’inscription.',
       },
     ],
+    bouton: { libelle: 'Reprendre l’inscription', url: h.r('inscription_url') },
   }),
 };
 
@@ -986,6 +1158,7 @@ const prof_mission_terminee: Modele = {
 const LISTE: Modele[] = [
   preinscription_recue,
   inscription_confirmee,
+  inscription_expiree,
   paiement_confirme,
   paiement_attente,
   infos_pratiques,

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { FormInscription } from '@/components/FormInscription';
-import type { Examen } from '@/lib/sessions';
+import { BREVET_ACTIF, type Examen } from '@/lib/sessions';
 
 // Une inscription = un seul examen, jamais les deux sur le même écran.
 // L'élève arrive de l'univers bac ou de l'univers brevet (?examen=…) et ne voit
@@ -85,11 +85,32 @@ export default async function InscriptionPage({
 }) {
   const examenParam = (await searchParams).examen;
 
+  // Tant que `BREVET_ACTIF` est à `false`, il n'y a qu'une épreuve : le bac.
+  // Pas d'écran de choix, et une vieille adresse `?examen=brevet` (un mail
+  // déjà parti, un favori) atterrit sur le bac plutôt que sur une page morte.
+  if (!BREVET_ACTIF) {
+    const u = UNIVERS.bac;
+    return <PageExamen examen="bac" u={u} autre={null} />;
+  }
+
   if (examenParam !== 'bac' && examenParam !== 'brevet') return <ChoixExamen />;
 
   const examen: Examen = examenParam;
   const u = UNIVERS[examen];
-  const autre = examen === 'bac' ? 'brevet' : 'bac';
+  const autre: Examen = examen === 'bac' ? 'brevet' : 'bac';
+
+  return <PageExamen examen={examen} u={u} autre={autre} />;
+}
+
+function PageExamen({
+  examen,
+  u,
+  autre,
+}: {
+  examen: Examen;
+  u: (typeof UNIVERS)[keyof typeof UNIVERS];
+  autre: Examen | null;
+}) {
 
   return (
     <div className={`min-h-screen ${u.fond}`}>
@@ -111,13 +132,15 @@ export default async function InscriptionPage({
             Une fois inscrit, tu recevras un email avec ton lien de salon visio personnel.
           </p>
 
-          <p className="text-sm text-center mt-4">
-            <Link href={`/inscription?examen=${autre}`} className={`font-semibold underline ${u.lien}`}>
-              {autre === 'brevet'
-                ? 'Vous cherchiez le brevet blanc (3e) ? →'
-                : 'Vous cherchiez le bac blanc (lycée) ? →'}
-            </Link>
-          </p>
+          {autre && (
+            <p className="text-sm text-center mt-4">
+              <Link href={`/inscription?examen=${autre}`} className={`font-semibold underline ${u.lien}`}>
+                {autre === 'brevet'
+                  ? 'Vous cherchiez le brevet blanc (3e) ? →'
+                  : 'Vous cherchiez le bac blanc (lycée) ? →'}
+              </Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

@@ -46,7 +46,7 @@ Rien d'autre à poser : aucune variable d'environnement, aucun secret. Contraire
 
 ## 2. Chaque session — ce que fait l'administratrice
 
-Dans **`/admin/bacs-blancs`**, sur la session concernée :
+Dans **`/direction/bacs-blancs`**, sur la session concernée :
 
 1. **Déposer le sujet** (bloc « Sujet de l'épreuve », type **Sujet**).
 2. Sur la ligne du sujet, dans la barre « Élèves » :

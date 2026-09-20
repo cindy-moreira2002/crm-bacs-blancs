@@ -20,6 +20,12 @@ export type ResultatEnvoi =
 export type MessageBrevo = {
   destinataire: string;
   destinataireNom?: string | null;
+  /**
+   * Adresses en copie visible (Cc) — le parent, sur les messages qui
+   * concernent la famille. Visible et non masquée : l'élève doit savoir que
+   * ses parents lisent le même message, et le parent peut répondre au fil.
+   */
+  copie?: string[];
   sujet: string;
   html: string;
   texte: string;
@@ -70,6 +76,14 @@ export async function envoyerViaBrevo(m: MessageBrevo): Promise<ResultatEnvoi> {
     htmlContent: m.html,
     textContent: m.texte,
   };
+  // Brevo refuse un `cc` vide ou contenant l'adresse déjà en `to` : on nettoie
+  // ici plutôt que de laisser un 400 transformer un message en échec définitif.
+  const destinataireBas = m.destinataire.trim().toLowerCase();
+  const copies = Array.from(
+    new Set((m.copie ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean)),
+  ).filter((e) => e !== destinataireBas);
+  if (copies.length) corps.cc = copies.map((email) => ({ email }));
+
   if (m.etiquettes?.length) corps.tags = m.etiquettes.slice(0, 10);
   if (m.desinscriptionUrl) {
     corps.headers = {

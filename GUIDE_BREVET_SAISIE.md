@@ -63,8 +63,8 @@ intitulés officiels sont en base, leurs critères sont à définir.
 **Par l'interface** (elle valide, contrôle les totaux, et refuse ce qui ne colle
 pas) :
 
-    /admin/brevet/francais/51019c11-0385-4359-b932-9a0e5adf1c75
-    /admin/brevet/mathematiques
+    /direction/brevet/francais/51019c11-0385-4359-b932-9a0e5adf1c75
+    /direction/brevet/mathematiques
 
 Accès réservé à l'administratrice (`role = 'admin'`, connexion via `/espace-prof`).
 

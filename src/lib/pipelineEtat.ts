@@ -1,6 +1,6 @@
 /**
  * État complet du pipeline de correction, pour la page de pilotage
- * /admin/correction.
+ * /direction/correction.
  *
  * ⚠️ SERVEUR UNIQUEMENT — lit la base pipeline avec la clé service_role.
  *
@@ -27,6 +27,7 @@ import type { StructExamen } from './pipelineVerifs';
 import { LABELS_MATIERES, labelExercice, labelMatiere } from './matieres';
 export { LABELS_MATIERES, labelExercice, labelMatiere };
 import { moteurAttendu, type MoteurNote } from './moteurs';
+import { BREVET_ACTIF } from './sessions';
 export { MOTEUR_ATTENDU, CE_QUI_SE_DEFINIT, LIBELLE_MOTEUR, moteurAttendu } from './moteurs';
 export type { MoteurNote } from './moteurs';
 
@@ -650,6 +651,10 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
   }
 
   const matieres: MatiereEtat[] = [...parMatiere.entries()]
+    // Le brevet est éteint (`BREVET_ACTIF`) : ses matières ne remontent plus du
+    // tout — ni dans le pilotage de la correction, ni dans la to-do, ni dans les
+    // compteurs. Les données restent en base, intactes.
+    .filter(([matiere]) => BREVET_ACTIF || !matiere.startsWith('brevet_'))
     .map(([matiere, exs]) => {
       exs.sort((a, b) => a.label.localeCompare(b.label, 'fr'));
       const tousSujets = exs.flatMap((e) => e.sujets);

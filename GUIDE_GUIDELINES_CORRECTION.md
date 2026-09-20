@@ -95,7 +95,7 @@ Le script choisit la destination d'après la matière (`moteurAttendu`,
 | `bareme_sujet` (maths, physique-chimie, SVT) | **refus** | — |
 
 Le refus n'est pas une limite technique : ce que vaut la question 2b n'existe
-que dans le sujet du jour, et s'écrit dans `/admin/bareme`. La guideline de ces
+que dans le sujet du jour, et s'écrit dans `/direction/bareme`. La guideline de ces
 matières dit COMMENT compter, pas COMBIEN.
 
 ```bash

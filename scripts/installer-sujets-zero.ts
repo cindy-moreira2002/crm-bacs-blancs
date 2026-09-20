@@ -421,7 +421,7 @@ async function principal(): Promise<void> {
   }
   console.log('\nÉcriture en base…');
   await installer(env);
-  console.log('\nTerminé. Les trois barèmes sont en brouillon : ouvre /admin/brevet pour les compléter.');
+  console.log('\nTerminé. Les trois barèmes sont en brouillon : ouvre /direction/brevet pour les compléter.');
 }
 
 principal().catch((err) => {

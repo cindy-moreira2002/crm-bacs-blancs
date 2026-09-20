@@ -51,7 +51,7 @@ pas de doublon.
 
 ## 2. À faire par toi : recharger la page Paiements
 
-https://espaces.matineesdubac.fr/admin/paiements
+https://espaces.matineesdubac.fr/direction/paiements
 
 Le bandeau orange disparaît. Si des élèves parrainés avaient déjà payé avant le
 script, clique sur **🔁 Rattraper les manquants** dans l'onglet

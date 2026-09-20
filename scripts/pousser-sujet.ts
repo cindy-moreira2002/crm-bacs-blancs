@@ -136,7 +136,7 @@ async function principal() {
   if (version.statut === 'locked') {
     throw new Error(
       `La version ${version.version} est verrouillée : les copies déjà corrigées gardent la leur. ` +
-        'Créer une nouvelle version depuis /admin/bareme avant de réécrire ce barème.',
+        'Créer une nouvelle version depuis /direction/bareme avant de réécrire ce barème.',
     );
   }
 
@@ -160,7 +160,7 @@ async function principal() {
 
   console.log(
     c.ok
-      ? `\n✅ Prêt à relire : /admin/bareme/${examId}\n   Le sujet reste en brouillon. C'est un professeur qui le valide, puis « Verrouiller cette version ».`
+      ? `\n✅ Prêt à relire : /direction/bareme/${examId}\n   Le sujet reste en brouillon. C'est un professeur qui le valide, puis « Verrouiller cette version ».`
       : `\n⛔ ${c.blocages.length} blocage(s) : le barème ne pourra pas être verrouillé tant qu'ils sont là.`,
   );
   if (!c.ok) process.exitCode = 2;

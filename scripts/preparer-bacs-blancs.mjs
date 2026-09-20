@@ -6,7 +6,7 @@
 //    node scripts/preparer-bacs-blancs.mjs            (verification)
 //    node scripts/preparer-bacs-blancs.mjs --apply    (cree le bucket)
 //
-//  Deux choses a poser avant que /admin/bacs-blancs fonctionne :
+//  Deux choses a poser avant que /direction/bacs-blancs fonctionne :
 //    1. les tables session_sujets et session_retours — SQL a coller dans
 //       l'editeur Supabase (supabase/sql/41_bacs_blancs_pilotage.sql) ;
 //    2. le bucket de stockage "sujets" — celui-la, ce script le cree.

@@ -15,7 +15,14 @@ import { MARQUE, SUPPORT_EMAIL, EXPEDITEUR } from '../config';
 export type Bloc =
   | { type: 'paragraphe'; texte: string }
   | { type: 'liste'; items: string[] }
-  | { type: 'encadre'; titre?: string; lignes: string[]; ton?: 'neutre' | 'attention' | 'succes' }
+  | {
+      type: 'encadre';
+      titre?: string;
+      lignes: string[];
+      // « alerte » = rouge, réservé à ce qui fait perdre quelque chose à la
+      // famille (place non réservée, délai de paiement). À ne pas banaliser.
+      ton?: 'neutre' | 'attention' | 'succes' | 'alerte';
+    }
   | { type: 'fiche'; lignes: [string, string][] }
   | { type: 'petit'; texte: string };
 
@@ -97,11 +104,12 @@ function blocHtml(b: Bloc): string {
         neutre: { fond: '#F3F4F6', bord: '#E5E7EB', texte: MARQUE.texte },
         attention: { fond: '#FEF3C7', bord: '#FCD34D', texte: '#78350F' },
         succes: { fond: '#ECFDF5', bord: '#A7F3D0', texte: '#065F46' },
+        alerte: { fond: '#FEF2F2', bord: '#DC2626', texte: '#7F1D1D' },
       };
       const t = tons[b.ton ?? 'neutre'];
       return (
         `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" ` +
-        `style="margin:0 0 16px;background:${t.fond};border:1px solid ${t.bord};border-radius:10px">` +
+        `style="margin:0 0 16px;background:${t.fond};border:${b.ton === 'alerte' ? '2px' : '1px'} solid ${t.bord};border-radius:10px">` +
         `<tr><td style="padding:14px 16px;font-size:14px;line-height:1.65;color:${t.texte}">` +
         (b.titre ? `<strong style="display:block;margin-bottom:6px">${b.titre}</strong>` : '') +
         b.lignes.join('<br>') +

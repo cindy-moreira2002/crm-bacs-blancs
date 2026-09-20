@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server';
 import { gardeApiAdmin } from '@/lib/gardeAcces';
-import { chargerResumeDirection } from '@/lib/direction';
+import { chargerResumeDirection } from '@/lib/direction/resume';
 
 export const dynamic = 'force-dynamic';
 

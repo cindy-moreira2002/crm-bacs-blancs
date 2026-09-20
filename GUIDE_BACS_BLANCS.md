@@ -1,9 +1,9 @@
 # Tableau de bord des bacs blancs
 
-Une page pour organiser les épreuves : **`/admin/bacs-blancs`** (bouton
+Une page pour organiser les épreuves : **`/direction/bacs-blancs`** (bouton
 📅 Bacs blancs en haut de l'espace prof, visible de l'administratrice seule).
 
-Elle ne remplace pas `/admin/correction` : là-bas on surveille la machine à
+Elle ne remplace pas `/direction/correction` : là-bas on surveille la machine à
 corriger, ici on organise l'épreuve elle-même.
 
 ---
@@ -24,7 +24,7 @@ Deux refus au moment de créer, plutôt qu'une mauvaise surprise plus tard :
 - **un doublon** matière + date, que la base refuserait avec un message
   incompréhensible.
 
-La liste des professeurs, elle, se gère sur **`/admin/profs`** (onglet
+La liste des professeurs, elle, se gère sur **`/direction/profs`** (onglet
 👥 Profs & accès) : valider une candidature, définir un mot de passe, suspendre
 un compte. Tout professeur qui y figure et n'est pas suspendu apparaît dans la
 fenêtre de création.

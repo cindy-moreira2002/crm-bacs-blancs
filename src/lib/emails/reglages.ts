@@ -3,7 +3,7 @@
  *
  * Une seule table (`email_reglages`, clé/valeur) et un seul jeu de valeurs
  * par défaut, dans ce fichier. Rien n'est éparpillé ailleurs : pour changer
- * « rappel la veille à 18 h », on change une ligne dans /admin/emails, et
+ * « rappel la veille à 18 h », on change une ligne dans /direction/emails, et
  * c'est fini.
  *
  * Si la table est vide ou injoignable, les valeurs par défaut s'appliquent :
@@ -32,6 +32,14 @@ export const REGLAGES_DEFAUT: Reglages = {
   lien_avis_url: '',
   paiement_instructions: '',
   paiement_montant_defaut: '29',
+  // Le compte de virement : vide par défaut, à remplir dans /direction/emails.
+  // Rien n'est écrit en dur ici — voir le commentaire du type `Reglages`.
+  paiement_iban: '',
+  paiement_titulaire: '',
+  paiement_bic: '',
+  // 10 minutes : le délai annoncé aux familles avant que la place soit rendue.
+  paiement_delai_minutes: 10,
+  paiement_expiration_active: 'oui',
   envoi_actif: 'oui',
   // Par défaut : « oui ». Tant que Cindy n'a pas décidé le contraire, aucun
   // message ne part sans son feu vert — c'est la règle depuis le 15/08/2026,
@@ -57,6 +65,7 @@ const NUMERIQUES = new Set<keyof Reglages>([
   'relance_interet_jours_apres',
   'quota_quotidien',
   'quota_marge',
+  'paiement_delai_minutes',
 ]);
 
 export function estReglage(cle: string): cle is keyof Reglages {
@@ -120,4 +129,15 @@ export function envoiDesactive(r: Reglages): boolean {
  */
 export function validationManuelle(r: Reglages): boolean {
   return String(r.validation_manuelle).trim().toLowerCase() === 'oui';
+}
+
+/**
+ * L'expiration annule-t-elle vraiment les inscriptions non réglées ?
+ *
+ * C'est le seul réglage de ce fichier qui ÉCRIT dans `inscriptions`. Sur
+ * « non », le délai reste affiché dans les messages mais aucune ligne n'est
+ * touchée : de quoi arrêter la mécanique en une saisie, sans redéploiement.
+ */
+export function expirationActive(r: Reglages): boolean {
+  return String(r.paiement_expiration_active).trim().toLowerCase() === 'oui';
 }

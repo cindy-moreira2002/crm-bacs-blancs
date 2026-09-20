@@ -267,7 +267,7 @@ export async function listerExamensBrevet(matiere: MatiereBrevet): Promise<
 /**
  * Charge un examen ET vérifie qu'il est bien du brevet, dans la bonne matière.
  *
- * C'est le garde-fou d'URL : ouvrir `/admin/brevet/francais/<id d'un examen de
+ * C'est le garde-fou d'URL : ouvrir `/direction/brevet/francais/<id d'un examen de
  * maths ou de bac>` ne montre rien.
  */
 export async function chargerExamenBrevet(

@@ -50,7 +50,7 @@ Les deux scripts sont rejouables : si une ligne affiche `0`, relance-les.
 
 ## Étape 2 — Le dossier des copies (1 minute)
 
-1. https://inscription.matineesdubac.fr/admin/bacs-blancs
+1. https://inscription.matineesdubac.fr/direction/bacs-blancs
 2. Encadré **🗝️ Réglages du jour J**, champ **📁 Dossier des copies** : colle
    l'adresse du dossier Drive → **Enregistrer**.
 
@@ -111,7 +111,7 @@ Maël de partager le classeur avec le compte utilisé.
 
 ### Où tu les retrouves
 
-https://inscription.matineesdubac.fr/admin/bacs-blancs → encadré
+https://inscription.matineesdubac.fr/direction/bacs-blancs → encadré
 **🗄️ Archive des classeurs de correction** → **Ouvrir ▼**. Une ligne par
 classeur : épreuve, matière, professeur, date de création, lien. Avec un filtre
 par matière ou par prof. Rien ne s'y supprime.
@@ -157,7 +157,7 @@ fini : attends, puis re-clique **Save Changes**.
 
 ### 4d. Poser les boutons dans les salles
 
-1. https://inscription.matineesdubac.fr/admin/discord
+1. https://inscription.matineesdubac.fr/direction/discord
 2. Sur le bac blanc concerné → **Préparer les salles**.
 
 **Résultat attendu** : « *N* boutons « ✋ Appeler le prof » posés. »

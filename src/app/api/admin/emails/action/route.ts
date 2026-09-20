@@ -1,5 +1,5 @@
 /**
- * POST /api/admin/emails/action — les boutons de la page /admin/emails.
+ * POST /api/admin/emails/action — les boutons de la page /direction/emails.
  *
  * Réservé à l'administratrice. Toutes les actions qui envoient réellement un
  * message exigent une confirmation explicite (`confirme: true`) envoyée par

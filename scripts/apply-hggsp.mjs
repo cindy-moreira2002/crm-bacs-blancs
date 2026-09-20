@@ -160,7 +160,7 @@ const taxonomie = TAXONOMIE.map((e) => ({
 /* ------------------------------------------------------------------ */
 /*  3. Grilles "rubrics" v2 (compatibilite avec tout l'existant)       */
 /*                                                                    */
-/*  Le depot, la page de relecture, l'inventaire /admin/correction et  */
+/*  Le depot, la page de relecture, l'inventaire /direction/correction et  */
 /*  generate-dossier lisent tous rubrics. On y ecrit la NOUVELLE       */
 /*  grille, avec le drapeau moteur qui envoie la copie vers            */
 /*  correct-copy-redigee. Aucun de ces ecrans n'a besoin de changer.   */

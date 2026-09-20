@@ -11,6 +11,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { nomCourt, normaliserCode, profParCode } from '@/lib/affiliation';
+import { lireCodePromo } from '@/lib/codesPromo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,9 +22,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ connu: false }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
-  const prof = await profParCode(code);
+  // Le répertoire des codes promo fait FOI : un code de prof retiré du
+  // répertoire ne donne plus rien, même si le professeur existe encore.
+  const [prof, promo] = await Promise.all([profParCode(code), lireCodePromo(code)]);
+
+  if (!promo) {
+    return NextResponse.json({ connu: false, code }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
   return NextResponse.json(
-    prof ? { connu: true, code, prof: nomCourt(prof) } : { connu: false, code },
+    {
+      connu: true,
+      code: promo.code,
+      // Le prénom du prof quand il y en a un, sinon le libellé du code
+      // (« Lycée Camille Sée », « Campagne rentrée ») : la famille doit
+      // reconnaître ce qu'elle a saisi, sans qu'on publie l'annuaire.
+      prof: prof ? nomCourt(prof) : null,
+      libelle: promo.libelle,
+      remise: Number(promo.remise_euros) || 0,
+    },
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }

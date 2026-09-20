@@ -30,7 +30,7 @@ import {
   type LigneInscription,
   type LigneSession,
 } from './donnees';
-import { verifierAvantEnvoi } from './planificateur';
+import { AUSSI_AU_PARENT, verifierAvantEnvoi } from './planificateur';
 import {
   annuler,
   etatQuota,
@@ -136,7 +136,12 @@ export async function traiterFile(options?: {
     };
   }
 
-  const contacts = await lireContacts(lot.map((l) => l.destinataire_email));
+  const contacts = await lireContacts([
+    ...lot.map((l) => l.destinataire_email),
+    // Les parents mis en copie : leur état (rebond, plainte) doit être connu
+    // ici, sinon on les ajoute en Cc sans jamais vérifier qu'on a le droit.
+    ...lot.map((l) => l.variables?.parent_email ?? '').filter(Boolean),
+  ]);
   const contexte = await chargerContexteLignes(lot);
 
   let envoyes = 0;
@@ -146,7 +151,7 @@ export async function traiterFile(options?: {
   let reportes = 0;
 
   for (const ligne of lot) {
-    const prepare = await preparer(ligne, reglages, contexte, contacts.get(ligne.destinataire_email));
+    const prepare = await preparer(ligne, reglages, contexte, contacts.get(ligne.destinataire_email), contacts);
 
     if (prepare.action === 'annuler') {
       if (!dryRun) await annuler(ligne.id, prepare.raison);
@@ -209,6 +214,7 @@ export async function traiterFile(options?: {
       html: prepare.html,
       texte: prepare.texte,
       desinscriptionUrl: prepare.desinscriptionUrl,
+      copie: prepare.copie,
       etiquettes: [ligne.type, ligne.categorie],
     });
 
@@ -254,7 +260,15 @@ export async function traiterFile(options?: {
 // --- Préparation d'un message ----------------------------------------
 
 type Preparation =
-  | { action: 'envoyer'; sujet: string; html: string; texte: string; desinscriptionUrl: string | null }
+  | {
+      action: 'envoyer';
+      sujet: string;
+      html: string;
+      texte: string;
+      desinscriptionUrl: string | null;
+      /** Adresses en copie visible : le parent, sur les messages de la famille. */
+      copie: string[];
+    }
   | { action: 'bloquer'; raison: string }
   | { action: 'annuler'; raison: string }
   | { action: 'reporter'; quand: Date; raison: string };
@@ -291,6 +305,8 @@ async function preparer(
   reglages: Reglages,
   ctx: ContexteLignes,
   contact: Contact | undefined,
+  /** Tous les contacts du lot, pour décider qui peut être mis en copie. */
+  contacts: Map<string, Contact>,
 ): Promise<Preparation> {
   // 1. Le destinataire accepte-t-il ce type de message ?
   const refus = refusDEnvoi(contact, ligne.categorie);
@@ -359,7 +375,37 @@ async function preparer(
     html: construit.html,
     texte: construit.texte,
     desinscriptionUrl,
+    copie: copiesDe(ligne, variables, contacts),
   };
+}
+
+/**
+ * Qui est mis en copie de ce message ?
+ *
+ * Le parent, sur les messages qui concernent la famille (`AUSSI_AU_PARENT`) —
+ * et seulement quand le message part à l'élève. Le parent ne reçoit plus de
+ * message séparé : il lit celui de son enfant, tel quel.
+ *
+ * Une adresse qui rebondit ou qui nous a signalés comme indésirables n'est pas
+ * mise en copie : l'e-mail de l'élève, lui, doit partir quand même.
+ */
+function copiesDe(
+  ligne: LigneEmail,
+  variables: Record<string, string>,
+  contacts: Map<string, Contact>,
+): string[] {
+  if (ligne.destinataire_role !== 'eleve') return [];
+  if (!AUSSI_AU_PARENT.includes(ligne.type as TypeEmail)) return [];
+  const parent = (variables.parent_email ?? '').trim();
+  if (!parent) return [];
+  // Contact inconnu = jamais écrit, donc jamais rebondi : on met en copie,
+  // exactement comme `refusDEnvoi` laisse passer un transactionnel vers une
+  // adresse dont on n'a pas de fiche. C'est aussi le cas des messages mis en
+  // file avant que `parent_email` existe : leur ligne figée ne portait pas
+  // l'adresse, elle n'a donc pas pu être préchargée.
+  const etat = contacts.get(parent.toLowerCase()) ?? contacts.get(parent);
+  if (etat?.bounce || etat?.plainte) return [];
+  return [parent];
 }
 
 function pick(o: Record<string, string>, cles: string[]): Record<string, string> {
@@ -419,13 +465,17 @@ export async function envoyerMaintenant(
   options?: { destinataireTest?: string },
 ): Promise<{ ok: boolean; message: string; sujet?: string }> {
   const reglages = await chargerReglages(true);
-  const contacts = await lireContacts([options?.destinataireTest ?? ligne.destinataire_email]);
+  const contacts = await lireContacts([
+    options?.destinataireTest ?? ligne.destinataire_email,
+    ligne.variables?.parent_email ?? '',
+  ]);
   const ctx = await chargerContexteLignes([ligne]);
   const prepare = await preparer(
     ligne,
     reglages,
     ctx,
     contacts.get((options?.destinataireTest ?? ligne.destinataire_email).toLowerCase()),
+    contacts,
   );
 
   if (prepare.action !== 'envoyer') {
@@ -448,6 +498,9 @@ export async function envoyerMaintenant(
     html: prepare.html,
     texte: prepare.texte,
     desinscriptionUrl: prepare.desinscriptionUrl,
+    // Un envoi de test ne met JAMAIS le vrai parent en copie : sinon
+    // « m'envoyer un test » expédierait le message à la famille.
+    copie: options?.destinataireTest ? [] : prepare.copie,
     etiquettes: [ligne.type, options?.destinataireTest ? 'test' : ligne.categorie],
   });
 
@@ -466,8 +519,17 @@ export async function previsualiser(
 ): Promise<{ ok: boolean; sujet?: string; html?: string; texte?: string; raison?: string; variables: Record<string, string> }> {
   const reglages = await chargerReglages();
   const ctx = await chargerContexteLignes([ligne]);
-  const contacts = await lireContacts([ligne.destinataire_email]);
-  const prepare = await preparer(ligne, reglages, ctx, contacts.get(ligne.destinataire_email));
+  const contacts = await lireContacts([
+    ligne.destinataire_email,
+    ligne.variables?.parent_email ?? '',
+  ]);
+  const prepare = await preparer(
+    ligne,
+    reglages,
+    ctx,
+    contacts.get(ligne.destinataire_email),
+    contacts,
+  );
 
   if (prepare.action !== 'envoyer') {
     return {

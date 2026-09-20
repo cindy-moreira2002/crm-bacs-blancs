@@ -1,5 +1,5 @@
 /**
- * GET /api/admin/emails/etat — tout ce qu'affiche la page /admin/emails.
+ * GET /api/admin/emails/etat — tout ce qu'affiche la page /direction/emails.
  *
  * Réservé à l'administratrice : la réponse contient des adresses d'élèves,
  * de parents et de professeurs.

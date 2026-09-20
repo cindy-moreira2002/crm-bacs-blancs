@@ -2,7 +2,7 @@
  * Le parcours d'un élève : la liste ordonnée de TOUS les e-mails qu'une
  * inscription est censée déclencher, de la confirmation à la demande d'avis.
  *
- * Ce fichier est la référence unique affichée dans `/admin/emails` (le tableau
+ * Ce fichier est la référence unique affichée dans `/direction/emails` (le tableau
  * « ce qui est prévu ») ET la colonne vertébrale de la vue « Par élève ».
  * Les deux ne peuvent donc pas diverger.
  *

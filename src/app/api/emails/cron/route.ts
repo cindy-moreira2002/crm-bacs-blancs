@@ -2,9 +2,15 @@
  * POST /api/emails/cron — le battement de cœur du système d'e-mails.
  *
  * Appelée toutes les 5 minutes par pg_cron (voir supabase/sql/29_emails_cron.sql).
- * Elle fait deux choses, dans cet ordre :
- *   1. planifier — relire l'état du site et mettre en file ce qui manque ;
- *   2. envoyer   — traiter les messages dus, en respectant la limite Brevo.
+ * Elle fait trois choses, dans cet ordre :
+ *   1. expirer   — annuler les inscriptions dont le délai de règlement est
+ *                  passé, et préparer le message d'annulation au parent ;
+ *   2. planifier — relire l'état du site et mettre en file ce qui manque ;
+ *   3. envoyer   — traiter les messages dus, en respectant la limite Brevo.
+ *
+ * L'expiration passe EN PREMIER : sinon le planificateur reprogrammerait,
+ * dans la même seconde, les rappels d'une inscription sur le point d'être
+ * annulée.
  *
  * Protégée par un secret partagé dans l'en-tête `x-emails-cron-secret`. Sans
  * lui, la route répond 401 : personne ne peut déclencher des envois depuis
@@ -16,6 +22,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { emailsManquant } from '@/lib/emails/config';
 import { synchroniserTout } from '@/lib/emails/declencheurs';
 import { traiterFile } from '@/lib/emails/envoi';
+import { expirerInscriptionsImpayees } from '@/lib/emails/expiration';
+import { veiller } from '@/lib/direction/veille';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,13 +53,35 @@ export async function POST(req: NextRequest) {
 
   const debut = Date.now();
   try {
+    // Une expiration qui échoue ne doit pas empêcher les e-mails de partir.
+    let expiration;
+    try {
+      expiration = await expirerInscriptionsImpayees();
+    } catch (err) {
+      console.error('⚠️ Expiration des inscriptions impayées', err);
+      expiration = { erreur: (err as Error).message };
+    }
+
     const planification = await synchroniserTout();
     const envoi = await traiterFile();
+
+    // 4. prévenir — la direction reçoit sur son téléphone ce qui vient
+    // d'apparaître (e-mail à valider, paiement en attente, copie bloquée).
+    // Isolée : une notification impossible ne doit pas colorer le cron en rouge.
+    let veille;
+    try {
+      veille = await veiller();
+    } catch (err) {
+      console.error('⚠️ Veille direction', err);
+      veille = { erreur: (err as Error).message };
+    }
 
     const resume = {
       ok: true,
       duree_ms: Date.now() - debut,
+      expiration,
       planification,
+      veille,
       envoi: {
         dryRun: envoi.dryRun,
         examines: envoi.examines,

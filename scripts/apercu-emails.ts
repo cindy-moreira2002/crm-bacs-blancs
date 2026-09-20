@@ -41,7 +41,13 @@ const VARIABLES: Record<string, string> = {
   payment_reference: 'VIR-2026-014',
   payment_status: 'en_attente',
   payment_status_label: 'en attente',
-  payment_instructions: 'Virement à effectuer sur le compte des Matinées du Bac — référence : A1B2C3D4.',
+  payment_instructions: 'Le virement peut être fait depuis n’importe quelle banque.',
+  // Un IBAN d'exemple : la documentation de la Banque de France utilise cette
+  // forme. Jamais le vrai — il vit dans `email_reglages`, pas dans le dépôt.
+  payment_iban: 'FR76 3000 6000 0112 3456 7890 189',
+  payment_holder: 'Les Matinées du Bac',
+  payment_bic: 'AGRIFRPP',
+  payment_deadline_minutes: '10',
   old_value: 'samedi 6 septembre 2026 à 9 h 00',
   new_value: 'samedi 20 septembre 2026 à 9 h 00',
   change_reason: 'Le professeur est empêché ce jour-là.',

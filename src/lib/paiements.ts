@@ -15,6 +15,7 @@
  * d'administration, rendue côté serveur, le connaît.
  */
 import { crmAdmin } from '@/lib/authProf';
+import { ibanPlausible } from '@/lib/paiementCompte';
 
 export type LignePaiement = {
   id: string;
@@ -45,8 +46,8 @@ export type EtatPaiements = {
   /** Prix d'une matinée, tel que réglé dans les e-mails. */
   montant_defaut: number;
   /**
-   * Les instructions de virement (IBAN, référence) sont-elles renseignées ?
-   * Sans elles, une relance de paiement part sans dire OÙ payer.
+   * L'IBAN de virement est-il renseigné ? Sans lui, la confirmation comme la
+   * relance partent sans dire OÙ payer.
    */
   instructions_pretes: boolean;
   lignes: LignePaiement[];
@@ -76,7 +77,10 @@ export async function chargerPaiements(): Promise<EtatPaiements> {
     ((reglages ?? []) as { cle: string; valeur: string | null }[]).find((r) => r.cle === cle)?.valeur ?? '';
 
   const montantDefaut = Number(reglage('paiement_montant_defaut')) || PRIX_DE_SECOURS;
-  const instructionsPretes = reglage('paiement_instructions').trim().length > 0;
+  // Ce qui rend une relance utile, c'est l'IBAN — pas le texte libre, qui n'est
+  // qu'un complément. Tant que `paiement_iban` est vide, l'e-mail de
+  // confirmation comme la relance partent sans dire où virer.
+  const instructionsPretes = ibanPlausible(reglage('paiement_iban'));
 
   const { data, error } = await db
     .from('inscriptions')

@@ -23,7 +23,7 @@
 //  question, et seul un professeur peut les lever.
 //
 //  Les valeurs ci-dessous sont une PROPOSITION a relire dans
-//  /admin/brevet/francais. Elles sont marquees `admin_instruction` en base,
+//  /direction/brevet/francais. Elles sont marquees `admin_instruction` en base,
 //  jamais `official_correction` : rien ici ne vient du ministere.
 //
 //  Reversible : `node scripts/proposer-bareme-brevet-francais.mjs --defaire`.

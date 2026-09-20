@@ -1,6 +1,6 @@
 /**
  * GET — la liste de ce qu'il reste à faire, matière par matière, en français
- * simple. Alimente /admin/a-faire.
+ * simple. Alimente /direction/a-faire.
  *
  * Réservé à l'administratrice : la réponse cite des identifiants de sujets et
  * l'état interne des barèmes.

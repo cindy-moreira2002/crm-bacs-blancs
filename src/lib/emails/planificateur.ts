@@ -27,8 +27,8 @@ import type {
 } from './donnees';
 import {
   libelleSession,
-  prenomDe,
   sessionAnnulee,
+  estEmail,
   sessionDe,
   variablesEleve,
   variablesPreinscription,
@@ -40,8 +40,14 @@ import type { CategorieEmail, RoleDestinataire, TypeEmail } from './config';
 /** Heure d'envoi des messages « à J-n » : 10 h, heure de Paris. */
 export const HEURE_ENVOI_JOURNEE = 10;
 
-/** Messages dont le parent reçoit aussi une copie, quand l'adresse existe. */
-const AUSSI_AU_PARENT: TypeEmail[] = [
+/**
+ * Messages où le parent est mis en COPIE (Cc) de l'e-mail de l'élève, quand
+ * son adresse est connue. Un seul message part, adressé à l'élève.
+ *
+ * Exporté parce que c'est le moteur d'envoi qui pose le Cc : la décision et
+ * la liste ne doivent exister qu'à un seul endroit.
+ */
+export const AUSSI_AU_PARENT: TypeEmail[] = [
   'inscription_confirmee',
   'paiement_confirme',
   'paiement_attente',
@@ -49,12 +55,6 @@ const AUSSI_AU_PARENT: TypeEmail[] = [
   'session_annulee',
   'correction_disponible',
 ];
-
-const EMAIL_VALIDE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-function estEmail(v: string | null | undefined): boolean {
-  return Boolean(v && EMAIL_VALIDE.test(v.trim()));
-}
 
 /** Un instant précis dans la journée d'une date « YYYY-MM-DD ». */
 function instantDuJour(dateISO: string, heures: number, minutes = 0): Date | null {
@@ -183,6 +183,10 @@ export function planifierEleve(
     session,
     instructionsPaiement: r.paiement_instructions,
     montantDefaut: r.paiement_montant_defaut,
+    ibanPaiement: r.paiement_iban,
+    titulairePaiement: r.paiement_titulaire,
+    bicPaiement: r.paiement_bic,
+    delaiPaiementMinutes: r.paiement_delai_minutes,
     lienAvis: r.lien_avis_url,
   });
 
@@ -209,16 +213,9 @@ export function planifierEleve(
       destinataire_role: 'eleve' as RoleDestinataire,
       cle_idempotence: `${type}:inscription:${i.id}${suffixeCle}`,
     });
-    if (AUSSI_AU_PARENT.includes(type) && estEmail(i.email_parent)) {
-      taches.push({
-        ...base,
-        destinataire_email: i.email_parent as string,
-        destinataire_nom: null,
-        destinataire_role: 'parent' as RoleDestinataire,
-        variables: { ...base.variables, first_name: prenomDe(i.nom) || 'à vous' },
-        cle_idempotence: `${type}:inscription:${i.id}${suffixeCle}:parent`,
-      });
-    }
+    // Le parent n'a plus son propre message : il est mis en COPIE de celui de
+    // l'élève, par le moteur d'envoi (`AUSSI_AU_PARENT` + `parent_email`).
+    // Un seul e-mail part, rédigé pour l'élève, et la famille le lit ensemble.
   };
 
   // 1. Confirmation d'inscription — jamais deux fois : l'ancien drapeau
@@ -436,6 +433,10 @@ export function tachesChangementSession(params: {
         session: s,
         instructionsPaiement: params.reglages.paiement_instructions,
         montantDefaut: params.reglages.paiement_montant_defaut,
+        ibanPaiement: params.reglages.paiement_iban,
+        titulairePaiement: params.reglages.paiement_titulaire,
+        bicPaiement: params.reglages.paiement_bic,
+        delaiPaiementMinutes: params.reglages.paiement_delai_minutes,
         ancienneValeur: ancienne,
         nouvelleValeur: nouvelle,
         motif: params.motif,
@@ -460,16 +461,8 @@ export function tachesChangementSession(params: {
       cle_idempotence: `${typeEleve}:inscription:${i.id}:${empreinte}`,
     });
 
-    if (estEmail(i.email_parent)) {
-      taches.push({
-        ...commun,
-        destinataire_email: i.email_parent as string,
-        destinataire_nom: null,
-        destinataire_role: 'parent',
-        variables: { ...variables, first_name: prenomDe(i.nom) || 'à vous' },
-        cle_idempotence: `${typeEleve}:inscription:${i.id}:${empreinte}:parent`,
-      });
-    }
+    // Pas de second message au parent : `variables.parent_email` le met en
+    // copie de celui de l'élève au moment de l'envoi.
   }
 
   for (const { prof, remuneration } of params.profs) {

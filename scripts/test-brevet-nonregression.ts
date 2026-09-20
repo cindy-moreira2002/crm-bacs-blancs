@@ -395,7 +395,7 @@ test('5.1', 'les routes du bac existent toujours', () => {
     'src/app/api/admin/bareme/route.ts',
     'src/app/api/admin/bareme/[examId]/route.ts',
     'src/app/api/admin/bareme/[examId]/bareme/route.ts',
-    'src/app/admin/bareme/page.tsx',
+    'src/app/direction/bareme/page.tsx',
   ]) {
     assert.ok(lire(f).length > 0, `${f} manquant`);
   }

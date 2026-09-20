@@ -9,7 +9,7 @@
  *
  * Ce que le script NE fait PAS : marquer le message comme envoyé. La ligne
  * reste programmée pour son vrai destinataire — exactement comme le bouton
- * « test » de /admin/emails, dont il emprunte le chemin de code.
+ * « test » de /direction/emails, dont il emprunte le chemin de code.
  *
  * Nécessite BREVO_API_KEY dans .env.local (jamais dans le dépôt).
  */

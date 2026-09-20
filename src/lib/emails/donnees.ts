@@ -21,6 +21,14 @@ import {
 import { lienSalon } from '@/lib/discord/config';
 import { dateCourte, dateLongue, formaterHeure, heureMoins } from './temps';
 import type { Variables } from './modeles';
+import { construireCompte, referenceVirement } from '@/lib/paiementCompte';
+
+const EMAIL_VALIDE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** Une adresse est-elle exploitable ? Seul contrôle de forme, avant tout envoi. */
+export function estEmail(v: string | null | undefined): boolean {
+  return Boolean(v && EMAIL_VALIDE.test(v.trim()));
+}
 
 // --- Types des lignes -------------------------------------------------
 
@@ -170,6 +178,12 @@ export type ContexteEleve = {
   /** Réglages utiles au contenu. */
   instructionsPaiement?: string;
   montantDefaut?: string;
+  /** Le compte de virement, tel que saisi dans /direction/emails. */
+  ibanPaiement?: string;
+  titulairePaiement?: string;
+  bicPaiement?: string;
+  /** Minutes laissées à la famille pour régler. */
+  delaiPaiementMinutes?: number;
   lienAvis?: string;
   /** Pour les e-mails de changement. */
   ancienneValeur?: string;
@@ -206,6 +220,12 @@ export function variablesEleve(c: ContexteEleve): Variables {
     payment_status_label: libellePaiement(i.paiement_statut),
   };
 
+  // L'adresse du parent voyage avec les variables, mais elle ne s'affiche
+  // jamais dans le message : c'est le moteur d'envoi qui la met en copie
+  // (Cc) des e-mails qui concernent la famille. Avant, le parent recevait un
+  // second exemplaire, adressé « à vous » — deux messages pour un seul fait.
+  if (estEmail(i.email_parent)) v.parent_email = (i.email_parent as string).trim();
+
   if (date) {
     v.session_date = dateLongue(date) ?? date;
     v.session_date_court = dateCourte(date) ?? date;
@@ -229,8 +249,29 @@ export function variablesEleve(c: ContexteEleve): Variables {
 
   if (i.paiement_montant != null) v.amount = String(i.paiement_montant);
   else if (c.montantDefaut) v.amount = c.montantDefaut;
-  if (i.paiement_reference) v.payment_reference = i.paiement_reference;
   if (c.instructionsPaiement) v.payment_instructions = c.instructionsPaiement;
+
+  // Le compte de virement. `construireCompte` est le même code que celui de
+  // l'écran affiché juste après l'inscription : l'IBAN est groupé par 4 des
+  // deux côtés, et le délai annoncé est le même. Rien n'est publié tant que
+  // l'IBAN n'est pas plausible — un cadre de virement sans compte ferait
+  // perdre du temps à la famille.
+  const compte = construireCompte({
+    iban: c.ibanPaiement,
+    titulaire: c.titulairePaiement,
+    bic: c.bicPaiement,
+    montant: v.amount,
+    reference: i.paiement_reference || referenceVirement(i.nom ?? '', i.id),
+    delaiMinutes: c.delaiPaiementMinutes,
+    precisions: c.instructionsPaiement,
+  });
+  v.payment_reference = compte.reference;
+  v.payment_deadline_minutes = String(compte.delaiMinutes);
+  if (compte.pret) {
+    v.payment_iban = compte.iban;
+    if (compte.titulaire) v.payment_holder = compte.titulaire;
+    if (compte.bic) v.payment_bic = compte.bic;
+  }
   if (c.lienAvis) v.survey_url = c.lienAvis;
   if (c.ancienneValeur) v.old_value = c.ancienneValeur;
   if (c.nouvelleValeur) v.new_value = c.nouvelleValeur;

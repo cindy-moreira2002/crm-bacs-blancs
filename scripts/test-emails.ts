@@ -171,15 +171,21 @@ async function main() {
   });
 
   // 2
-  await test('02', 'Inscription validée → confirmation à l’élève ET au parent', () => {
+  await test('02', 'Inscription validée → UN message à l’élève, le parent en copie', () => {
     const taches = planifier(contexte({ inscriptions: [inscription()] }), {
       reglages: REGLAGES,
       maintenant: MAINTENANT,
     });
     const confirmations = taches.filter((t) => t.type === 'inscription_confirmee');
-    assert.equal(confirmations.length, 2, 'il faut une confirmation élève + une parent');
-    const roles = confirmations.map((c) => c.destinataire_role).sort();
-    assert.deepEqual(roles, ['eleve', 'parent']);
+    // Un seul message, adressé à l'élève : le parent le reçoit en copie (Cc),
+    // posée par le moteur d'envoi à partir de `variables.parent_email`.
+    assert.equal(confirmations.length, 1, 'un seul message doit être planifié');
+    assert.equal(confirmations[0].destinataire_role, 'eleve');
+    assert.equal(
+      confirmations[0].variables.parent_email,
+      inscription().email_parent,
+      'l’adresse du parent doit voyager avec le message, pour le mettre en copie',
+    );
     const construit = construireEmail('inscription_confirmee', confirmations[0].variables);
     assert.ok(construit.ok, 'ok' in construit && !construit.ok ? construit.raison : '');
   });
@@ -468,8 +474,12 @@ async function main() {
     const clesB = b.map((t) => t.cle_idempotence).sort();
     assert.deepEqual(clesA, clesB, 'la planification doit être stable');
     assert.equal(new Set(clesA).size, clesA.length, 'aucune clé ne doit être en double dans un même lot');
-    // Élève et parent ont bien des clés distinctes.
-    assert.ok(clesA.some((c) => c.endsWith(':parent')));
+    // Plus aucune clé « :parent » : le parent n'a plus de message à lui, il
+    // est mis en copie de celui de l'élève.
+    assert.ok(
+      !clesA.some((c) => c.endsWith(':parent')),
+      'le parent ne doit plus avoir de message séparé',
+    );
   });
 
   // 15
@@ -742,6 +752,107 @@ async function main() {
     assert.ok(texte.includes('Bonjour Léa'), 'les balises doivent disparaître');
     assert.ok(texte.includes('- un'));
     assert.ok(texte.includes('https://exemple.fr/x'), 'le lien doit être lisible en texte');
+  });
+
+  // --- Paiement : IBAN, délai, expiration --------------------------------
+
+  // 29
+  await test('29', 'L’IBAN réglé apparaît dans la confirmation, avec la référence', () => {
+    const r: Reglages = {
+      ...REGLAGES,
+      paiement_iban: 'FR7630006000011234567890189',
+      paiement_titulaire: 'Les Matinées du Bac',
+      paiement_montant_defaut: '29',
+    };
+    const taches = planifier(contexte({ inscriptions: [inscription()] }), {
+      reglages: r,
+      maintenant: MAINTENANT,
+    });
+    const t = taches.find((x) => x.type === 'inscription_confirmee')!;
+    const c = construireEmail('inscription_confirmee', t.variables);
+    assert.ok(c.ok, 'ok' in c && !c.ok ? c.raison : '');
+    if (!c.ok) return;
+    // Groupé par 4, comme sur un RIB : c'est ainsi qu'on le recopie.
+    assert.ok(c.html.includes('FR76 3000 6000 0112 3456 7890 189'), 'l’IBAN doit être lisible');
+    assert.ok(c.html.includes('Les Matinées du Bac'), 'le titulaire doit apparaître');
+    assert.ok(
+      c.html.includes('LEA MARTIN'),
+      'la référence de virement doit porter le nom de l’élève',
+    );
+    assert.ok(
+      c.html.includes('ne sera pas enregistrée'),
+      'l’avertissement de paiement doit être présent',
+    );
+    assert.ok(c.html.includes('10 minutes'), 'le délai doit être annoncé');
+  });
+
+  // 30
+  await test('30', 'Sans IBAN réglé, aucun cadre de virement vide n’est affiché', () => {
+    const taches = planifier(contexte({ inscriptions: [inscription()] }), {
+      reglages: REGLAGES, // paiement_iban vide
+      maintenant: MAINTENANT,
+    });
+    const t = taches.find((x) => x.type === 'inscription_confirmee')!;
+    const c = construireEmail('inscription_confirmee', t.variables);
+    assert.ok(c.ok);
+    if (!c.ok) return;
+    assert.ok(!c.html.includes('IBAN'), 'pas de ligne IBAN sans IBAN');
+    assert.ok(
+      c.html.includes('message séparé'),
+      'le message doit dire que les coordonnées arrivent',
+    );
+  });
+
+  // 31
+  await test('31', 'Une inscription réglée n’affiche ni bloc rouge ni IBAN', () => {
+    const r: Reglages = { ...REGLAGES, paiement_iban: 'FR7630006000011234567890189' };
+    const i = inscription({ paiement_statut: 'paye' });
+    const taches = planifier(contexte({ inscriptions: [i] }), {
+      reglages: r,
+      maintenant: MAINTENANT,
+    });
+    const t = taches.find((x) => x.type === 'inscription_confirmee')!;
+    const c = construireEmail('inscription_confirmee', t.variables);
+    assert.ok(c.ok);
+    if (!c.ok) return;
+    assert.ok(!c.html.includes('ne sera pas enregistrée'), 'rien à réclamer à qui a payé');
+    assert.ok(!c.html.includes('FR76'), 'pas d’IBAN quand c’est déjà réglé');
+    assert.ok(c.sujet.startsWith('Inscription confirmée'), 'pas d’alerte dans le sujet');
+  });
+
+  // 32
+  await test('32', 'Le message d’expiration s’adresse au parent et rappelle l’IBAN', () => {
+    const c = construireEmail('inscription_expiree', {
+      student_name: 'Léa Martin',
+      subject_name: 'Français',
+      inscription_url: 'https://inscription.matineesdubac.fr/inscription',
+      payment_iban: 'FR76 3000 6000 0112 3456 7890 189',
+      payment_reference: 'LEA MARTIN A1B2C3D4',
+      payment_deadline_minutes: '10',
+      amount: '29',
+    });
+    assert.ok(c.ok, 'ok' in c && !c.ok ? c.raison : '');
+    if (!c.ok) return;
+    assert.ok(c.html.includes('annulée'), 'l’annulation doit être dite');
+    assert.ok(c.html.includes('FR76 3000 6000'), 'l’IBAN doit être rappelé');
+    assert.ok(c.html.includes('Léa Martin'), 'le parent doit savoir de quel enfant il s’agit');
+  });
+
+  // 33
+  await test('33', 'La confirmation sépare le salon d’appel et l’espace élève', () => {
+    const taches = planifier(contexte({ inscriptions: [inscription()] }), {
+      reglages: REGLAGES,
+      maintenant: MAINTENANT,
+    });
+    const t = taches.find((x) => x.type === 'inscription_confirmee')!;
+    const c = construireEmail('inscription_confirmee', t.variables);
+    assert.ok(c.ok);
+    if (!c.ok) return;
+    assert.ok(c.html.includes('salon d’appel'), 'un encadré pour le salon');
+    assert.ok(c.html.includes('espace élève'), 'un encadré pour l’espace élève');
+    assert.ok(c.html.includes('sujet de l’épreuve'), 'le sujet doit être annoncé dans l’espace');
+    // Aucun service de visio autre que Discord ne doit réapparaître.
+    assert.ok(!/jitsi|whereby|meet\.google|zoom\.us/i.test(c.html), 'Discord et rien d’autre');
   });
 
   // --- Bilan ------------------------------------------------------------

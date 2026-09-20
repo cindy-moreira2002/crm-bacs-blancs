@@ -26,7 +26,7 @@ export const LABELS_COURTS_BREVET: Record<MatiereBrevetUI, string> = {
   brevet_mathematiques: 'Mathématiques',
 };
 
-/** Segment d'URL de chaque matière : /admin/brevet/<segment>. */
+/** Segment d'URL de chaque matière : /direction/brevet/<segment>. */
 export const SEGMENT_MATIERE: Record<MatiereBrevetUI, string> = {
   brevet_francais: 'francais',
   brevet_mathematiques: 'mathematiques',

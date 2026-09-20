@@ -9,7 +9,7 @@ const geistSans = Geist({
 
 export const metadata: Metadata = {
   title: "Les Matinées du Bac",
-  description: "Bacs blancs et brevets blancs corrigés : inscriptions, espace élève et espace professeur.",
+  description: "Bacs blancs corrigés : inscriptions, espace élève et espace professeur.",
 };
 
 export default function RootLayout({

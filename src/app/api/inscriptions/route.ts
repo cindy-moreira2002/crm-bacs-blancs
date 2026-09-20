@@ -1,11 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { normaliserCode, profParCode } from '@/lib/affiliation';
+import { evaluerCode, prixApresRemise } from '@/lib/codesPromo';
 import { codeCopie } from '@/lib/codeCopie';
 import { lienSalon } from '@/lib/discord/config';
 import { apresInscription } from '@/lib/emails/declencheurs';
 import { gardeApiProfDetail } from '@/lib/gardeAcces';
 import { eleveConnecte } from '@/lib/authEleve';
+import { chargerReglages } from '@/lib/emails/reglages';
+import {
+  construireCompte,
+  referenceVirement,
+  type CompteVirement,
+} from '@/lib/paiementCompte';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +43,41 @@ async function trouverSession(matiere: string, date: string | null): Promise<str
   return data.find((s) => normMatiere(s.matiere) === cible)?.id ?? null;
 }
 
+/**
+ * Les coordonnées de virement à montrer à la famille, juste après
+ * l'inscription. Rien de secret : c'est ce qui figure sur un RIB, et c'est
+ * déjà ce que l'e-mail de confirmation contient.
+ *
+ * En cas de pépin (réglages illisibles), on renvoie `null` : l'écran dira
+ * alors que les coordonnées arrivent par e-mail, plutôt que d'afficher un
+ * cadre de virement vide.
+ */
+async function compteVirementPublic(
+  inscription: { id?: string } | null,
+  nom: string,
+  montant: number,
+): Promise<CompteVirement | null> {
+  try {
+    const r = await chargerReglages();
+    const compte = construireCompte({
+      iban: r.paiement_iban,
+      titulaire: r.paiement_titulaire,
+      bic: r.paiement_bic,
+      // Le prix RÉELLEMENT dû par cette famille, remise déduite — pas le
+      // tarif public. Deux écrans qui n'annoncent pas le même montant, c'est
+      // un virement du mauvais montant et un rapprochement à la main.
+      montant: String(montant),
+      reference: referenceVirement(nom, inscription?.id ?? ''),
+      delaiMinutes: r.paiement_delai_minutes,
+      precisions: r.paiement_instructions,
+    });
+    return compte.pret ? compte : null;
+  } catch (err) {
+    console.error('⚠️ Coordonnées de virement indisponibles :', err);
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const {
@@ -46,12 +88,39 @@ export async function POST(req: NextRequest) {
       matiere,
       date_epreuve,
       code_affiliation: codeSaisi,
+      engagement,
     } = await req.json();
 
     if (!nom || !email || !email_parent || !telephone || !matiere) {
       return NextResponse.json(
         { error: 'Tous les champs sont requis' },
         { status: 400 }
+      );
+    }
+
+    // L'élève s'inscrit à un ÉVÉNEMENT daté, pas à un service. Sans date, il
+    // n'y a pas de place tenue, pas de prof affecté, pas de salle : le
+    // navigateur le refuse déjà, le serveur doit le refuser aussi — une
+    // inscription sans date se retrouvait rattachée à aucune session et
+    // n'apparaissait dans aucun bac blanc.
+    if (!date_epreuve) {
+      return NextResponse.json(
+        { error: 'Choisis la date de la matinée à laquelle tu t’inscris.' },
+        { status: 400 },
+      );
+    }
+
+    // Engagement de présence : c'est la contrepartie du « pas de
+    // remboursement en cas d'absence ». Il doit être coché, et on garde la
+    // trace de l'acceptation côté serveur — pas seulement une case cochée
+    // dans un navigateur.
+    if (engagement !== true) {
+      return NextResponse.json(
+        {
+          error:
+            'Il faut accepter l’engagement de présence : la place est réservée à ton nom et n’est pas remboursée en cas d’absence.',
+        },
+        { status: 400 },
       );
     }
 
@@ -63,6 +132,15 @@ export async function POST(req: NextRequest) {
     // ligne de `sessions_bacs_blancs` — c'est exactement ce que l'élève a choisi
     // dans le formulaire, qui lit désormais la même table.
     const sessionId = await trouverSession(matiere, date_epreuve);
+    if (!sessionId) {
+      // La date envoyée ne correspond à aucune matinée ouverte dans cette
+      // matière : formulaire resté ouvert pendant qu'on fermait la session,
+      // ou date bricolée. Dans les deux cas, il n'y a pas de place à tenir.
+      return NextResponse.json(
+        { error: 'Cette matinée n’est plus ouverte à l’inscription. Choisis une autre date.' },
+        { status: 409 },
+      );
+    }
 
     // Le code du prof qui a recommandé les Matinées. On ne garde QUE le code
     // d'un prof réellement en activité : un code inventé ou recopié de travers
@@ -71,15 +149,34 @@ export async function POST(req: NextRequest) {
     const parrain = await profParCode(codeSaisi);
     const codeAffiliation = parrain ? normaliserCode(parrain.code_affiliation) : null;
 
+    // Le code promo : 10 € de remise, une seule fois par élève. Un code qui
+    // n'est pas au répertoire est REFUSÉ — avant, il était ignoré en silence
+    // et la famille croyait avoir une remise qu'elle n'avait pas.
+    const verdict = await evaluerCode(codeSaisi, {
+      email,
+      nom,
+      emailParent: email_parent ?? null,
+    });
+    if (verdict.etat === 'inconnu') {
+      return NextResponse.json({ error: verdict.message, code_refuse: verdict.code }, { status: 400 });
+    }
+
+    const reglagesPrix = await chargerReglages();
+    const montantPlein = Number(reglagesPrix.paiement_montant_defaut) || 0;
+    const montantDu = prixApresRemise(montantPlein, verdict.remise);
+
     const row = {
       nom,
       email,
       email_parent,
       telephone,
       matiere,
-      date_epreuve: date_epreuve || null,
+      date_epreuve,
+      paiement_montant: montantDu,
       ...(sessionId ? { session_id: sessionId } : {}),
       ...(codeAffiliation ? { code_affiliation: codeAffiliation } : {}),
+      ...(verdict.code ? { code_promo: verdict.code } : {}),
+      ...(verdict.remise > 0 ? { remise_euros: verdict.remise } : {}),
     };
     let { data, error } = await supabase.from('inscriptions').insert([row]).select();
 
@@ -96,6 +193,18 @@ export async function POST(req: NextRequest) {
       const { session_id: _sansSession, ...rowSansSession } = row as typeof row & { session_id?: string };
       void _sansSession;
       ({ data, error } = await supabase.from('inscriptions').insert([rowSansSession]).select());
+    }
+
+    // Repli si les colonnes du script 53 n'existent pas encore : l'inscription
+    // passe au prix plein plutôt que d'échouer. La remise sera à reprendre à
+    // la main — c'est visible dans /direction/paiements.
+    if (error && /(code_promo|remise_euros)/.test(error.message || '')) {
+      const { code_promo: _p, remise_euros: _r, ...rowSansPromo } = row as typeof row & {
+        code_promo?: string;
+        remise_euros?: number;
+      };
+      void _p; void _r;
+      ({ data, error } = await supabase.from('inscriptions').insert([rowSansPromo]).select());
     }
 
     // Idem pour code_affiliation (script 09/47 non joué) : on préfère perdre
@@ -158,7 +267,29 @@ export async function POST(req: NextRequest) {
       console.warn('⚠️ GMAIL_WEBAPP_URL manquant en .env');
     }
 
-    return NextResponse.json({ success: true, data }, { status: 201 });
+    // L'écran de confirmation a besoin de savoir OÙ virer, tout de suite :
+    // l'e-mail peut mettre quelques minutes, et le délai de règlement court
+    // dès maintenant. Les mêmes valeurs que celles de l'e-mail, construites
+    // par le même code (`construireCompte`) — pas de seconde vérité.
+    const paiement = await compteVirementPublic(nouvelleInscription ?? null, nom, montantDu);
+
+    return NextResponse.json(
+      {
+        success: true,
+        data,
+        paiement,
+        // Ce que la famille doit lire à l'écran : le prix plein, la remise
+        // obtenue (ou pourquoi elle ne l'a pas), et ce qu'elle doit virer.
+        prix: {
+          plein: montantPlein,
+          remise: verdict.remise,
+          du: montantDu,
+          code: verdict.etat === 'aucun' ? null : verdict.code,
+          etat: verdict.etat,
+        },
+      },
+      { status: 201 },
+    );
   } catch (err) {
     console.error('❌ Inscription error:', err);
     return NextResponse.json(

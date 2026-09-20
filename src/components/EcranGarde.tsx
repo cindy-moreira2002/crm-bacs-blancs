@@ -3,8 +3,8 @@ import type { Garde } from '@/lib/gardeAcces';
 
 /**
  * Les deux écrans de refus, mutualisés — « non configuré » et « accès réservé ».
- * Reprend au pixel près ce qu'affichaient déjà /admin/emails et
- * /admin/correction, pour que le refus soit identique partout.
+ * Reprend au pixel près ce qu'affichaient déjà /direction/emails et
+ * /direction/correction, pour que le refus soit identique partout.
  *
  * Le cas `anonyme` n'est pas géré ici : il se traite par `redirect()` dans la
  * page, avant tout rendu.

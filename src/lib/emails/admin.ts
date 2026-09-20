@@ -1,5 +1,5 @@
 /**
- * Ce que voit l'administratrice sur /admin/emails.
+ * Ce que voit l'administratrice sur /direction/emails.
  *
  * ⚠️ SERVEUR UNIQUEMENT — la réponse contient des adresses d'élèves et de
  * professeurs. La route qui l'expose vérifie `role === 'admin'`.

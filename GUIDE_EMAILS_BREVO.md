@@ -25,7 +25,7 @@ rétroactivement aux 16 inscriptions déjà en base.
 | Webhook Brevo | `src/app/api/emails/webhook-brevo/route.ts` |
 | Désinscription | `src/app/api/emails/desinscription/route.ts` + `/desinscription` |
 | Demandes du site vitrine | `src/app/api/preinscriptions/route.ts` |
-| **Administration** | `/admin/emails` |
+| **Administration** | `/direction/emails` |
 | Tests hors ligne (28) | `scripts/test-emails.ts` |
 | Aperçu de tous les modèles | `scripts/apercu-emails.ts` |
 | Migrations | `supabase/sql/28_emails_brevo.sql`, `29_emails_cron.sql` |
@@ -195,7 +195,7 @@ secret voyage dans une URL, et un `+` y serait lu comme un espace.
 
 **Comment savoir que ça marche** : au prochain e-mail parti, la ligne passe de
 « parti » à « reçu » dans le tableau de bord Direction, et de `sent` à
-`delivered` dans `/admin/emails` → onglet **Messages**.
+`delivered` dans `/direction/emails` → onglet **Messages**.
 
 ### Étape 7 — Arrêter l'ancien système Gmail (1 min, IMPORTANT)
 
@@ -258,7 +258,7 @@ Pour que ce soit en ligne, il faut **redéployer le projet
 ### Le tableau de bord
 
 Connecte-toi sur `/espace-prof` avec ton compte administratrice, puis clique sur
-**📬 E-mails** (ou va directement sur `/admin/emails`).
+**📬 E-mails** (ou va directement sur `/direction/emails`).
 
 Tu y trouves :
 
@@ -282,10 +282,10 @@ défaut. Tant qu'il est sur `oui` :
 - le moteur automatique, lui, n'envoie **plus rien** — il se contente de
   simuler et de le dire dans son compte rendu ;
 - chaque message attend le bouton **« Valider et envoyer »**, dans
-  `/admin/emails` → onglet **Messages**, ligne par ligne. Le bouton **« Voir »**
+  `/direction/emails` → onglet **Messages**, ligne par ligne. Le bouton **« Voir »**
   juste à côté affiche l'e-mail exact avant décision ;
 - un bandeau orange rappelle combien de messages attendent ton feu vert, sur
-  `/admin/emails` comme sur le tableau de bord Direction.
+  `/direction/emails` comme sur le tableau de bord Direction.
 
 Pour revenir à l'envoi automatique un jour : onglet **Réglages**, passe
 « Je valide chaque e-mail avant qu'il parte » sur **`non`**.
@@ -308,7 +308,7 @@ préparé et visible, mais rien ne part. Remets-le sur `oui` quand tu es prête.
 2. Dans la liste, prends un message et clique **Test** : la copie arrive dans ta
    boîte, avec `[TEST]` devant l'objet.
 3. Fais une inscription de bout en bout avec **ta propre adresse** sur
-   `/inscription`. Tu dois voir apparaître la confirmation dans `/admin/emails`
+   `/inscription`. Tu dois voir apparaître la confirmation dans `/direction/emails`
    dans les 5 minutes, puis la recevoir.
 
 ### Vérifier les échecs
@@ -366,7 +366,7 @@ pour les campagnes commerciales) :
 
 ## 5. Les messages prévus et leurs délais
 
-Tous les délais sont modifiables dans `/admin/emails` → onglet **Réglages**.
+Tous les délais sont modifiables dans `/direction/emails` → onglet **Réglages**.
 
 ### Élèves (et parents quand l'adresse existe)
 

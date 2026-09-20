@@ -179,7 +179,7 @@ const DEPOSER = readFileSync(
   'utf8',
 );
 const ADMIN_SUJETS = readFileSync(
-  join(process.cwd(), 'src/app/admin/bacs-blancs/TableauBacsBlancs.tsx'),
+  join(process.cwd(), 'src/app/direction/bacs-blancs/TableauBacsBlancs.tsx'),
   'utf8',
 );
 const LIB = readFileSync(join(process.cwd(), 'src/lib/bacsBlancs.ts'), 'utf8');

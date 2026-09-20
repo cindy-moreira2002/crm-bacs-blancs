@@ -108,7 +108,7 @@ function citation(texte: string): string | null {
 /**
  * L'adresse exacte de l'objet concerné, dans le pilotage.
  *
- * Un lien vers `/admin/correction` tout court ramène en haut d'une page de
+ * Un lien vers `/direction/correction` tout court ramène en haut d'une page de
  * trois écrans : il faut ensuite retrouver soi-même la ligne dont parlait la
  * tâche. Les paramètres disent à la page quoi ouvrir, où défiler et quoi
  * surligner.
@@ -119,12 +119,12 @@ function lienPilotage(matiere: string | undefined, cible: CibleDiag | undefined)
   if (cible?.correction_id) p.set('copie', cible.correction_id);
   if (cible?.sujet_id) p.set('sujet', cible.sujet_id);
   const q = p.toString();
-  return q ? `/admin/correction?${q}` : '/admin/correction';
+  return q ? `/direction/correction?${q}` : '/direction/correction';
 }
 
 /** La page d'un bac blanc précis, quand le diagnostic en désigne un. */
 function lienBareme(cible: CibleDiag | undefined): string {
-  return cible?.exam_id ? `/admin/bareme/${cible.exam_id}` : '/admin/bareme';
+  return cible?.exam_id ? `/direction/bareme/${cible.exam_id}` : '/direction/bareme';
 }
 
 function traduire(a: AnomalieGlobale, i: number): Tache {
@@ -471,7 +471,7 @@ function tachesMoteur(m: MatiereEtat): Tache[] {
           : 'Le barème existe : il reste à le verrouiller puis à ouvrir les corrections.',
         acteur: 'humain',
         bloquant: ouverte,
-        ou: { label: 'Ouvrir les barèmes', href: '/admin/bareme' },
+        ou: { label: 'Ouvrir les barèmes', href: '/direction/bareme' },
       },
     ];
   }

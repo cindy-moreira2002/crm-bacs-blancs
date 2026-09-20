@@ -207,15 +207,15 @@ export function TableauDeBordProf({
               {(prof.matieres ?? []).join(' · ') || 'Aucune matière renseignée'}
             </p>
           </div>
-          {/* Les consoles d'administration ne vivent plus ici : elles sont
-              regroupées dans la vue Direction, qui les explique une par une. */}
+          {/* Les consoles d'administration ne vivent plus ici : elles ont leur
+              propre espace, /direction, partagé par l'équipe de direction. */}
           <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            {prof.role !== 'admin' && (
-              <button onClick={seDeconnecter}
-                className="text-xs text-purple-200 hover:text-white underline">
-                Se déconnecter
-              </button>
-            )}
+            <button
+              onClick={seDeconnecter}
+              className="text-xs text-purple-200 hover:text-white underline"
+            >
+              Se déconnecter
+            </button>
           </div>
         </div>
 

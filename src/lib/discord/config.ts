@@ -27,8 +27,11 @@ export const ROLE_PROF_ID = process.env.DISCORD_ROLE_PROF_ID ?? '';
 /**
  * Variables absentes. Tant que la liste n'est pas vide, l'intégration est
  * considérée comme éteinte : les boutons Discord disparaissent des espaces et
- * le salon Jitsi historique reprend la main. C'est aussi la procédure de
- * désactivation propre — supprimer les variables suffit.
+ * aucun lien d'appel n'est proposé. C'est aussi la procédure de désactivation
+ * propre — supprimer les variables suffit.
+ *
+ * Il n'existe plus d'autre salon que Discord : l'ancien service de visio a été
+ * retiré, et rien ne doit le réintroduire en secours.
  */
 export function discordManquant(): string[] {
   const manquants: string[] = [];

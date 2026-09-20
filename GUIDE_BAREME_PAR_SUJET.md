@@ -127,7 +127,7 @@ Ce que le code applicatif ne peut pas garantir seul :
 | `src/lib/baremeNoyau.ts` | ré-export du noyau pour l'application |
 | `src/lib/bareme.ts` | accès base : examens, versions, questions, verrouillage |
 | `src/lib/calibration.ts` | étalons, comparaison IA/humain, statistiques |
-| `src/app/admin/bareme/**` | l'interface d'administration |
+| `src/app/direction/bareme/**` | l'interface d'administration |
 | `src/app/api/admin/bareme/**` | les routes, réservées à l'administratrice |
 | `scripts/seed-referentiels.mjs` | (re)pose les référentiels d'une discipline |
 | `scripts/test-bareme.ts` | 58 tests hors ligne |
@@ -344,7 +344,7 @@ Résultat au 7 août 2026 : **103 tests, 0 échec**.
 
 ### A. Créer un nouveau bac blanc
 
-1. **`/admin/bareme` → « + Nouveau bac blanc »**. Renseigne un identifiant
+1. **`/direction/bareme` → « + Nouveau bac blanc »**. Renseigne un identifiant
    (`maths_bac_blanc_2027_01`), la matière, le titre, éventuellement le type
    d'épreuve, la session et la date. Le barème **1.0** est créé avec lui, vide,
    en brouillon. L'examen est en `draft` : rien n'est visible d'un élève.

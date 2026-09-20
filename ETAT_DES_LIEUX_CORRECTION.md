@@ -9,11 +9,11 @@ Mis à jour le même jour après le chantier décrit en partie 9.
 > 1. **Les 9 matières ont été passées en `active`** (décision Cindy, phase de
 >    test) : les 85 sujets apparaissent au dépôt. Les étalons des 8 matières
 >    hors français restent synthétiques — les notes sont donc approximatives.
-> 2. **La page `/admin/correction`** (réservée au compte admin) remplace ce
+> 2. **La page `/direction/correction`** (réservée au compte admin) remplace ce
 >    fichier comme source de vérité : inventaire par matière lu en direct dans
 >    la base, interrupteurs activer/brouillon (matière, épreuve, sujet),
 >    corrections en direct, coûts estimés, retours des profs relecteurs.
->    Voir `src/lib/pipelineEtat.ts` et `src/app/admin/correction/`.
+>    Voir `src/lib/pipelineEtat.ts` et `src/app/direction/correction/`.
 >
 > **⚠️ 7 août 2026 — la NOTE ne vient plus d'une grille de compétences.**
 >
@@ -22,7 +22,7 @@ Mis à jour le même jour après le chantier décrit en partie 9.
 > verrouillé en version immuable. La grille générique de compétences reste, mais
 > elle produit un **diagnostic pédagogique**, plus la note. Tout ce que ce
 > fichier dit du calcul de la note ne vaut donc plus que pour les sept autres
-> matières. Voir **`GUIDE_BAREME_PAR_SUJET.md`** et **`/admin/bareme`**.
+> matières. Voir **`GUIDE_BAREME_PAR_SUJET.md`** et **`/direction/bareme`**.
 >
 > **6 août 2026 — les deux trous structurels sont bouchés** (voir partie 10) :
 > la **voie technologique du français** est installée et visible (3 épreuves),
@@ -219,7 +219,7 @@ technique : il faut 3 vraies copies notées par matière.
 ## 10. Ce qui a été fait le 6 août 2026
 
 Chantier « compléter les dossiers de correction partout ». Point de départ :
-les diagnostics de `/admin/correction` (règles de `src/lib/pipelineVerifs.ts`),
+les diagnostics de `/direction/correction` (règles de `src/lib/pipelineVerifs.ts`),
 rejoués matière par matière sur la base.
 
 ### a) La voie technologique du français, qui n'existait pas

@@ -1,5 +1,5 @@
 /**
- * GET — l'état complet du pipeline de correction, pour /admin/correction.
+ * GET — l'état complet du pipeline de correction, pour /direction/correction.
  *
  * Réservé à l'administratrice : la réponse contient des noms d'élèves, des
  * emails de profs et l'état interne des barèmes.

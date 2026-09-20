@@ -93,6 +93,9 @@ export const TYPES_EMAIL = [
   'inscription_confirmee',
   'paiement_confirme',
   'paiement_attente',
+  // Le délai de règlement est passé : la place n'est plus tenue. Seul message
+  // adressé au parent et à lui seul — c'est lui qui règle.
+  'inscription_expiree',
   // Déclenché par le classeur de suivi financier, jamais par le planificateur.
   'facture_disponible',
   // B — avant la session
@@ -135,6 +138,7 @@ export const LIBELLE_TYPE: Record<TypeEmail, string> = {
   inscription_confirmee: 'Inscription confirmée',
   paiement_confirme: 'Paiement confirmé',
   paiement_attente: 'Relance — paiement manquant',
+  inscription_expiree: 'Inscription annulée — délai de paiement dépassé',
   facture_disponible: 'Facture envoyée au parent',
   infos_pratiques: 'Informations pratiques',
   lien_visio: 'Lien de visioconférence',

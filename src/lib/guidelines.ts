@@ -50,7 +50,7 @@ export const GUIDELINES: Record<string, Guideline> = {
   maths: {
     url: SHEET('1TB7tp1ZQ65swxN53k8lNYYX8QRjcXdRRaXKruNeNxDw'),
     titre: 'Guideline correction épreuve bac spé maths V0',
-    note: 'Épreuve à questions numérotées : la guideline dit COMMENT compter, le barème du sujet dit COMBIEN vaut chaque question (/admin/bareme). La version 1ère tronc commun est ici : https://docs.google.com/spreadsheets/d/1k3Bt0d818xUCaBzp9zJwtgN2RMoR--_BW1w7ki8bV0E/edit',
+    note: 'Épreuve à questions numérotées : la guideline dit COMMENT compter, le barème du sujet dit COMBIEN vaut chaque question (/direction/bareme). La version 1ère tronc commun est ici : https://docs.google.com/spreadsheets/d/1k3Bt0d818xUCaBzp9zJwtgN2RMoR--_BW1w7ki8bV0E/edit',
   },
   ses: {
     url: SHEET('1mHcvJNt6ONZw85_AMoKIDeL1Oi3YnNkdfhKYjzGkE4w'),

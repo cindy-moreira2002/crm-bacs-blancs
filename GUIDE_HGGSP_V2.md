@@ -40,7 +40,7 @@ enregistrées sont conservés et marqués `archived` / `moteur = grille_generiqu
 | Tests hors ligne | `scripts/test-hggsp.mjs` — `npm run test:hggsp` |
 | Vérification de la base | `scripts/verifier-hggsp-base.mjs` — `npm run hggsp:verifier` |
 | Dépôt d'un bac blanc complet | `src/components/DepotCopiePipeline.tsx` + `/api/pipeline/sujets`, `/api/pipeline/deposer`, `/api/pipeline/groupe/[id]` |
-| Pilotage (3ᵉ couche) | `src/lib/pipelineEtat.ts` → `/admin/correction` |
+| Pilotage (3ᵉ couche) | `src/lib/pipelineEtat.ts` → `/direction/correction` |
 
 **Le noyau fait foi.** Le script d'installation écrit en base exactement ce
 qu'il contient, et la consigne système remise au correcteur est *construite* à
@@ -266,7 +266,7 @@ Il distingue trois niveaux : ✓ conforme, ✗ problème (sortie en code 1), et
 · remarque — un fait à savoir qui ne fait pas échouer le script (grille non
 verrouillée, étalons synthétiques, chemin jamais emprunté).
 
-Ce que le pilotage `/admin/correction` en montre : le bandeau
+Ce que le pilotage `/direction/correction` en montre : le bandeau
 « 📝 Les épreuves rédigées » donne les mêmes chiffres en continu — grilles,
 verrouillages, copies notées, **étalons corrigés par un prof sur le total**, et
 relectures en attente. HGGSP y porte la pastille « note : grille rédigée » et,
@@ -360,7 +360,7 @@ node scripts/deployer-edge.mjs correct-copy-redigee supabase/functions/_shared/h
    la note finale sur 20. Il reste à le faire tourner **une fois sur de vraies
    copies** avant la première session vendue : le script de vérification le
    signale tant que `v_notes_examen_redige` est vide.
-6. ~~Le pilotage ignorait ce moteur~~ — `/admin/correction` connaît désormais les
+6. ~~Le pilotage ignorait ce moteur~~ — `/direction/correction` connaît désormais les
    trois moteurs : HGGSP y est annoncée comme notée par grille rédigée, avec le
    statut des grilles, l'état des étalons et les relectures en attente (§6 bis).
    Au passage, un étalon synthétique n'est plus compté comme « validé par un

@@ -6,7 +6,7 @@
 //    node scripts/lien-acces-admin.mjs cindy@exemple.fr
 //    node scripts/lien-acces-admin.mjs cindy@exemple.fr --jours 7
 //
-//  Genere l'URL /admin/acces?t=<jeton> ou l'administratrice choisit
+//  Genere l'URL /direction/acces?t=<jeton> ou l'administratrice choisit
 //  elle-meme son mot de passe (voir src/lib/accesAdmin.ts — meme
 //  signature HMAC, garder les deux implementations alignees).
 //
@@ -65,6 +65,6 @@ const signature = createHmac('sha256', secret)
 const jeton = `${Buffer.from(email).toString('base64url')}.${exp}.${signature}`;
 
 console.log(`\nLien d'acces administratrice pour ${email} (valable ${jours} j) :\n`);
-console.log(`  https://espaces.matineesdubac.fr/admin/acces?t=${jeton}\n`);
+console.log(`  https://espaces.matineesdubac.fr/direction/acces?t=${jeton}\n`);
 console.log('A ouvrir soi-meme, ne pas le publier : quiconque a ce lien peut');
 console.log("definir le mot de passe du compte admin tant qu'il est valable.");

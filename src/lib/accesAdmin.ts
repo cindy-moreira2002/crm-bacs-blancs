@@ -3,7 +3,7 @@
  *
  * ⚠️ SERVEUR UNIQUEMENT.
  *
- * Pourquoi : la page /admin/correction exige un compte `role='admin'`, mais
+ * Pourquoi : la page /direction/correction exige un compte `role='admin'`, mais
  * seule l'admin peut définir des mots de passe… œuf et poule. Ce module casse
  * la boucle : un lien signé, généré hors ligne (scripts/lien-acces-admin.mjs),
  * ouvre un formulaire où l'administratrice choisit ELLE-MÊME son mot de passe.

@@ -11,6 +11,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { profConnecte } from '@/lib/authProf';
+import { BREVET_ACTIF } from '@/lib/sessions';
 import { pipelineManquant, invoquerEdge } from '@/lib/pipeline';
 import type { MatiereBrevet } from '@/lib/brevetNoyau';
 import {
@@ -48,6 +49,12 @@ export type Garde = { ok: true; auteur: string } | { ok: false; reponse: NextRes
  * avec son adresse.
  */
 export async function gardeAdminBrevet(): Promise<Garde> {
+  // Brevet éteint (`BREVET_ACTIF`) : toutes les routes `/api/admin/brevet/*`
+  // répondent 404, comme si elles n'existaient pas.
+  if (!BREVET_ACTIF) {
+    return { ok: false, reponse: NextResponse.json({ error: 'Introuvable.' }, { status: 404 }) };
+  }
+
   const moi = await profConnecte();
   if (!moi || moi.role !== 'admin') {
     return {

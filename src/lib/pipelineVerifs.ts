@@ -254,7 +254,7 @@ export function verifierBaremes(slugMatiere: string, examens: StructExamen[]): D
       diag(
         'attention',
         `« ${e.titre} » n'a aucune version de barème : rien ne peut être corrigé avec.`,
-        'Ouvrir l’examen dans /admin/bareme et créer son barème 1.0.',
+        'Ouvrir l’examen dans /direction/bareme et créer son barème 1.0.',
       );
     }
 
@@ -262,7 +262,7 @@ export function verifierBaremes(slugMatiere: string, examens: StructExamen[]): D
       diag(
         e.statut === 'correction_open' ? 'bloquant' : 'attention',
         `« ${e.titre} » : ${e.blocages} blocage(s) dans le barème (total ≠ ${e.max_score ?? 20}, réponse attendue ou compétence manquante…).`,
-        'Ouvrir l’examen dans /admin/bareme, onglet Éditeur de barème.',
+        'Ouvrir l’examen dans /direction/bareme, onglet Éditeur de barème.',
       );
     } else if (
       e.total_points !== null &&
@@ -311,7 +311,7 @@ export function verifierBaremes(slugMatiere: string, examens: StructExamen[]): D
     diag(
       'attention',
       `Aucun sujet de ${matiere} n'a de barème : sans lui, aucune copie ne peut être notée.`,
-      'Créer le sujet et son barème dans /admin/bareme.',
+      'Créer le sujet et son barème dans /direction/bareme.',
     );
   }
 

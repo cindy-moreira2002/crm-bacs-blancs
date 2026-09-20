@@ -67,7 +67,7 @@ export const MOTEUR_ATTENDU: Record<string, MoteurNote> = {
   // questions → barème par sujet ; épreuve rédigée → grille commune.
   //
   // Ce que cela engage concrètement : chaque nouveau bac blanc de ces trois
-  // matières demande son barème, écrit dans /admin/bareme avant que la moindre
+  // matières demande son barème, écrit dans /direction/bareme avant que la moindre
   // copie ne soit corrigée (voir GUIDE_BAREME_PAR_SUJET.md et
   // REGLES_TRANSVERSALES dans `baremeNoyau`).
   maths: 'bareme_sujet',

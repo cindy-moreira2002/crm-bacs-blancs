@@ -1,6 +1,6 @@
 /**
  * POST — activer ou remettre en brouillon une matière, une épreuve ou un
- * sujet, depuis /admin/correction. Remplace les allers-retours SQL.
+ * sujet, depuis /direction/correction. Remplace les allers-retours SQL.
  *
  * Corps : { cible: 'matiere' | 'exercice' | 'sujet', statut: 'active' | 'draft',
  *           matiere, track?, exercise_type?, sujet_id? }

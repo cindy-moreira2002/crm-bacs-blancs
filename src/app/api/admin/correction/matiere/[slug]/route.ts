@@ -1,6 +1,6 @@
 /**
  * GET — le détail complet d'une matière pour la vue « tout voir » de
- * /admin/correction : grilles avec critères, sujets avec pièges, étalons avec
+ * /direction/correction : grilles avec critères, sujets avec pièges, étalons avec
  * notes, gabarits, corrections, retours, diagnostics.
  *
  * Réservé à l'administratrice : contient le lien de relecture signé (qui vaut

@@ -17,7 +17,7 @@
 //      précédente sont hérités tels quels. Une guideline dit combien vaut un
 //      critère, pas comment parler à l'élève.
 //    • matière en `bareme_sujet` (maths, physique-chimie, SVT) -> refus : le
-//      barème de ces épreuves n'existe que dans le sujet du jour (/admin/bareme).
+//      barème de ces épreuves n'existe que dans le sujet du jour (/direction/bareme).
 //
 //  Usage :
 //    node scripts/importer-guideline.mjs --csv <fichier.csv> [--partie 1] [--bloc C]
@@ -395,7 +395,7 @@ async function main() {
   if (moteur === 'bareme_sujet') {
     throw new Error(
       `${o.matiere} se note au barème du sujet : ce que vaut une question n'existe que dans le sujet du jour, ` +
-        `et s'écrit dans /admin/bareme. La guideline de cette matière dit COMMENT compter, pas COMBIEN — ` +
+        `et s'écrit dans /direction/bareme. La guideline de cette matière dit COMMENT compter, pas COMBIEN — ` +
         `elle ne s'installe pas en grille du pipeline.`,
     );
   }

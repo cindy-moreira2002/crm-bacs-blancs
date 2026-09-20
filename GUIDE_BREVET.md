@@ -402,7 +402,7 @@ en ajoute une nouvelle.
 
 ## 8. Procédure : ajouter un sujet
 
-1. **`/admin/brevet`** → choisir la matière → **« + Nouveau brevet blanc »**.
+1. **`/direction/brevet`** → choisir la matière → **« + Nouveau brevet blanc »**.
    Identifiant stable, titre, session (2027), date. Le barème 1.0 naît avec lui,
    en brouillon, avec ses blocs au bon maximum.
 2. **Onglet « Examen »** : coller le **sujet**, le **corrigé** et les **consignes
@@ -430,7 +430,7 @@ en ajoute une nouvelle.
 3. `transcribe-french-copy` transcrit ; le trigger aiguille vers la bonne Edge
    Function ; celle-ci vérifie l'appariement, appelle Claude, valide la sortie,
    recalcule tout, écrit le détail.
-4. **`/admin/brevet/<matière>/copies`** : la liste, filtrable sur « à vérifier ».
+4. **`/direction/brevet/<matière>/copies`** : la liste, filtrable sur « à vérifier ».
 5. L'écran de correction montre, pour chaque unité : réponse détectée, réponse
    attendue, analyse, points proposés, maximum, **source de la règle**, erreurs
    types, niveau de confiance, et le bouton de modification.
@@ -590,7 +590,7 @@ de `43_brevet_referentiels.sql`.
 > qu'aucune donnée ne disparaît. Le retrécissement de `corrections_moteur_valide`
 > échouera d'ailleurs s'il reste des copies de brevet — c'est voulu.
 
-**Côté code** : supprimer les répertoires `src/app/admin/brevet`,
+**Côté code** : supprimer les répertoires `src/app/direction/brevet`,
 `src/app/api/admin/brevet`, les fichiers `src/lib/brevet*.ts`,
 `src/lib/matieresBrevet.ts`, `supabase/functions/_shared/brevet-*.ts`,
 `supabase/functions/correct-brevet-*`, `scripts/brevet/`,

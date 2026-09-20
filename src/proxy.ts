@@ -33,6 +33,16 @@ export function proxy(request: NextRequest) {
   const host = (request.headers.get('host') ?? '').toLowerCase();
   const { pathname, search } = request.nextUrl;
 
+  // Les consoles d'administration ont déménagé de /admin vers /direction le
+  // 20/09/2026, quand la direction est devenue un espace partagé. Les favoris,
+  // les liens collés dans des messages et les guides imprimés continuent de
+  // marcher. `/api/admin/…` n'est PAS concerné : les routes d'API n'ont pas
+  // bougé, et les rediriger ferait perdre le corps des requêtes POST.
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    const suite = pathname.slice('/admin'.length);
+    return NextResponse.redirect(new URL(`/direction${suite}${search}`, request.url));
+  }
+
   const isPublicDomain = host.endsWith('matineesdubac.fr');
   const isInternalPath = INTERNAL_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(p + '/'),
@@ -44,7 +54,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (host === HOTE_INSCRIPTION) {
-    // La racine de l'adresse imprimée ouvre le choix bac / brevet, sur place.
+    // La racine de l'adresse imprimée ouvre l'inscription au bac blanc, sur place.
     if (pathname === '/') {
       return NextResponse.redirect(new URL('/inscription', request.url));
     }

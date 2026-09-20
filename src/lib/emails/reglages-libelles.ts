@@ -22,6 +22,24 @@ export type Reglages = {
   lien_avis_url: string;
   paiement_instructions: string;
   paiement_montant_defaut: string;
+  /**
+   * Le compte sur lequel les familles virent l'argent. Ces trois réglages
+   * vivent en base et jamais dans le dépôt : un IBAN écrit en dur finirait
+   * dans l'historique git, et il changerait de banque sans qu'on redéploie.
+   * Tant que `paiement_iban` est vide, l'e-mail de confirmation le dit
+   * franchement au lieu d'afficher un cadre de virement sans compte.
+   */
+  paiement_iban: string;
+  paiement_titulaire: string;
+  paiement_bic: string;
+  /** Délai laissé à la famille pour régler, en minutes. */
+  paiement_delai_minutes: number;
+  /**
+   * « oui » = passé ce délai, l'inscription est ANNULÉE en base et le parent
+   * reçoit un message. Sur « non », le délai reste annoncé dans les messages
+   * mais rien n'est annulé — de quoi éteindre la mécanique sans redéployer.
+   */
+  paiement_expiration_active: string;
   envoi_actif: string;
   /**
    * « oui » = rien ne part sans un clic de l'administratrice. Le planificateur
@@ -47,8 +65,13 @@ export const LIBELLE_REGLAGE: Record<keyof Reglages, string> = {
   quota_quotidien: 'Limite d’envois par jour (offre Brevo)',
   quota_marge: 'Marge de sécurité réservée aux e-mails indispensables',
   lien_avis_url: 'Adresse du questionnaire d’avis',
-  paiement_instructions: 'Instructions de virement (IBAN, référence…)',
+  paiement_instructions: 'Précisions de paiement (facultatif — s’affichent sous l’IBAN)',
   paiement_montant_defaut: 'Montant par défaut d’un bac blanc (€)',
+  paiement_iban: 'IBAN sur lequel les familles virent (FR76…)',
+  paiement_titulaire: 'Titulaire du compte (nom affiché aux familles)',
+  paiement_bic: 'BIC / SWIFT (facultatif)',
+  paiement_delai_minutes: 'Délai pour régler avant annulation (minutes)',
+  paiement_expiration_active: 'Annuler vraiment l’inscription passé le délai ? (oui / non)',
   envoi_actif: 'Envoi réel actif ? (oui / non)',
   validation_manuelle: 'Je valide chaque e-mail avant qu’il parte ? (oui / non)',
   actif_depuis: 'Système actif depuis (rien d’antérieur n’est envoyé)',
