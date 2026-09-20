@@ -27,7 +27,7 @@ toutes seules vers `/direction/...`. Aucun favori n'est cassé.
 Ouvre le **SQL Editor du projet CRM** (celui des inscriptions) :
 https://supabase.com/dashboard/project/orpbfnmdlvxmkvyrpvtj/sql/new
 
-Colle le contenu de `supabase/sql/53_direction_web_app.sql`, puis **Run**.
+Colle le contenu de `supabase/sql/54_direction_web_app.sql`, puis **Run**.
 
 *Résultat attendu :* `Success. No rows returned`. Le script est rejouable : le
 relancer ne casse rien.
