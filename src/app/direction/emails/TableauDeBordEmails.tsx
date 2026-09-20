@@ -66,7 +66,7 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
   const [occupe, setOccupe] = useState<string | null>(null);
   const [apercu, setApercu] = useState<Apercu | null>(null);
   const [journal, setJournal] = useState<string | null>(null);
-  const [onglet, setOnglet] = useState<'valider' | 'parcours' | 'messages' | 'paiements' | 'reglages'>(
+  const [onglet, setOnglet] = useState<'valider' | 'parcours' | 'modeles' | 'messages' | 'paiements' | 'reglages'>(
     'parcours',
   );
   // Tant que je n'ai pas choisi d'onglet moi-même, la page s'ouvre là où il y
@@ -401,6 +401,7 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
             [
               ['valider', `🔔 À valider (${etat.aValider.length})`],
               ['parcours', `Par élève (${etat.parcours.length})`],
+              ['modeles', '📄 Modèles'],
               ['messages', 'Messages'],
               ['paiements', `Paiements à confirmer (${etat.paiementsEnAttente.length})`],
               ['reglages', 'Réglages'],
@@ -495,6 +496,8 @@ export function TableauDeBordEmails({ monEmail }: { monEmail: string }) {
             onApercu={previsualiserId}
           />
         )}
+
+        {onglet === 'modeles' && <Modeles />}
 
         {onglet === 'messages' && (
           <>
@@ -877,7 +880,9 @@ function TableauReference({ etapes, reglages }: { etapes: EtapeParcours[]; regla
           <strong>
             {v.totalMin} à {v.totalMax} envois par inscription
           </strong>
-          , parent compris quand son adresse est renseignée.
+          , parent compris quand son adresse est renseignée. Les étapes marquées{' '}
+          <em>seulement avec une offre</em> (pack, trio) ne sont pas comptées : elles ne
+          concernent que les inscriptions qui ont pris un code.
         </p>
       </div>
     </details>
@@ -904,7 +909,17 @@ function ReactFragmentPhase({
       {groupe.map((e) => (
         <tr key={e.type} className="hover:bg-gray-50">
           <td className="px-3 py-2 text-gray-400">{etapes.indexOf(e) + 1}</td>
-          <td className="px-3 py-2 font-medium text-gray-900">{e.libelle}</td>
+          <td className="px-3 py-2 font-medium text-gray-900">
+            {e.libelle}
+            {/* Une étape conditionnelle ne concerne qu'une inscription sur
+                quelques-unes : sans ce repère, une colonne vide passerait
+                pour un trou alors que c'est le cas normal. */}
+            {e.conditionnel && (
+              <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-purple-700 bg-purple-50 border border-purple-200 rounded px-1.5 py-0.5">
+                seulement avec une offre
+              </span>
+            )}
+          </td>
           <td className="px-3 py-2 text-gray-700">{e.quand}</td>
           <td className="px-3 py-2 text-gray-500">{e.declencheur}</td>
           <td className="px-3 py-2 text-center">{e.parent ? '✅' : '—'}</td>
@@ -1289,6 +1304,334 @@ function LigneReglage({
         </button>
       </div>
       <p className="mt-1 text-[11px] text-gray-400 font-mono">{cle}</p>
+    </div>
+  );
+}
+
+// --- Onglet « Modèles » -----------------------------------------------
+
+type ModeleListe = {
+  type: string;
+  libelle: string;
+  existe: boolean;
+  ok: boolean;
+  role: string | null;
+  categorie: string | null;
+  requises: string[];
+  sujet?: string;
+  manquantes?: string[];
+};
+
+type ZoneTexte = {
+  cle: string;
+  libelle: string;
+  aide: string;
+  valeur: string;
+  personnalise: boolean;
+};
+
+type ModeleRendu = {
+  type: string;
+  libelle: string;
+  ok: boolean;
+  sujet?: string;
+  html?: string;
+  texte?: string;
+  requises?: string[];
+  manquantes?: string[];
+  raison?: string;
+  fichier?: string;
+  zones?: ZoneTexte[];
+};
+
+/**
+ * Le catalogue complet des e-mails, relisible à tout moment.
+ *
+ * Le rendu se fait sur des valeurs d'EXEMPLE : relire un modèle ne doit
+ * jamais faire apparaître le nom d'un vrai élève. C'est aussi ce qui permet
+ * de voir un message qui n'est encore jamais parti.
+ */
+function Modeles() {
+  const [liste, setListe] = useState<ModeleListe[]>([]);
+  const [choisi, setChoisi] = useState<string | null>(null);
+  const [rendu, setRendu] = useState<ModeleRendu | null>(null);
+  const [vue, setVue] = useState<'html' | 'texte' | 'corriger'>('html');
+  const [chargement, setChargement] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/admin/emails/modeles')
+      .then((r) => r.json())
+      .then((d) => {
+        setListe(d.modeles ?? []);
+        setChoisi((c) => c ?? (d.modeles?.[0]?.type ?? null));
+      })
+      .finally(() => setChargement(false));
+  }, []);
+
+  useEffect(() => {
+    if (!choisi) return;
+    setRendu(null);
+    fetch(`/api/admin/emails/modeles?type=${encodeURIComponent(choisi)}`)
+      .then((r) => r.json())
+      .then(setRendu);
+  }, [choisi]);
+
+  // Les messages d'une même phase restent groupés : c'est l'ordre dans lequel
+  // une famille les reçoit, pas l'ordre alphabétique.
+  const groupes: [string, ModeleListe[]][] = [
+    ['Élève', liste.filter((m) => m.role === 'eleve')],
+    ['Parent', liste.filter((m) => m.role === 'parent')],
+    ['Professeur', liste.filter((m) => m.role === 'prof')],
+    ['Prospect', liste.filter((m) => m.role === 'prospect')],
+    ['Administration', liste.filter((m) => m.role === 'admin' || !m.role)],
+  ];
+
+  if (chargement) return <p className="text-sm text-gray-500">Chargement des modèles…</p>;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+      {/* La liste */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden self-start">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <h3 className="font-bold text-gray-900 text-sm">{liste.length} modèles</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Tous les messages que le site sait écrire.
+          </p>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto">
+          {groupes.map(([titre, membres]) =>
+            membres.length === 0 ? null : (
+              <div key={titre}>
+                <p className="px-4 py-1.5 bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  {titre}
+                </p>
+                {membres.map((m) => (
+                  <button
+                    key={m.type}
+                    onClick={() => setChoisi(m.type)}
+                    className={`w-full text-left px-4 py-2 border-b border-gray-50 hover:bg-purple-50 ${
+                      choisi === m.type ? 'bg-purple-50' : ''
+                    }`}
+                  >
+                    <span className="block text-sm text-gray-900">{m.libelle}</span>
+                    <span className="block text-[11px] font-mono text-gray-400">{m.type}</span>
+                    {!m.ok && (
+                      <span className="block text-[11px] text-amber-700 font-semibold mt-0.5">
+                        ⚠️ ne se rend pas : {(m.manquantes ?? []).join(', ') || 'modèle absent'}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ),
+          )}
+        </div>
+      </div>
+
+      {/* L'aperçu */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {!rendu ? (
+          <p className="p-5 text-sm text-gray-500">Chargement…</p>
+        ) : !rendu.ok ? (
+          <div className="p-5">
+            <h3 className="font-bold text-gray-900">{rendu.libelle}</h3>
+            <div className="mt-3 rounded-lg border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Ce modèle ne peut pas être rendu.</p>
+              <p className="mt-1">{rendu.raison}</p>
+              {rendu.manquantes?.length ? (
+                <p className="mt-2">
+                  Variables manquantes : <strong>{rendu.manquantes.join(', ')}</strong>
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="px-5 py-4 border-b border-gray-100">
+              <p className="text-[11px] uppercase tracking-wide text-gray-400">Objet</p>
+              <p className="font-bold text-gray-900">{rendu.sujet}</p>
+              <p className="mt-2 text-xs text-gray-500">
+                Rendu avec des <strong>valeurs d’exemple</strong> (Léa Martin, Français…) — aucun
+                élève réel.
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                {(['html', 'texte', 'corriger'] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setVue(v)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border ${
+                      vue === v
+                        ? 'bg-purple-700 text-white border-purple-700'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {v === 'html' ? 'Rendu' : v === 'texte' ? 'Version texte' : '✏️ Corriger'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {vue === 'corriger' ? (
+              <CorrigerZones
+                type={rendu.type}
+                zones={rendu.zones ?? []}
+                onEnregistre={(z, html, sujet, texte) =>
+                  setRendu((r) => (r ? { ...r, zones: z, html, sujet, texte } : r))
+                }
+              />
+            ) : vue === 'html' ? (
+              // `sandbox` vide : le modèle s'affiche, mais aucun script ne
+              // s'exécute et aucun lien ne navigue dans la console.
+              <iframe
+                title={`Aperçu ${rendu.type}`}
+                srcDoc={rendu.html}
+                sandbox=""
+                className="w-full"
+                style={{ height: '70vh', border: 0 }}
+              />
+            ) : (
+              <pre className="p-5 text-xs whitespace-pre-wrap text-gray-800 max-h-[70vh] overflow-y-auto">
+                {rendu.texte}
+              </pre>
+            )}
+
+            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-600">
+              <p>
+                Pour corriger ce texte :{' '}
+                <code className="font-mono text-[11px]">{rendu.fichier}</code>, modèle{' '}
+                <code className="font-mono text-[11px]">{rendu.type}</code>.
+              </p>
+              {rendu.requises?.length ? (
+                <p className="mt-1">
+                  Variables obligatoires : <strong>{rendu.requises.join(', ')}</strong> — si l’une
+                  manque, le message part en « bloqué » au lieu d’être envoyé incomplet.
+                </p>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Corriger le texte d'un modèle, zone par zone.
+ *
+ * Cinq zones seulement, celles où une correction ne peut rien casser : le
+ * corps du message (encadrés, listes, cadre de virement) reste dans le code,
+ * parce que c'est lui qui porte les variables obligatoires.
+ *
+ * Vider une zone la remet au texte d'origine : on ne perd jamais le départ.
+ */
+function CorrigerZones({
+  type,
+  zones,
+  onEnregistre,
+}: {
+  type: string;
+  zones: ZoneTexte[];
+  onEnregistre: (zones: ZoneTexte[], html?: string, sujet?: string, texte?: string) => void;
+}) {
+  const [brouillon, setBrouillon] = useState<Record<string, string>>(
+    Object.fromEntries(zones.map((z) => [z.cle, z.valeur])),
+  );
+  const [enCours, setEnCours] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  // Changer de modèle doit repartir de SES textes, pas de ceux d'avant.
+  useEffect(() => {
+    setBrouillon(Object.fromEntries(zones.map((z) => [z.cle, z.valeur])));
+    setMessage(null);
+  }, [type, zones]);
+
+  const enregistrer = async (cle: string) => {
+    setEnCours(cle);
+    setMessage(null);
+    try {
+      const r = await fetch('/api/admin/emails/modeles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, zone: cle, valeur: brouillon[cle] ?? '' }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setMessage(d.error ?? 'Enregistrement impossible.');
+        return;
+      }
+      onEnregistre(d.zones ?? zones, d.rendu?.html, d.rendu?.sujet, d.rendu?.texte);
+      setMessage(
+        (brouillon[cle] ?? '').trim()
+          ? 'Enregistré. Le prochain envoi utilisera ce texte.'
+          : 'Zone vidée : le texte d’origine revient.',
+      );
+    } catch {
+      setMessage('Erreur de connexion.');
+    } finally {
+      setEnCours(null);
+    }
+  };
+
+  return (
+    <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+        <p>
+          Tu peux écrire <code className="font-mono">{'{first_name}'}</code>,{' '}
+          <code className="font-mono">{'{subject_name}'}</code>,{' '}
+          <code className="font-mono">{'{session_date}'}</code> — remplacés à l’envoi.
+        </p>
+        <p className="mt-1">
+          <strong>Laisser vide = texte d’origine.</strong> Le corps du message (encadrés, listes,
+          coordonnées de virement) ne se modifie pas ici : il porte les variables obligatoires.
+        </p>
+      </div>
+
+      {message && (
+        <p className="text-sm font-semibold text-green-700">{message}</p>
+      )}
+
+      {zones.map((z) => (
+        <div key={z.cle}>
+          <label className="block">
+            <span className="text-sm font-semibold text-gray-900">
+              {z.libelle}
+              {z.personnalise && (
+                <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-purple-700 bg-purple-50 border border-purple-200 rounded px-1.5 py-0.5">
+                  corrigé
+                </span>
+              )}
+            </span>
+            <span className="block text-xs text-gray-500 mb-1">{z.aide}</span>
+            <textarea
+              value={brouillon[z.cle] ?? ''}
+              onChange={(e) => setBrouillon({ ...brouillon, [z.cle]: e.target.value })}
+              rows={z.cle === 'sujet' || z.cle === 'titre' || z.cle === 'signature' ? 2 : 4}
+              placeholder="Vide = texte d’origine"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+          </label>
+          <div className="mt-1 flex items-center gap-2">
+            <button
+              onClick={() => enregistrer(z.cle)}
+              disabled={enCours === z.cle || (brouillon[z.cle] ?? '') === z.valeur}
+              className="px-3 py-1.5 rounded-lg bg-purple-700 text-white text-xs font-semibold disabled:opacity-40"
+            >
+              {enCours === z.cle ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+            {z.personnalise && (
+              <button
+                onClick={() => {
+                  setBrouillon({ ...brouillon, [z.cle]: '' });
+                  setTimeout(() => enregistrer(z.cle), 0);
+                }}
+                className="text-xs text-gray-500 hover:text-red-700"
+              >
+                Revenir au texte d’origine
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

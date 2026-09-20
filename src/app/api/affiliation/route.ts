@@ -39,7 +39,17 @@ export async function GET(req: NextRequest) {
       // reconnaître ce qu'elle a saisi, sans qu'on publie l'annuaire.
       prof: prof ? nomCourt(prof) : null,
       libelle: promo.libelle,
-      remise: Number(promo.remise_euros) || 0,
+      // Ce que le code annonce AVANT l'inscription. Le prix réellement dû
+      // n'est calculé qu'au moment de s'inscrire — il dépend de l'élève
+      // (première matinée ? avoir en attente ?), pas seulement du code.
+      type: promo.type,
+      prix_unitaire: promo.prix_unitaire,
+      remise: Number(promo.remise) || 0,
+      matinees_incluses: promo.matinees_incluses,
+      prix_lot: promo.prix_lot,
+      // Tarif de groupe : le formulaire doit prévenir EN ROUGE avant que la
+      // famille paie, parce que son inscription dépend de deux autres.
+      groupe: promo.categorie === 'groupe' || promo.min_participants > 1,
     },
     { headers: { 'Cache-Control': 'no-store' } },
   );

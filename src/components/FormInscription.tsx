@@ -93,10 +93,25 @@ function LigneCopiable({ libelle, valeur, copie }: { libelle: string; valeur: st
 export type PrixInscription = {
   plein: number;
   remise: number;
+  /** Au titre de quoi la remise a été accordée (« Première matinée »). */
+  motif: string | null;
+  /** Avoir de l'élève déduit en plus de la remise. */
+  avoir: number;
   du: number;
   code: string | null;
-  etat: 'aucun' | 'accepte' | 'deja_utilise' | 'inconnu';
+  etat:
+    | 'plein_tarif'
+    | 'premiere_matinee'
+    | 'code_applique'
+    | 'code_sans_effet'
+    | 'pack'
+    | 'lot_achete'
+    | 'refus';
+  message: string | null;
 };
+
+/** Le code de groupe remis au premier du trio, avec son heure limite. */
+export type CodeTrio = { code: string; expire_a: string };
 
 function EcranPaiementEnAttente({
   prenom,
@@ -104,6 +119,7 @@ function EcranPaiementEnAttente({
   date,
   paiement,
   prix,
+  trio,
   examen,
 }: {
   prenom: string;
@@ -111,6 +127,7 @@ function EcranPaiementEnAttente({
   date: string;
   paiement: CompteVirement | null;
   prix: PrixInscription | null;
+  trio: CodeTrio | null;
   examen: Examen;
 }) {
   const minutes = paiement?.delaiMinutes ?? DELAI_PAIEMENT_DEFAUT;
@@ -149,23 +166,53 @@ function EcranPaiementEnAttente({
             </p>
             {prix.remise > 0 && (
               <p className="flex justify-between text-green-700 font-semibold">
-                <span>Code {prix.code}</span>
+                <span>{prix.motif ?? `Code ${prix.code}`}</span>
                 <span>− {prix.remise} €</span>
+              </p>
+            )}
+            {prix.avoir > 0 && (
+              <p className="flex justify-between text-green-700 font-semibold">
+                <span>Ton avoir</span>
+                <span>− {prix.avoir} €</span>
               </p>
             )}
             <p className="flex justify-between font-bold text-gray-900 text-base">
               <span>À régler</span>
               <span>{prix.du} €</span>
             </p>
-            {prix.etat === 'deja_utilise' && (
-              <p className="text-xs text-gray-500 pt-1">
-                Ce code a déjà servi pour cet élève : la remise ne s’applique qu’à la première
-                matinée.
-              </p>
-            )}
+            {prix.message && <p className="text-xs text-gray-500 pt-1">{prix.message}</p>}
           </div>
         )}
       </div>
+
+
+      {/* Le code du trio. Il passe AVANT le cadre de virement : sans les deux
+          camarades, le virement de 39 € ne sert à rien — l'offre tombe. */}
+      {trio && (
+        <div className="mt-5 rounded-xl border-2 border-red-600 bg-red-50 p-4">
+          <p className="font-bold text-red-900">Ton code à donner à tes deux camarades</p>
+          <p className="my-3 text-center font-mono text-2xl font-black tracking-widest text-red-900">
+            {trio.code}
+          </p>
+          <p className="text-sm text-red-900 font-semibold">
+            Le tarif de groupe ne tient que si <strong>les trois inscriptions sont réglées</strong>{' '}
+            avant le{' '}
+            {new Date(trio.expire_a).toLocaleString('fr-FR', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+            .
+          </p>
+          <p className="mt-2 text-sm text-red-900">
+            Passé ce délai, <strong>les inscriptions du trio sont annulées</strong> — la tienne
+            comprise — et ce qui a été versé est rendu en avoir. Le code ne marche que pour deux
+            camarades : au troisième, il affiche « expiré ».
+          </p>
+        </div>
+      )}
 
       {paiement ? (
         <div className="mt-5">
@@ -243,7 +290,13 @@ export function FormInscription({ examen }: { examen: Examen }) {
     etat: 'vide' | 'cherche' | 'connu' | 'inconnu';
     nom?: string | null;
     libelle?: string;
+    type?: 'prix_fixe' | 'remise' | 'lot' | 'affiliation';
+    prix_unitaire?: number | null;
+    prix_lot?: number | null;
+    matinees_incluses?: number;
     remise?: number;
+    /** Tarif de groupe : l'offre tombe si le trio ne se complète pas. */
+    groupe?: boolean;
   }>({
     etat: 'vide',
   });
@@ -281,7 +334,11 @@ export function FormInscription({ examen }: { examen: Examen }) {
   // est aussi mémorisé par la vitrine, qui le repasse dans l'URL — l'élève
   // n'a donc rien à recopier, mais il voit et peut corriger ce qui est saisi.
   useEffect(() => {
-    const ref = new URLSearchParams(window.location.search).get('ref');
+    const params = new URLSearchParams(window.location.search);
+    // `ref` : le lien d'affiliation d'un prof. `code` : les boutons du site
+    // vitrine, qui pointent vers …/inscription?examen=bac&code=DUO89. Les
+    // deux remplissent le même champ — c'est le même répertoire derrière.
+    const ref = params.get('code') || params.get('ref');
     if (!ref) return;
     // setTimeout : ne pas poser d'état pendant le rendu de l'effet (Next 16).
     const minuteur = setTimeout(() => setCodeProf(ref.replace(/\s+/g, '').toUpperCase()), 0);
@@ -304,7 +361,17 @@ export function FormInscription({ examen }: { examen: Examen }) {
         const data = await res.json();
         setParrain(
           data.connu
-            ? { etat: 'connu', nom: data.prof ?? null, libelle: data.libelle, remise: data.remise }
+            ? {
+                etat: 'connu',
+                nom: data.prof ?? null,
+                libelle: data.libelle,
+                type: data.type,
+                prix_unitaire: data.prix_unitaire,
+                prix_lot: data.prix_lot,
+                matinees_incluses: data.matinees_incluses,
+                remise: data.remise,
+                groupe: data.groupe,
+              }
             : { etat: 'inconnu' },
         );
       } catch {
@@ -326,6 +393,7 @@ export function FormInscription({ examen }: { examen: Examen }) {
     date: string;
     paiement: CompteVirement | null;
     prix: PrixInscription | null;
+    trio: CodeTrio | null;
   } | null>(null);
 
   // L'engagement de présence. Volontairement DÉCOCHÉ au départ : une case
@@ -428,6 +496,7 @@ export function FormInscription({ examen }: { examen: Examen }) {
             : '',
           paiement: (data as { paiement?: CompteVirement | null }).paiement ?? null,
           prix: (data as { prix?: PrixInscription }).prix ?? null,
+          trio: (data as { trio?: CodeTrio | null }).trio ?? null,
         });
         setPrenom('');
         setNom('');
@@ -458,6 +527,7 @@ export function FormInscription({ examen }: { examen: Examen }) {
         date={confirmation.date}
         paiement={confirmation.paiement}
         prix={confirmation.prix}
+        trio={confirmation.trio}
         examen={examen}
       />
     );
@@ -563,7 +633,13 @@ export function FormInscription({ examen }: { examen: Examen }) {
           {parrain.etat === 'connu' && (
             <span className="mt-1 block text-xs font-semibold text-green-700">
               ✅ {parrain.nom ? `Recommandé par ${parrain.nom}` : parrain.libelle}
-              {parrain.remise ? ` — ${parrain.remise} € de remise sur ta première matinée` : ''}
+              {parrain.type === 'prix_fixe' && parrain.prix_unitaire
+                ? ` — ${parrain.prix_unitaire} € la matinée`
+                : parrain.type === 'lot' && parrain.prix_lot
+                  ? ` — ${parrain.matinees_incluses} matinées pour ${parrain.prix_lot} €`
+                  : parrain.type === 'remise' && parrain.remise
+                    ? ` — ${parrain.remise} € de remise`
+                    : ''}
             </span>
           )}
           {/* Refus net, et non plus un avertissement qu'on pouvait ignorer :
@@ -580,6 +656,20 @@ export function FormInscription({ examen }: { examen: Examen }) {
             </span>
           )}
         </label>
+
+        {/* Le tarif de groupe s'annonce AVANT de payer : c'est la seule
+            offre où l'inscription peut être annulée à cause de quelqu'un
+            d'autre. Rouge, au-dessus du bouton, impossible à manquer. */}
+        {parrain.etat === 'connu' && parrain.groupe && (
+          <div className="rounded-xl border-2 border-red-600 bg-red-50 p-3 text-sm text-red-900">
+            <p className="font-bold">Tarif de groupe : à trois, dans les 48 heures.</p>
+            <p className="mt-1">
+              Le code ne fonctionne que si <strong>les trois participants sont inscrits et réglés
+              dans les 48 h</strong> qui suivent la première inscription. Sinon, les inscriptions du
+              trio sont annulées et les sommes versées sont rendues en avoir.
+            </p>
+          </div>
+        )}
 
         {/* L'engagement de présence — la contrepartie du « pas de
             remboursement ». Encadré, jamais pré-coché, et refusé côté serveur

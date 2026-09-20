@@ -11,53 +11,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { construireEmail, MODELES } from '../src/lib/emails/modeles/index';
 import { LIBELLE_TYPE, type TypeEmail } from '../src/lib/emails/config';
+import { VARIABLES_EXEMPLE } from '../src/lib/emails/exemples';
 
 const dossier = process.argv[2] || join(process.cwd(), 'apercu-emails');
 mkdirSync(dossier, { recursive: true });
 
-const VARIABLES: Record<string, string> = {
-  first_name: 'Léa',
-  student_name: 'Léa Martin',
-  parent_name: 'Mme Martin',
-  subject_name: 'Français',
-  session_date: 'samedi 6 septembre 2026',
-  session_date_court: 'sam. 6 sept.',
-  session_date_iso: '2026-09-06',
-  start_time: '9 h 00',
-  end_time: '13 h 00',
-  connection_time: '8 h 45',
-  teacher_name: 'Camille Durand',
-  student_space_url: 'https://espaces.matineesdubac.fr/espace-eleve',
-  teacher_space_url: 'https://espaces.matineesdubac.fr/espace-prof',
-  // Forme réelle d'une adresse de salle Discord : serveur, puis salon.
-  video_room_url: 'https://discord.com/channels/000000000000000000/111111111111111111',
-  inscription_url: 'https://inscription.matineesdubac.fr/inscription',
-  correction_url: 'https://espaces.matineesdubac.fr/espace-eleve',
-  survey_url: 'https://exemple.fr/avis',
-  support_email: 'matineesdubac@gmail.com',
-  site_url: 'https://matineesdubac.fr',
-  inscription_ref: 'A1B2C3D4',
-  amount: '29',
-  payment_reference: 'VIR-2026-014',
-  payment_status: 'en_attente',
-  payment_status_label: 'en attente',
-  payment_instructions: 'Le virement peut être fait depuis n’importe quelle banque.',
-  // Un IBAN d'exemple : la documentation de la Banque de France utilise cette
-  // forme. Jamais le vrai — il vit dans `email_reglages`, pas dans le dépôt.
-  payment_iban: 'FR76 3000 6000 0112 3456 7890 189',
-  payment_holder: 'Les Matinées du Bac',
-  payment_bic: 'AGRIFRPP',
-  payment_deadline_minutes: '10',
-  old_value: 'samedi 6 septembre 2026 à 9 h 00',
-  new_value: 'samedi 20 septembre 2026 à 9 h 00',
-  change_reason: 'Le professeur est empêché ce jour-là.',
-  student_count: '8',
-  copy_count: '8',
-  deadline_date: 'samedi 13 septembre 2026',
-  remuneration: '40',
-  grade: '14/20',
-  places_restantes: '3',
-};
+const VARIABLES = VARIABLES_EXEMPLE;
 
 const liens: string[] = [];
 let erreurs = 0;

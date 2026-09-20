@@ -96,6 +96,17 @@ export const TYPES_EMAIL = [
   // Le délai de règlement est passé : la place n'est plus tenue. Seul message
   // adressé au parent et à lui seul — c'est lui qui règle.
   'inscription_expiree',
+  // Tarif de groupe : le code du premier, le rappel, et la chute de l'offre.
+  'trio_code_partage',
+  'trio_rappel',
+  'trio_expire',
+  // Packs prépayés (DUO89, FIDELITE3, FIDELITE5).
+  'pack_achete',
+  'pack_bientot_expire',
+  // Avoirs : le parrain a gagné de l'argent, il doit le savoir.
+  'avoir_credite',
+  // Ambassadeur : les 3 codes −10 € promis après la première matinée.
+  'ambassadeur_codes',
   // Déclenché par le classeur de suivi financier, jamais par le planificateur.
   'facture_disponible',
   // B — avant la session
@@ -139,6 +150,13 @@ export const LIBELLE_TYPE: Record<TypeEmail, string> = {
   paiement_confirme: 'Paiement confirmé',
   paiement_attente: 'Relance — paiement manquant',
   inscription_expiree: 'Inscription annulée — délai de paiement dépassé',
+  trio_code_partage: 'Trio — ton code à partager',
+  trio_rappel: 'Trio — il reste peu de temps',
+  trio_expire: 'Trio — offre tombée, inscriptions annulées',
+  pack_achete: 'Pack — matinées prépayées',
+  pack_bientot_expire: 'Pack — matinées à utiliser avant expiration',
+  avoir_credite: 'Avoir gagné — parrainage ou ambassadeur',
+  ambassadeur_codes: 'Ambassadeur — tes 3 codes à offrir',
   facture_disponible: 'Facture envoyée au parent',
   infos_pratiques: 'Informations pratiques',
   lien_visio: 'Lien de visioconférence',

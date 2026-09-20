@@ -19,6 +19,7 @@
 import { emailsDb } from './client';
 import { chargerReglages, envoiDesactive, validationManuelle, type Reglages } from './reglages';
 import { construireEmail } from './modeles';
+import { textesDuModele } from './textes';
 import { envoyerViaBrevo } from './brevo';
 import { urlDesinscription } from './desinscription';
 import { dryRunParEnv, type TypeEmail } from './config';
@@ -364,7 +365,11 @@ async function preparer(
   const desinscriptionUrl =
     ligne.categorie === 'marketing' ? urlDesinscription(ligne.destinataire_email) : null;
 
-  const construit = construireEmail(ligne.type, variables, { desinscriptionUrl });
+  // Les corrections écrites dans la console (onglet « Modèles ») s'appliquent
+  // au dernier moment : un texte changé ce matin part dès le prochain envoi,
+  // sans redéploiement.
+  const zones = await textesDuModele(ligne.type);
+  const construit = construireEmail(ligne.type, variables, { desinscriptionUrl }, zones);
   if (!construit.ok) {
     return { action: 'bloquer', raison: construit.raison };
   }

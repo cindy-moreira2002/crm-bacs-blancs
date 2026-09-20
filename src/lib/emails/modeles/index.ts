@@ -13,6 +13,7 @@
  * statut « bloqué » et l'administration affiche laquelle.
  */
 import type { CategorieEmail, RoleDestinataire, TypeEmail } from '../config';
+import { appliquerVariables } from '../textes';
 import { SUPPORT_EMAIL } from '../config';
 import {
   Contenu,
@@ -1153,6 +1154,261 @@ const prof_mission_terminee: Modele = {
   }),
 };
 
+
+// --- Tarif de groupe (trio à 39 €) ------------------------------------
+
+/**
+ * Le code du premier inscrit, envoyé par écrit.
+ *
+ * Il l'a déjà vu à l'écran, mais il doit pouvoir le retrouver et le
+ * transférer à ses camarades : un code qui n'existe que sur une page fermée
+ * depuis est un code perdu, et l'offre tombe au bout de 48 h.
+ */
+const trio_code_partage: Modele = {
+  type: 'trio_code_partage',
+  categorie: 'transactional',
+  role: 'eleve',
+  requises: ['first_name', 'trio_code', 'trio_deadline', 'subject_name'],
+  sujet: (h) => `Ton code ${h.r('trio_code')} — à donner à tes deux camarades`,
+  contenu: (h) => ({
+    titre: 'Ton code de groupe',
+    blocs: [
+      { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
+      {
+        type: 'paragraphe',
+        texte: `Voici le code à donner à <strong>tes deux camarades</strong> pour qu'ils s'inscrivent au bac blanc de ${h.t('subject_name')} au tarif de groupe.`,
+      },
+      { type: 'encadre', ton: 'succes', titre: h.t('trio_code'), lignes: ['39 € par personne au lieu de 59 €.'] },
+      {
+        type: 'encadre',
+        ton: 'attention',
+        titre: 'À faire avant le ' + h.t('trio_deadline'),
+        lignes: [
+          'Les <strong>trois inscriptions</strong> doivent être <strong>réglées</strong> avant cette heure.',
+          'Passé ce délai, les inscriptions du trio sont annulées — la tienne comprise — et les sommes versées sont rendues en avoir.',
+          'Le code ne vaut que pour <strong>deux camarades</strong> et pour <strong>cette matinée</strong>.',
+        ],
+      },
+    ],
+    bouton: { libelle: 'Ouvrir mon espace élève', url: h.r('student_space_url') },
+  }),
+};
+
+/** Le rappel, quand l'heure approche et que le compte n'y est pas. */
+const trio_rappel: Modele = {
+  type: 'trio_rappel',
+  categorie: 'transactional',
+  role: 'eleve',
+  requises: ['first_name', 'trio_code', 'trio_deadline', 'trio_manquants'],
+  sujet: (h) => `Il manque ${h.r('trio_manquants')} inscription(s) pour ton tarif de groupe`,
+  contenu: (h) => ({
+    titre: 'Ton trio n’est pas encore complet',
+    blocs: [
+      { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
+      {
+        type: 'encadre',
+        ton: 'attention',
+        titre: `Échéance : ${h.t('trio_deadline')}`,
+        lignes: [
+          `Il manque encore <strong>${h.t('trio_manquants')} inscription(s) réglée(s)</strong> avec le code <strong>${h.t('trio_code')}</strong>.`,
+          'Si le compte n’y est pas à l’heure dite, les inscriptions du trio sont annulées et les sommes versées rendues en avoir.',
+        ],
+      },
+      { type: 'paragraphe', texte: 'Un message à tes camarades suffit peut-être — ils ont peut-être simplement oublié de régler.' },
+    ],
+    bouton: { libelle: 'Ouvrir mon espace élève', url: h.r('student_space_url') },
+  }),
+};
+
+/**
+ * L'offre est tombée. Adressé à TOUS les membres du trio, l'initiateur
+ * comme ceux qui avaient déjà réglé : leur inscription est annulée aussi.
+ */
+const trio_expire: Modele = {
+  type: 'trio_expire',
+  categorie: 'transactional',
+  role: 'eleve',
+  requises: ['first_name', 'trio_code', 'subject_name'],
+  sujet: () => 'Ton tarif de groupe n’a pas pu être appliqué',
+  contenu: (h) => ({
+    titre: 'L’offre de groupe est tombée',
+    blocs: [
+      { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
+      {
+        type: 'encadre',
+        ton: 'attention',
+        titre: 'Le trio n’a pas été complété dans les 48 heures',
+        lignes: [
+          `Les trois inscriptions au code <strong>${h.t('trio_code')}</strong> n’ont pas toutes été réglées à temps.`,
+          'Le tarif de groupe ne s’applique donc pas, et <strong>les inscriptions du trio sont annulées</strong>.',
+        ],
+      },
+      h.a('credit_amount')
+        ? {
+            type: 'encadre',
+            ton: 'succes',
+            titre: `Tes ${h.t('credit_amount')} € te sont rendus`,
+            lignes: ['Ils sont conservés en avoir et se déduiront automatiquement de ta prochaine inscription, pendant un an.'],
+          }
+        : { type: 'paragraphe', texte: 'Rien n’a été prélevé de ton côté.' },
+      { type: 'paragraphe', texte: 'Deux possibilités, maintenant :' },
+      {
+        type: 'liste',
+        items: [
+          `T’inscrire seul au bac blanc de ${h.t('subject_name')}, au tarif normal`,
+          'Recommencer à trois — cette fois en vous mettant d’accord avant, pour que les trois règlent dans les 48 heures',
+        ],
+      },
+    ],
+    bouton: { libelle: 'Me réinscrire', url: h.r('inscription_url') },
+  }),
+};
+
+// --- Packs prépayés ---------------------------------------------------
+
+/** Ce que la famille a acheté, et combien de matinées il lui reste. */
+const pack_achete: Modele = {
+  type: 'pack_achete',
+  categorie: 'transactional',
+  role: 'eleve',
+  requises: ['first_name', 'pack_label', 'pack_total', 'pack_restantes', 'pack_expire'],
+  sujet: (h) => `${h.r('pack_label')} — ${h.r('pack_restantes')} matinée(s) en réserve`,
+  contenu: (h) => ({
+    titre: h.t('pack_label'),
+    blocs: [
+      { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
+      {
+        type: 'encadre',
+        ton: 'succes',
+        titre: `${h.t('pack_total')} matinées prépayées`,
+        lignes: [
+          `Il t’en reste <strong>${h.t('pack_restantes')}</strong> à réserver, dans la matière que tu veux.`,
+          `À utiliser avant le <strong>${h.t('pack_expire')}</strong>.`,
+        ],
+      },
+      {
+        type: 'paragraphe',
+        texte: 'Tu n’as rien à repayer : inscris-toi normalement aux dates qui t’arrangent, le montant affiché sera de 0 €.',
+      },
+    ],
+    bouton: { libelle: 'Réserver une matinée', url: h.r('inscription_url') },
+  }),
+};
+
+
+/** Un pack payé qui périme sans avoir servi, c'est de l'argent perdu. */
+const pack_bientot_expire: Modele = {
+  type: 'pack_bientot_expire',
+  categorie: 'transactional',
+  role: 'eleve',
+  requises: ['first_name', 'pack_label', 'pack_restantes', 'pack_expire'],
+  sujet: (h) => `Il te reste ${h.r('pack_restantes')} matinée(s) à utiliser`,
+  contenu: (h) => ({
+    titre: 'Tes matinées prépayées expirent bientôt',
+    blocs: [
+      { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
+      {
+        type: 'encadre',
+        ton: 'attention',
+        titre: `${h.t('pack_restantes')} matinée(s) encore disponible(s)`,
+        lignes: [
+          `Ton <strong>${h.t('pack_label')}</strong> arrive à échéance le <strong>${h.t('pack_expire')}</strong>.`,
+          'Passé cette date, les matinées non utilisées sont perdues — elles sont déjà payées, autant en profiter.',
+        ],
+      },
+      {
+        type: 'paragraphe',
+        texte: 'Choisis simplement une date et une matière : le montant affiché sera de 0 €.',
+      },
+    ],
+    bouton: { libelle: 'Réserver une matinée', url: h.r('inscription_url') },
+  }),
+};
+
+// --- Avoirs -----------------------------------------------------------
+
+/**
+ * Quelqu'un s'est inscrit avec le code de l'élève : il a gagné de l'argent.
+ *
+ * Sans ce message, l'avoir existe en base et personne ne le sait : la famille
+ * repaie plein tarif et découvre la réduction par hasard, ou jamais.
+ */
+const avoir_credite: Modele = {
+  type: 'avoir_credite',
+  categorie: 'transactional',
+  role: 'eleve',
+  requises: ['first_name', 'credit_amount', 'credit_total'],
+  sujet: (h) => `Tu as gagné ${h.r('credit_amount')} € sur ta prochaine matinée`,
+  contenu: (h) => ({
+    titre: `+${h.t('credit_amount')} € pour toi`,
+    blocs: [
+      { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
+      {
+        type: 'paragraphe',
+        texte: h.a('filleul_name')
+          ? `<strong>${h.t('filleul_name')}</strong> vient de s'inscrire avec ton code. Merci !`
+          : 'Quelqu’un vient de s’inscrire avec ton code. Merci !',
+      },
+      {
+        type: 'encadre',
+        ton: 'succes',
+        titre: `Ton avoir : ${h.t('credit_total')} €`,
+        lignes: [
+          'Il se déduira <strong>tout seul</strong> de ta prochaine inscription — rien à saisir.',
+          'Valable un an.',
+        ],
+      },
+    ],
+    bouton: { libelle: 'Réserver ma prochaine matinée', url: h.r('inscription_url') },
+  }),
+};
+
+// --- Ambassadeur ------------------------------------------------------
+
+/**
+ * Les trois codes promis par le site après la première matinée.
+ *
+ * « L'élève reçoit par email 3 codes −10 € à donner autour de lui. Pour chaque
+ * ami qui s'inscrit avec l'un de ces codes, il gagne 5 € de crédit. »
+ */
+const ambassadeur_codes: Modele = {
+  type: 'ambassadeur_codes',
+  categorie: 'transactional',
+  role: 'eleve',
+  requises: ['first_name', 'code_1', 'code_2', 'code_3'],
+  sujet: () => 'Tes 3 codes −10 € à offrir',
+  contenu: (h) => ({
+    titre: 'Tu es ambassadeur',
+    blocs: [
+      { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
+      {
+        type: 'paragraphe',
+        texte: 'Tu as passé ta première matinée : voici <strong>trois codes de 10 € de réduction</strong> à donner autour de toi.',
+      },
+      {
+        type: 'encadre',
+        ton: 'succes',
+        titre: 'Tes codes',
+        lignes: [
+          `<strong>${h.t('code_1')}</strong>`,
+          `<strong>${h.t('code_2')}</strong>`,
+          `<strong>${h.t('code_3')}</strong>`,
+        ],
+      },
+      {
+        type: 'encadre',
+        ton: 'neutre',
+        titre: 'Ce que tu gagnes',
+        lignes: [
+          'Pour <strong>chaque ami</strong> qui s’inscrit avec un de ces codes, tu reçois <strong>5 € d’avoir</strong> sur ta prochaine matinée.',
+          'Chaque code ne sert qu’<strong>une fois</strong>.',
+        ],
+      },
+    ],
+    bouton: { libelle: 'Voir mes matinées', url: h.r('student_space_url') },
+  }),
+};
+
 // --- Registre ---------------------------------------------------------
 
 const LISTE: Modele[] = [
@@ -1183,6 +1439,13 @@ const LISTE: Modele[] = [
   prof_rappel_correction,
   prof_mission_terminee,
   facture_disponible,
+  trio_code_partage,
+  trio_rappel,
+  trio_expire,
+  pack_achete,
+  pack_bientot_expire,
+  avoir_credite,
+  ambassadeur_codes,
 ];
 
 export const MODELES: Record<string, Modele> = Object.fromEntries(
@@ -1206,10 +1469,25 @@ export type EmailConstruit =
  * pas de date fausse, pas de bouton cassé. L'appelant met le message en
  * « bloqué » et l'administration affiche la donnée manquante.
  */
+/**
+ * Les zones corrigées depuis la console (script SQL 55).
+ *
+ * Volontairement passées en paramètre plutôt que lues ici : ce fichier ne
+ * fait aucun appel réseau, et doit rester testable hors ligne.
+ */
+export type ZonesTexte = {
+  sujet?: string;
+  titre?: string;
+  intro?: string;
+  postscriptum?: string;
+  signature?: string;
+};
+
 export function construireEmail(
   type: string,
   variables: Variables,
   options: PageOptions = {},
+  zones: ZonesTexte = {},
 ): EmailConstruit {
   const m = modele(type);
   if (!m) {
@@ -1239,7 +1517,27 @@ export function construireEmail(
   }
 
   const h = aide(variables);
-  const contenu = m.contenu(h);
+  const origine = m.contenu(h);
+
+  // Les corrections de la console s'appliquent ICI, sur le contenu déjà
+  // construit : `titre` remplace, `intro` et `postscriptum` s'ajoutent sans
+  // rien supprimer. Le corps du message n'est jamais touché.
+  const perso = (v: string | undefined) =>
+    v ? appliquerVariables(v, variables, echapper) : '';
+  const intro = perso(zones.intro);
+  const postscriptum = perso(zones.postscriptum);
+
+  const contenu: Contenu = {
+    ...origine,
+    titre: perso(zones.titre) || origine.titre,
+    blocs: intro
+      ? ([{ type: 'paragraphe' as const, texte: intro }, ...origine.blocs] as Contenu['blocs'])
+      : origine.blocs,
+    apres: postscriptum
+      ? ([...(origine.apres ?? []), { type: 'paragraphe' as const, texte: postscriptum }] as Contenu['blocs'])
+      : origine.apres,
+    signature: perso(zones.signature) || origine.signature,
+  };
   const opts: PageOptions =
     m.categorie === 'marketing'
       ? {
@@ -1252,7 +1550,11 @@ export function construireEmail(
 
   return {
     ok: true,
-    sujet: m.sujet(h).slice(0, 250),
+    // L'objet est du TEXTE BRUT : on n'y échappe rien, sinon une esperluette
+    // arriverait en « &amp; » dans la boîte de réception.
+    sujet: (
+      (zones.sujet ? appliquerVariables(zones.sujet, variables, (v) => v) : '') || m.sujet(h)
+    ).slice(0, 250),
     html: rendreHtml(contenu, opts),
     texte: rendreTexte(contenu, opts),
   };

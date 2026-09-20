@@ -35,6 +35,8 @@ import {
   tachesChangementSession,
 } from './planificateur';
 import { chargerContexte, variablesPreinscription } from './donnees';
+import { traiterTrios } from './trios';
+import { traiterAmbassadeurs, traiterPacksQuiExpirent } from './promos';
 import type { TypeEmail } from './config';
 
 /**
@@ -47,16 +49,34 @@ export async function synchroniserTout(maintenant = new Date()): Promise<{
   proposees: number;
   creees: number;
   changementsSession: number;
+  triosAnnules: number;
+  triosRappeles: number;
 }> {
   // D'abord les changements de session : ils annulent des messages devenus
   // faux avant que la planification n'en propose de nouveaux.
   const changementsSession = await detecterChangementsSession();
 
+  // Les trios à 39 € : rappels quand l'heure approche, annulation quand elle
+  // est passée. Avant la planification : un trio qui tombe annule des
+  // inscriptions, et il ne faut pas leur préparer d'e-mails entre-temps.
+  const trios = await traiterTrios(maintenant);
+
+  // Les offres qui vivent après l'épreuve : les codes d'ambassadeur promis
+  // par le site, et les packs prépayés qui vont périmer sans avoir servi.
+  const ambassadeurs = await traiterAmbassadeurs(maintenant);
+  const packs = await traiterPacksQuiExpirent(maintenant);
+
   const reglages = await chargerReglages(true);
   const ctx = await chargerContexte(maintenant);
   const taches = planifier(ctx, { reglages, maintenant });
   const creees = await enfiler(taches);
-  return { proposees: taches.length, creees, changementsSession };
+  return {
+    proposees: taches.length,
+    creees: creees + trios.messages + ambassadeurs.messages + packs,
+    changementsSession,
+    triosAnnules: trios.annules,
+    triosRappeles: trios.rappels,
+  };
 }
 
 /**

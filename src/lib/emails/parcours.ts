@@ -39,6 +39,12 @@ export type EtapeParcours = {
   declencheur: string;
   /** Le parent en reçoit une copie quand son adresse est renseignée. */
   parent: boolean;
+  /**
+   * L'étape ne concerne QUE les inscriptions qui ont pris une offre (pack,
+   * trio). Elle ne compte donc pas dans le volume nominal : sinon le quota
+   * Brevo serait calculé sur des messages qui ne partent presque jamais.
+   */
+  conditionnel?: boolean;
 };
 
 /**
@@ -77,6 +83,36 @@ export function parcoursEleve(r: Reglages): EtapeParcours[] {
       quand: 'quand tu marques « payé » ou « offert »',
       declencheur: 'tu poses le statut de paiement',
       parent: true,
+    },
+    {
+      type: 'pack_achete',
+      conditionnel: true,
+      libelle: LIBELLE_TYPE.pack_achete,
+      court: 'Pack',
+      phase: 'inscription',
+      quand: 'tout de suite',
+      declencheur: 'l’inscription achète un pack (DUO89, FIDELITE3, FIDELITE5)',
+      parent: false,
+    },
+    {
+      type: 'trio_code_partage',
+      conditionnel: true,
+      libelle: LIBELLE_TYPE.trio_code_partage,
+      court: 'Code trio',
+      phase: 'inscription',
+      quand: 'tout de suite',
+      declencheur: 'l’élève s’inscrit avec TRIO39 : il reçoit SON code',
+      parent: false,
+    },
+    {
+      type: 'trio_rappel',
+      conditionnel: true,
+      libelle: LIBELLE_TYPE.trio_rappel,
+      court: 'Rappel trio',
+      phase: 'inscription',
+      quand: '12 h avant la fin des 48 h',
+      declencheur: 'le trio n’est pas encore complet ni réglé',
+      parent: false,
     },
     {
       type: 'infos_pratiques',
@@ -142,6 +178,45 @@ export function parcoursEleve(r: Reglages): EtapeParcours[] {
       parent: false,
     },
     {
+      type: 'ambassadeur_codes',
+      conditionnel: true,
+      libelle: LIBELLE_TYPE.ambassadeur_codes,
+      court: 'Codes ambassadeur',
+      phase: 'apres',
+      quand: 'après la première matinée réglée et passée',
+      declencheur: 'l’élève a composé et payé : il reçoit 3 codes −10 € à offrir',
+      parent: false,
+    },
+    {
+      type: 'avoir_credite',
+      conditionnel: true,
+      libelle: LIBELLE_TYPE.avoir_credite,
+      court: 'Avoir gagné',
+      phase: 'apres',
+      quand: 'dès qu’un filleul s’inscrit avec son code',
+      declencheur: 'parrainage (10 €) ou code ambassadeur utilisé (5 €)',
+      parent: false,
+    },
+    {
+      type: 'pack_bientot_expire',
+      conditionnel: true,
+      libelle: LIBELLE_TYPE.pack_bientot_expire,
+      court: 'Pack à utiliser',
+      phase: 'apres',
+      quand: '45 jours avant la fin du pack',
+      declencheur: 'des matinées prépayées n’ont pas été réservées',
+      parent: false,
+    },
+    {
+      type: 'trio_expire',
+      libelle: LIBELLE_TYPE.trio_expire,
+      court: 'Trio tombé',
+      phase: 'exception',
+      quand: 'à la fin des 48 h',
+      declencheur: 'les trois du trio n’ont pas tous réglé : les inscriptions sont annulées',
+      parent: true,
+    },
+    {
       type: 'session_modifiee',
       libelle: LIBELLE_TYPE.session_modifiee,
       court: 'Session modifiée',
@@ -183,7 +258,7 @@ export function volumeNominal(r: Reglages): {
   totalMax: number;
 } {
   const relances = Math.max(0, Math.min(5, r.relance_paiement_max));
-  const nominales = parcoursEleve(r).filter((e) => e.phase !== 'exception');
+  const nominales = parcoursEleve(r).filter((e) => e.phase !== 'exception' && !e.conditionnel);
 
   // Hors relance de paiement, chaque étape nominale part une seule fois.
   const eleveFixe = nominales.filter((e) => e.type !== 'paiement_attente').length;

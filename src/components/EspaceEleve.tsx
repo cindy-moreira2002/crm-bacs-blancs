@@ -69,6 +69,13 @@ const salonUrl = (i: Inscription) => i.salon_url ?? null;
 // NEXT_PUBLIC_ECRITURE_URL reste prioritaire (développement local, changement
 // de domaine) ; on lui retire espaces et barre oblique finale, deux fautes de
 // saisie qui casseraient silencieusement tous les liens.
+// Où la famille va poser sa prochaine matinée. Variable d'environnement :
+// l'inscription vit sous son propre domaine, qui peut changer sans toucher
+// au code de l'espace élève.
+const INSCRIPTION_URL = (
+  process.env.NEXT_PUBLIC_INSCRIPTION_URL?.trim() || 'https://inscription.matineesdubac.fr'
+).replace(/\/+$/, '') + '/inscription';
+
 const ECRITURE_URL = (
   process.env.NEXT_PUBLIC_ECRITURE_URL?.trim() || 'https://matinees-appweb-ecriture.vercel.app'
 ).replace(/\/+$/, '');
@@ -78,6 +85,28 @@ const ecritureUrl = (i: Inscription) =>
   `${ECRITURE_URL}/copie/${i.code_copie}?m=${encodeURIComponent(i.matiere)}`;
 
 // --- Le sujet de l'épreuve -------------------------------------------
+
+/** Les matinées prépayées encore disponibles. Miroir de `v_packs_eleve`. */
+type PackVue = {
+  id: string;
+  code: string;
+  libelle: string | null;
+  matinees_total: number;
+  matinees_utilisees: number;
+  matinees_restantes: number;
+  expire_le: string;
+};
+
+/** Jamais bloquant : route absente, pas de pack → tableau vide, pas d'erreur. */
+async function chargerPacks(): Promise<PackVue[]> {
+  try {
+    const r = await fetch('/api/eleve/packs');
+    if (!r.ok) return [];
+    return (await r.json()).packs ?? [];
+  } catch {
+    return [];
+  }
+}
 
 /** Ce que renvoie /api/eleve/sujets. Miroir de `SujetEleve` côté serveur. */
 type SujetEleveVue = {
@@ -526,6 +555,7 @@ export function EspaceEleve() {
   const [inscriptions, setInscriptions] = useState<Inscription[] | null>(null);
   // Le sujet de l'épreuve, ouvert automatiquement quelques minutes avant.
   const [sujets, setSujets]             = useState<SujetEleveVue[]>([]);
+  const [packs, setPacks]               = useState<PackVue[]>([]);
   const [loading, setLoading]           = useState(false);
   // Connexion en deux temps : l'adresse identifie, le code envoyé par e-mail
   // prouve. `defi` est la signature rendue par le serveur — il ne stocke rien.
@@ -612,6 +642,7 @@ export function EspaceEleve() {
     setCopies(rc.copies || []);
     setInscriptions(ri.inscriptions || []);
     setSujets(rs);
+    setPacks(await chargerPacks());
   };
 
   // Session encore ouverte (cookie de 30 jours) → on entre sans redemander de code.
@@ -630,6 +661,7 @@ export function EspaceEleve() {
         setCopies(rc.copies || []);
         setInscriptions(ri.inscriptions || []);
         setSujets(rs);
+        setPacks(await chargerPacks());
         setEtape('entree');
       } catch { /* pas de session : on reste sur l'écran de connexion */ }
     })();
@@ -999,6 +1031,72 @@ export function EspaceEleve() {
           </div>
         );
       })()}
+
+      {/* ── FENÊTRE 1 ter : MES MATINÉES PRÉPAYÉES ──
+            Un pack payé mais oublié, c'est de l'argent versé pour rien. Le
+            solde s'affiche donc en haut, avec la date limite et un bouton qui
+            mène droit à l'inscription. ── */}
+      {packs.length > 0 && (
+        <div style={{ maxWidth: 900, margin: '20px auto 0', padding: '0 24px' }}>
+          <h3 style={{ fontWeight: 900, color: '#1E1145', fontSize: '1.05rem', margin: '0 0 10px' }}>
+            🎟️ Mes matinées déjà payées
+          </h3>
+          <div style={{ display: 'grid', gap: 12 }}>
+            {packs.map((p) => (
+              <div
+                key={p.id}
+                style={{
+                  background: '#fff',
+                  border: '2px solid #A78BFA',
+                  borderRadius: 16,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, fontWeight: 900, color: '#1E1145', fontSize: '1.05rem' }}>
+                    {p.matinees_restantes} matinée{p.matinees_restantes > 1 ? 's' : ''} à réserver
+                  </p>
+                  <p style={{ margin: '4px 0 0', color: '#6B7280', fontSize: '.85rem' }}>
+                    {p.libelle ?? p.code} — {p.matinees_utilisees} utilisée
+                    {p.matinees_utilisees > 1 ? 's' : ''} sur {p.matinees_total}. Rien à repayer :
+                    la matière est au choix.
+                  </p>
+                  <p style={{ margin: '4px 0 0', color: '#B45309', fontSize: '.8rem', fontWeight: 700 }}>
+                    À utiliser avant le{' '}
+                    {new Date(p.expire_le).toLocaleDateString('fr-FR', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </p>
+                </div>
+                <a
+                  href={INSCRIPTION_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    background: '#6D28D9',
+                    color: '#fff',
+                    padding: '11px 18px',
+                    borderRadius: 12,
+                    fontWeight: 800,
+                    fontSize: '.9rem',
+                    textDecoration: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Réserver une matinée →
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── FENÊTRE 2 : Mes anciens bacs blancs & mes copies ──
             Toujours affichée, même vide : un nouvel élève doit voir où ses

@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { normaliserCode, profParCode } from '@/lib/affiliation';
-import { evaluerCode, prixApresRemise } from '@/lib/codesPromo';
+import { beneficiaireAvoir, calculerTarif, consommerAvoirs, crediterParrain } from '@/lib/codesPromo';
+import { genererCodeTrio, ouvrirPack } from '@/lib/offres';
+import { apresPackAchete, apresTrioCree } from '@/lib/emails/trios';
+import { apresAvoirCredite } from '@/lib/emails/promos';
 import { codeCopie } from '@/lib/codeCopie';
 import { lienSalon } from '@/lib/discord/config';
 import { apresInscription } from '@/lib/emails/declencheurs';
@@ -89,6 +92,9 @@ export async function POST(req: NextRequest) {
       date_epreuve,
       code_affiliation: codeSaisi,
       engagement,
+      // PARRAIN10 est un code partagé : il ne dit pas QUI a parrainé. Sans
+      // cette adresse, personne ne peut être crédité des 10 €.
+      email_parrain,
     } = await req.json();
 
     if (!nom || !email || !email_parent || !telephone || !matiere) {
@@ -149,21 +155,23 @@ export async function POST(req: NextRequest) {
     const parrain = await profParCode(codeSaisi);
     const codeAffiliation = parrain ? normaliserCode(parrain.code_affiliation) : null;
 
-    // Le code promo : 10 € de remise, une seule fois par élève. Un code qui
-    // n'est pas au répertoire est REFUSÉ — avant, il était ignoré en silence
-    // et la famille croyait avoir une remise qu'elle n'avait pas.
-    const verdict = await evaluerCode(codeSaisi, {
+    // Le prix de cette inscription : bienvenue à 49 € pour un nouvel élève,
+    // code éventuel, puis l'avoir de l'élève s'il en a un. Un code absent du
+    // répertoire est REFUSÉ — avant, il était ignoré en silence et la famille
+    // croyait avoir une remise qu'elle n'avait pas.
+    const tarif = await calculerTarif({
       email,
       nom,
       emailParent: email_parent ?? null,
+      code: codeSaisi,
+      sessionId,
     });
-    if (verdict.etat === 'inconnu') {
-      return NextResponse.json({ error: verdict.message, code_refuse: verdict.code }, { status: 400 });
+    if (tarif.etat === 'refus') {
+      return NextResponse.json({ error: tarif.message, code_refuse: tarif.code }, { status: 400 });
     }
 
-    const reglagesPrix = await chargerReglages();
-    const montantPlein = Number(reglagesPrix.paiement_montant_defaut) || 0;
-    const montantDu = prixApresRemise(montantPlein, verdict.remise);
+    const montantPlein = tarif.prix_public;
+    const montantDu = tarif.prix_du;
 
     const row = {
       nom,
@@ -173,10 +181,13 @@ export async function POST(req: NextRequest) {
       matiere,
       date_epreuve,
       paiement_montant: montantDu,
+      prix_public: tarif.prix_public,
       ...(sessionId ? { session_id: sessionId } : {}),
       ...(codeAffiliation ? { code_affiliation: codeAffiliation } : {}),
-      ...(verdict.code ? { code_promo: verdict.code } : {}),
-      ...(verdict.remise > 0 ? { remise_euros: verdict.remise } : {}),
+      ...(tarif.code ? { code_promo: tarif.code } : {}),
+      ...(tarif.remise > 0 ? { remise_euros: tarif.remise } : {}),
+      ...(tarif.avoir_utilise > 0 ? { avoir_utilise: tarif.avoir_utilise } : {}),
+      ...(tarif.pack_id ? { pack_id: tarif.pack_id } : {}),
     };
     let { data, error } = await supabase.from('inscriptions').insert([row]).select();
 
@@ -198,12 +209,20 @@ export async function POST(req: NextRequest) {
     // Repli si les colonnes du script 53 n'existent pas encore : l'inscription
     // passe au prix plein plutôt que d'échouer. La remise sera à reprendre à
     // la main — c'est visible dans /direction/paiements.
-    if (error && /(code_promo|remise_euros)/.test(error.message || '')) {
-      const { code_promo: _p, remise_euros: _r, ...rowSansPromo } = row as typeof row & {
+    if (error && /(code_promo|remise_euros|prix_public|avoir_utilise)/.test(error.message || '')) {
+      const {
+        code_promo: _p,
+        remise_euros: _r,
+        prix_public: _pp,
+        avoir_utilise: _av,
+        ...rowSansPromo
+      } = row as typeof row & {
         code_promo?: string;
         remise_euros?: number;
+        prix_public?: number;
+        avoir_utilise?: number;
       };
-      void _p; void _r;
+      void _p; void _r; void _pp; void _av;
       ({ data, error } = await supabase.from('inscriptions').insert([rowSansPromo]).select());
     }
 
@@ -241,6 +260,68 @@ export async function POST(req: NextRequest) {
     // Tant que la clé n'est pas posée, l'ancien envoi Gmail (Apps Script)
     // continue de fonctionner exactement comme avant.
     const nouvelleInscription = (data as { id?: string }[] | null)?.[0];
+
+    // L'argent qui change de mains, maintenant que l'inscription existe :
+    // l'avoir de l'élève est marqué consommé, et le parrain est crédité.
+    // Les deux sont non bloquants — une inscription ne doit jamais échouer
+    // pour une écriture comptable, qui se rattrape à la main.
+    let codeTrio: { code: string; expire_a: string } | null = null;
+
+    if (nouvelleInscription?.id) {
+      if (tarif.avoir_utilise > 0) {
+        await consommerAvoirs(email, nouvelleInscription.id, tarif.avoir_utilise);
+      }
+      if (tarif.avoir_a_crediter > 0 && tarif.code) {
+        const credite = await crediterParrain(
+          tarif.code,
+          nouvelleInscription.id,
+          tarif.avoir_a_crediter,
+          email_parrain ?? null,
+        );
+        // Un avoir que personne n'annonce ne sert à rien : le parrain
+        // repaierait plein tarif sans savoir qu'il a de l'argent en réserve.
+        if (credite) {
+          const beneficiaire = await beneficiaireAvoir(tarif.code, email_parrain ?? null);
+          if (beneficiaire) {
+            await apresAvoirCredite(beneficiaire, tarif.avoir_a_crediter, {
+              nom,
+              inscription_id: nouvelleInscription.id,
+            });
+          }
+        }
+      }
+      // La famille achète un pack : les matinées suivantes l'attendent.
+      if (tarif.pack_a_creer) {
+        const packId = await ouvrirPack({ email, nom }, tarif.pack_a_creer, nouvelleInscription.id);
+        if (packId) {
+          await apresPackAchete(
+            { id: nouvelleInscription.id, email, nom, session_id: sessionId },
+            {
+              libelle: tarif.motif ?? tarif.pack_a_creer.code,
+              total: tarif.pack_a_creer.matinees,
+              restantes: tarif.pack_a_creer.matinees - 1,
+              // Un an, comme le dit le site : « à utiliser dans l'année ».
+              expire_le: new Date(Date.now() + 365 * 86_400_000).toISOString(),
+            },
+          );
+        }
+      }
+      // Premier du trio : on lui fabrique SON code, bon 48 h pour 2 camarades.
+      if (tarif.trio_a_generer && tarif.code) {
+        codeTrio = await genererCodeTrio(tarif.code, {
+          id: nouvelleInscription.id,
+          nom,
+          session_id: sessionId,
+        });
+        if (codeTrio) {
+          await apresTrioCree(
+            { id: nouvelleInscription.id, email, nom, matiere, session_id: sessionId },
+            codeTrio,
+          );
+        }
+      }
+    }
+
     if (process.env.BREVO_API_KEY && nouvelleInscription?.id) {
       try {
         const misEnFile = await apresInscription(nouvelleInscription.id, email, nom);
@@ -282,11 +363,17 @@ export async function POST(req: NextRequest) {
         // obtenue (ou pourquoi elle ne l'a pas), et ce qu'elle doit virer.
         prix: {
           plein: montantPlein,
-          remise: verdict.remise,
+          remise: tarif.remise,
+          motif: tarif.motif,
+          avoir: tarif.avoir_utilise,
           du: montantDu,
-          code: verdict.etat === 'aucun' ? null : verdict.code,
-          etat: verdict.etat,
+          code: tarif.code,
+          etat: tarif.etat,
+          message: tarif.message,
         },
+        // Le premier du trio repart avec son code à partager, et l'heure
+        // limite au-delà de laquelle l'offre tombe pour les trois.
+        trio: codeTrio,
       },
       { status: 201 },
     );
