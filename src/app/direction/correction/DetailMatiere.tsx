@@ -15,6 +15,7 @@ import type {
   Diagnostic,
   EtalonDetail,
   GrilleDetail,
+  GrilleRedigeeDetail,
   SujetDetail,
 } from '@/lib/pipelineDetail';
 import type { ExamenEtat } from '@/lib/pipelineEtat';
@@ -292,9 +293,31 @@ function CarteGrille({ g, matiere }: { g: GrilleDetail; matiere: string }) {
         )}
       </div>
 
+      {/* La consigne, en entier. On n'en voyait que la longueur : impossible de
+          vérifier ce qu'on demande au correcteur sans ouvrir la base. */}
+      <details className="mt-3">
+        <summary className="cursor-pointer text-xs text-purple-700 hover:underline">
+          Lire la consigne donnée au correcteur ({g.system_prompt_chars.toLocaleString('fr-FR')} caractères)
+        </summary>
+        <p className="mt-2 text-[11px] text-gray-700 whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 leading-relaxed">
+          {g.system_prompt || 'Aucune consigne enregistrée — le correcteur travaille alors sans instruction de matière.'}
+        </p>
+      </details>
+
+      {g.guardrails.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-purple-700 hover:underline">
+            Les {g.guardrails.length} garde-fous de cette grille
+          </summary>
+          <ul className="mt-1 ml-4 list-disc space-y-0.5">
+            {g.guardrails.map((r) => (
+              <li key={r} className="text-[11px] text-gray-600">{r}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       <div className="mt-3 text-[11px] text-gray-500 flex flex-wrap gap-x-4 gap-y-1">
-        <span>consigne correcteur : {g.system_prompt_chars.toLocaleString('fr-FR')} caractères</span>
-        <span>garde-fous : {g.guardrails.length}</span>
         <span>
           taxonomie d’erreurs : {g.taxonomie.length > 0 ? `${g.taxonomie.length} codes` : 'aucune'}
         </span>
@@ -310,6 +333,95 @@ function CarteGrille({ g, matiere }: { g: GrilleDetail; matiere: string }) {
                 <b>{t.code}</b>
                 {t.description && ` — ${t.description}`}
               </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// --- Grilles rédigées (3ᵉ moteur) -------------------------------------
+
+/**
+ * Une grille rédigée, avec ses critères et sa consigne. Le tableau de bord en
+ * donnait le nombre de critères ; ce qu'ils disent n'était lisible nulle part.
+ */
+function CarteGrilleRedigee({ g }: { g: GrilleRedigeeDetail }) {
+  const somme = Math.round(g.criteres.reduce((n, c) => n + c.max_points, 0) * 100) / 100;
+  return (
+    <div className="border border-gray-200 rounded-xl p-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="font-semibold text-gray-800 text-sm">
+          {g.libelle}
+          <span className="ml-2 text-xs font-normal text-gray-400">{g.id} · v{g.version}</span>
+        </p>
+        <Etat status={g.statut === 'locked' ? 'active' : g.statut} />
+      </div>
+
+      <p className="mt-2 text-xs text-sky-900 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+        <strong>C’est cette grille qui donne la note.</strong> Les critères se notent sur{' '}
+        {g.max_analytique} points, puis la note est ramenée sur {g.max_officiel} — c’est l’échelle
+        officielle de l’épreuve.
+        {g.statut !== 'locked' && (
+          <span className="block mt-1 text-amber-800">
+            Grille non verrouillée : tant qu’elle ne l’est pas, chaque note produite est provisoire.
+          </span>
+        )}
+      </p>
+
+      <p className="text-[11px] text-gray-500 pt-2">Clique un critère pour voir ses paliers.</p>
+      <div className="space-y-1">
+        {g.criteres.map((c) => (
+          <details key={c.code} className="group">
+            <summary className="cursor-pointer list-none flex items-baseline gap-2 px-2 py-1 rounded-lg hover:bg-purple-50 text-xs text-gray-700">
+              <span className="text-gray-400 group-open:rotate-90 transition-transform">▸</span>
+              <span className="flex-1">
+                {c.libelle} <span className="text-gray-400">{c.code}</span>
+              </span>
+              <b className="text-gray-900 whitespace-nowrap">{c.max_points} pts</b>
+            </summary>
+            <div className="mt-1 mb-2 ml-6 border-l-2 border-purple-200 pl-3 space-y-1">
+              {c.evaluer.length > 0 && (
+                <p className="text-[11px] text-gray-600">
+                  <b>Ce qui est évalué :</b> {c.evaluer.join(' · ')}
+                </p>
+              )}
+              {c.paliers.map((pl) => (
+                <p key={`${c.code}-${pl.points}-${pl.niveau}`} className="text-[11px] text-gray-600">
+                  <b className="text-purple-700">{pl.points} pt</b> — <i>{pl.niveau}</i> — {pl.description}
+                </p>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+      <p className="text-[11px] text-gray-500 pl-2 pt-1 border-t border-gray-100">
+        Total : {somme} points analytiques
+        {Math.abs(somme - g.max_analytique) > 0.001 && (
+          <span className="text-red-600 font-semibold"> — mais la grille annonce {g.max_analytique}</span>
+        )}
+      </p>
+
+      <details className="mt-3">
+        <summary className={`cursor-pointer text-xs hover:underline ${g.system_prompt ? 'text-purple-700' : 'text-amber-700'}`}>
+          {g.system_prompt
+            ? `Lire la consigne donnée au correcteur (${g.system_prompt.length.toLocaleString('fr-FR')} caractères)`
+            : 'Aucune consigne pour cette grille — elle attend encore sa relecture'}
+        </summary>
+        <p className="mt-2 text-[11px] text-gray-700 whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 leading-relaxed">
+          {g.system_prompt || 'Aucune consigne enregistrée.'}
+        </p>
+      </details>
+
+      {g.garde_fous.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-purple-700 hover:underline">
+            Les {g.garde_fous.length} garde-fous de cette grille
+          </summary>
+          <ul className="mt-1 ml-4 list-disc space-y-0.5">
+            {g.garde_fous.map((r) => (
+              <li key={r} className="text-[11px] text-gray-600">{r}</li>
             ))}
           </ul>
         </details>
@@ -558,6 +670,39 @@ export function DetailMatiereVue({
           ))}
           {detail.grilles.length === 0 && <p className="text-sm text-red-600">Aucun barème en base pour cette matière.</p>}
         </div>
+      </Section>
+
+      {detail.grilles_redigees.length > 0 && (
+        <Section
+          titre={`Grilles rédigées — c’est ici que se joue la note (${detail.grilles_redigees.length})`}
+          sousTitre="Critères décrits, paliers rédigés, note analytique ramenée à l’échelle officielle de l’épreuve. Cliquer un critère déplie ses paliers."
+        >
+          <div className="space-y-3">
+            {detail.grilles_redigees.map((g) => (
+              <CarteGrilleRedigee key={g.id} g={g} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      <Section
+        titre="Le classeur avec lequel le professeur corrige"
+        sousTitre="C’est le document que le prof ouvre pour noter à la main. Son export CSV se dépose dans l’espace prof, et sa note fait foi sur celle de la machine."
+      >
+        {detail.guideline?.url ? (
+          <p className="text-sm text-gray-700">
+            <a href={detail.guideline.url} target="_blank" className="text-purple-700 font-medium hover:underline">
+              {detail.guideline.titre} ↗
+            </a>
+            {detail.guideline.note && <span className="block text-xs text-gray-500 mt-1">{detail.guideline.note}</span>}
+          </p>
+        ) : (
+          <p className="text-sm text-amber-700">
+            {detail.guideline
+              ? `« ${detail.guideline.titre} » n’est pas encore partagé avec le CRM : le lien n’existe pas, le prof corrige donc sans classeur.`
+              : 'Aucun classeur de correction n’est prévu pour cette matière.'}
+          </p>
+        )}
       </Section>
 
       <Section

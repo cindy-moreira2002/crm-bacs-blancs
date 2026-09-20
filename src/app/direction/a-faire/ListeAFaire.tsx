@@ -119,7 +119,10 @@ function BlocMatiere({ m, seulementBloquants }: { m: TodoMatiere; seulementBloqu
               ici, et à chaque fois ? ». La réponse dépend de la forme de
               l'épreuve, pas d'un état d'avancement. */}
           <p className="text-[11px] text-gray-600 mt-1.5">
-            Notée par sa <strong>{m.moteur_label}</strong>. {m.a_definir}
+            {/* « Notée par sa barème du sujet » : le possessif ne marchait que
+                pour « grille ». On accorde au libellé plutôt que de le tordre. */}
+            Notée {m.moteur === 'bareme_sujet' ? 'au' : 'à la'}{' '}
+            <strong>{m.moteur_label}</strong>. {m.a_definir}
           </p>
         </div>
         <span

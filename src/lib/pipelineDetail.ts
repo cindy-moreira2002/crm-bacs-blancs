@@ -14,6 +14,7 @@ import { jetonRelecture } from './relecture';
 import { LABELS_MATIERES, labelExercice, chargerExamens } from './pipelineEtat';
 import type { CorrectionLigne, RetourProf, ExamenEtat } from './pipelineEtat';
 import { echelleExpliquee, trierDiagnostics, verifierBaremes, verifierStructureMatiere } from './pipelineVerifs';
+import { GUIDELINES } from './guidelines';
 import type { Diagnostic } from './pipelineVerifs';
 
 // --- Formes -----------------------------------------------------------
@@ -40,6 +41,15 @@ export type GrilleDetail = {
   guardrails: string[];
   principle: string | null;
   taxonomie: { code: string; description: string | null }[];
+  /**
+   * La consigne donnée au correcteur, EN ENTIER.
+   *
+   * Elle était réduite à son nombre de caractères : on pouvait voir qu'une
+   * consigne existait, jamais ce qu'elle disait. C'est pourtant elle qui fixe
+   * la sévérité, ce qui ne se sanctionne pas deux fois et ce qui déclenche une
+   * relecture — la première chose qu'on veut relire quand une note surprend.
+   */
+  system_prompt: string;
   system_prompt_chars: number;
   /** Barème ≠ 20 : l'échelle doit être expliquée dans le system_prompt. */
   echelle_ok: boolean;
@@ -97,6 +107,33 @@ export type OrphelinDetail = {
   ambigu: boolean;
 };
 
+/**
+ * Une grille RÉDIGÉE de la matière (le 3ᵉ moteur, celui de l'HGGSP) : critères
+ * décrits, paliers, consigne correcteur, garde-fous. Elle vit dans d'autres
+ * tables que les grilles de compétences, et n'apparaissait nulle part dans le
+ * détail d'une matière — on voyait son existence sur le tableau de bord, jamais
+ * son contenu.
+ */
+export type GrilleRedigeeDetail = {
+  id: string;
+  exercise_type: string;
+  label: string;
+  libelle: string;
+  version: string;
+  statut: string;
+  max_analytique: number;
+  max_officiel: number;
+  system_prompt: string;
+  garde_fous: string[];
+  criteres: {
+    code: string;
+    libelle: string;
+    max_points: number;
+    evaluer: string[];
+    paliers: { points: number; niveau: string; description: string }[];
+  }[];
+};
+
 export type DetailMatiere = {
   matiere: string;
   label: string;
@@ -104,6 +141,10 @@ export type DetailMatiere = {
   /** Couche 1 : les bacs blancs de la matière et leur barème propre. */
   baremes: ExamenEtat[];
   grilles: GrilleDetail[];
+  /** Les grilles rédigées de la matière, quand elle en a (HGGSP aujourd'hui). */
+  grilles_redigees: GrilleRedigeeDetail[];
+  /** Le classeur Google Sheets avec lequel le professeur corrige, s'il existe. */
+  guideline: { url: string | null; titre: string; note?: string } | null;
   sujets: SujetDetail[];
   gabarits: GabaritDetail[];
   /** Étalons sans sujet, rattachés à la matière par leur type d'épreuve. */
@@ -291,6 +332,7 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
           code: t.code,
           description: t.description ?? null,
         })),
+        system_prompt: prompt,
         system_prompt_chars: prompt.length,
         echelle_ok,
         source_status: texte(rj.source_status),
@@ -397,6 +439,62 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
     corrections_total: corrections.length,
     corrections_echecs: corrections.filter((cor) => cor.status.includes('failed')).length,
   });
+  // --- Les grilles rédigées de la matière (3ᵉ moteur) -----------------
+  // Tables séparées (`grilles_redigees`, `criteres_rediges`,
+  // `descripteurs_criteres`) : une matière qui n'en a pas rend un tableau vide,
+  // et une base sans ces tables ne doit pas casser la page.
+  const grilles_redigees: GrilleRedigeeDetail[] = [];
+  const redRes = await db
+    .from('grilles_redigees')
+    .select('id, exercise_type, version, libelle, statut, max_analytique, max_officiel, system_prompt, garde_fous')
+    .eq('matiere', matiere)
+    // Une grille archivée n'est plus la règle : l'afficher ferait lire un
+    // barème que plus aucune copie n'utilise.
+    .not('statut', 'eq', 'archived')
+    .order('exercise_type');
+  if (!redRes.error && redRes.data?.length) {
+    type Red = {
+      id: string; exercise_type: string; version: string; libelle: string; statut: string;
+      max_analytique: number; max_officiel: number; system_prompt: string | null; garde_fous: unknown;
+    };
+    type Crit = { id: string; grille_id: string; code: string; libelle: string; max_points: number; ordre: number; evaluer: unknown };
+    type Desc = { critere_id: string; points: number; niveau: string; description: string };
+    const redigees = redRes.data as Red[];
+    const [critRes, descRes] = await Promise.all([
+      db.from('grille_criteres').select('id, grille_id, code, libelle, max_points, ordre, evaluer').in('grille_id', redigees.map((g) => g.id)),
+      db.from('grille_descripteurs').select('critere_id, points, niveau, description'),
+    ]);
+    const criteres = (critRes.data ?? []) as Crit[];
+    const descripteurs = (descRes.data ?? []) as Desc[];
+    for (const g of redigees) {
+      grilles_redigees.push({
+        id: g.id,
+        exercise_type: g.exercise_type,
+        label: labelExercice(g.exercise_type),
+        libelle: g.libelle,
+        version: g.version,
+        statut: g.statut,
+        max_analytique: Number(g.max_analytique),
+        max_officiel: Number(g.max_officiel),
+        system_prompt: g.system_prompt ?? '',
+        garde_fous: Array.isArray(g.garde_fous) ? (g.garde_fous as string[]) : [],
+        criteres: criteres
+          .filter((c) => c.grille_id === g.id)
+          .sort((a, b) => Number(a.ordre) - Number(b.ordre))
+          .map((c) => ({
+            code: c.code,
+            libelle: c.libelle,
+            max_points: Number(c.max_points),
+            evaluer: Array.isArray(c.evaluer) ? (c.evaluer as string[]) : [],
+            paliers: descripteurs
+              .filter((d) => d.critere_id === c.id)
+              .map((d) => ({ points: Number(d.points), niveau: String(d.niveau), description: d.description }))
+              .sort((a, b) => a.points - b.points),
+          })),
+      });
+    }
+  }
+
   // Couche 1 : les barèmes propres aux sujets. Ils passent AVANT la grille
   // dans le tri, parce que c'est la note officielle qui s'y joue.
   const baremes = (await chargerExamens()).get(matiere) ?? [];
@@ -413,6 +511,8 @@ export async function chargerDetailMatiere(matiere: string): Promise<DetailMatie
     genere_le: new Date().toISOString(),
     baremes,
     grilles,
+    grilles_redigees,
+    guideline: GUIDELINES[matiere] ?? null,
     sujets,
     gabarits,
     orphelins,

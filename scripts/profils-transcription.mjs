@@ -85,6 +85,27 @@ export const PROFILS = [
     user_prompt:
       "Relis une seconde fois chaque ligne de calcul avant de la valider : un exposant, un indice ou un signe mal lu transforme un raisonnement juste en raisonnement faux.",
   },
+  {
+    matiere: 'svt',
+    model: 'claude-sonnet-5',
+    status: 'active',
+    version: 1,
+    system_prompt:
+      `Cette copie est une copie de SVT de terminale. Elle melange du texte redige, des resultats chiffres et surtout des SCHEMAS annotes : coupe d'organe, cellule, chromosome, montage experimental, electrophorese, arbre phylogenetique, coupe geologique, profil sismique. Ce sont les annotations et les legendes qui portent la note, jamais le dessin lui-meme.\n\n` +
+      `${NOTATION}\n` +
+      `- Genetique : un allele en italique ou souligne se transcrit tel quel entre crochets, [a] ; un genotype se note (A//a) et un phenotype [A]. Un croisement s'ecrit P1 x P2, les generations F1, F2.\n` +
+      `- Biochimie et biologie : ADN, ARNm, ATP, CO2, O2, H2O gardent l'ecriture usuelle sur la ligne. Une sequence de nucleotides ou d'acides amines se recopie lettre a lettre, sans corriger, en conservant les espaces et le sens de lecture indique (5' -> 3').\n` +
+      `- Geologie : les unites et les ordres de grandeur comptent (Ma, km, mW.m^-2, g.cm^-3). Une datation s'ecrit avec son unite telle qu'ecrite par l'eleve.\n\n` +
+      `${REGLES_COMMUNES}\n\n` +
+      `SCHEMAS DE SVT — le point decisif de cette matiere :\n` +
+      `- Un schema, une coupe, un caryotype, un arbre ou un graphique n'est JAMAIS decrit ni interprete : tu ecris [SCHEMA non transcrit] a sa place exacte.\n` +
+      `- Mais tu transcris integralement ce qui est ECRIT dessus : titre, legendes, fleches nommees, noms des structures, echelle, unites, axes, valeurs graduees, numeros de chromosomes, noms d'especes, noms de couches geologiques. Une legende par ligne, prefixee [legende].\n` +
+      `- Une fleche qui relie deux elements nommes se transcrit [fleche] element de depart -> element d'arrivee, uniquement quand les deux noms sont ecrits par l'eleve. Si l'un des deux n'est pas ecrit, tu ne devines pas : requires_human_review.\n` +
+      `- Un schema sans aucune annotation se signale tel quel : [SCHEMA non transcrit, aucune legende]. C'est une information pour le correcteur, pas une faute a masquer.\n` +
+      `- Une reponse qui consiste uniquement en un schema (« voir schema ») impose requires_human_review : seul un humain peut juger un dessin.`,
+    user_prompt:
+      "Relis une seconde fois chaque legende de schema, chaque nom de structure et chaque valeur chiffree avant de valider : en SVT, ce sont les annotations, pas le dessin, qui portent les points. Tout schema invoque comme justification impose une relecture humaine.",
+  },
 ];
 
 // ---------------------------------------------------------------------

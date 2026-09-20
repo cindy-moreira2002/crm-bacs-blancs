@@ -60,6 +60,14 @@ export type ExerciceEtat = {
   label: string;
   /** `grille_id` : la grille rédigée désignée par cette grille de dépôt, s'il y en a une. */
   grille: { id: string; version: number | null; status: string; moteur: string; grille_id: string | null } | null;
+  /**
+   * Une version PLUS RÉCENTE que la grille active, laissée en brouillon.
+   * Ce n'est pas un manque — la matière corrige très bien avec l'active — mais
+   * une décision en attente : garder celle qui tourne, ou lui substituer
+   * celle-ci. Tant que personne ne tranche, le travail déjà fait sur la
+   * nouvelle version ne sert à rien et n'apparaît nulle part.
+   */
+  grille_en_attente: { id: string; version: number | null; status: string } | null;
   gabarit: { id: string; status: string } | null;
   sujets: SujetEtat[];
   etalons: { total: number; synthetiques: number; valides: number };
@@ -568,6 +576,7 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
         exercise_type: e,
         label: labelExercice(e) + (t === 'technologique' ? ' · techno' : ''),
         grille: null,
+        grille_en_attente: null,
         gabarit: null,
         sujets: [],
         etalons: { total: 0, synthetiques: 0, valides: 0 },
@@ -577,17 +586,44 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
     return ex;
   };
 
+  // Toutes les versions d'une même épreuve, avant d'en choisir une : il faut
+  // les voir ensemble pour distinguer celle qui corrige de celles qui attendent.
+  const versionsParExercice = new Map<string, Rub[]>();
   for (const r of rubriques) {
-    const ex = exercice(r.matiere, r.track, r.exercise_type);
-    // Plusieurs versions possibles : on retient la plus récente.
-    if (!ex.grille || (r.version ?? 0) > (ex.grille.version ?? 0)) {
-      ex.grille = {
-        id: r.id,
-        version: r.version,
-        status: r.status,
-        moteur: r.moteur ?? 'grille_generique',
-        grille_id: r.grille_id,
-      };
+    exercice(r.matiere, r.track, r.exercise_type); // crée l'épreuve même sans sujet
+    const k = cle(r.matiere, r.track, r.exercise_type);
+    versionsParExercice.set(k, [...(versionsParExercice.get(k) ?? []), r]);
+  }
+  for (const [k, versions] of versionsParExercice) {
+    const ex = exercices.get(k)!;
+    // CELLE QUI CORRIGE d'abord : la grille active. Une contrainte de base
+    // (`one_active_rubric_per_matiere_exercise`) garantit qu'il n'y en a jamais
+    // deux, et c'est elle que le trigger recopie sur la copie déposée.
+    //
+    // Retenir « la plus récente » était faux : français, philosophie et SES
+    // portent chacune une V2 en brouillon au-dessus d'une V1 active (le
+    // découpage fin du classeur prof, jamais tranché). Le pilotage lisait donc
+    // la brouillonne, annonçait « 0 grille active » et déclarait fermées trois
+    // matières qui acceptaient les copies — constaté le 20 septembre 2026.
+    const parVersion = [...versions].sort((a, b) => (b.version ?? 0) - (a.version ?? 0));
+    const retenue = parVersion.find((r) => r.status === 'active') ?? parVersion[0];
+    ex.grille = {
+      id: retenue.id,
+      version: retenue.version,
+      status: retenue.status,
+      moteur: retenue.moteur ?? 'grille_generique',
+      grille_id: retenue.grille_id,
+    };
+    // Une version plus récente laissée en brouillon n'est pas un manque : c'est
+    // une décision en attente, et la to-do doit la porter plutôt que de la
+    // laisser dormir.
+    if (retenue.status === 'active') {
+      const attente = parVersion.find(
+        (r) => r.status !== 'active' && (r.version ?? 0) > (retenue.version ?? 0),
+      );
+      if (attente) {
+        ex.grille_en_attente = { id: attente.id, version: attente.version, status: attente.status };
+      }
     }
   }
   for (const s of sujets) {
@@ -599,7 +635,13 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
   }
   for (const t of gabarits) {
     if (t.audience !== 'eleve') continue;
-    exercice(t.matiere, t.track, t.exercise_type).gabarit = { id: t.id, status: t.status };
+    const ex = exercice(t.matiere, t.track, t.exercise_type);
+    // Même règle que pour les grilles : une épreuve peut porter la v1 archivée
+    // ET la v2 active. C'est le gabarit ACTIF qui fabrique le dossier de
+    // l'élève ; celui qui arrive en dernier ne veut rien dire.
+    if (!ex.gabarit || (t.status === 'active' && ex.gabarit.status !== 'active')) {
+      ex.gabarit = { id: t.id, status: t.status };
+    }
   }
 
   let orphelins = 0;
@@ -673,10 +715,23 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
         corrections_reussies: reussiesParMatiere.get(matiere) ?? 0,
         retours_profs: retoursParMatiere.get(matiere) ?? 0,
       };
-      const actifs = totaux.grilles_actives + totaux.sujets_actifs + totaux.gabarits_actifs;
-      const total = totaux.grilles + totaux.sujets + totaux.gabarits;
+      // « Visible au dépôt » répond à UNE question : un professeur peut-il
+      // déposer une copie qui ira jusqu'au dossier de l'élève ? Il lui faut,
+      // pour chaque épreuve, les trois pièces OUVERTES : une grille active,
+      // un sujet actif et un gabarit de dossier actif.
+      //
+      // Ce n'est pas « tout ce qui existe est actif ». Une matière garde
+      // normalement des pièces en brouillon : versions remplacées, et surtout
+      // fiches support de copies réelles (le français en a seize) qui ne sont
+      // PAS destinées au dépôt. Les compter comme des manques faisait dire à
+      // la page qu'une matière était fermée alors qu'elle corrigeait.
+      const epreuvePrete = (e: ExerciceEtat) =>
+        e.grille?.status === 'active' &&
+        e.gabarit?.status === 'active' &&
+        e.sujets.some((s) => s.status === 'active');
+      const pretes = exs.filter(epreuvePrete).length;
       const visibilite: MatiereEtat['visibilite'] =
-        actifs === 0 ? 'draft' : actifs === total ? 'active' : 'partielle';
+        exs.length === 0 || pretes === 0 ? 'draft' : pretes === exs.length ? 'active' : 'partielle';
 
       // D'ou sort la note ici ? Trois moteurs peuvent y prétendre :
       //   - un barème propre au sujet, dès que ses corrections sont ouvertes ;

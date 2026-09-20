@@ -520,6 +520,30 @@ export async function chargerTodo(): Promise<TodoPipeline> {
     parMatiere.set(m.matiere, [...(parMatiere.get(m.matiere) ?? []), ...sup]);
   }
 
+  // Une version de grille plus récente laissée en brouillon : ce n'est pas une
+  // panne, c'est une décision jamais prise. Le travail est fait, il ne sert à
+  // personne, et rien ne le rappelait nulle part — la matière corrige avec
+  // l'ancienne version sans que ça se voie.
+  for (const m of etat.matieres) {
+    const enAttente = m.exercices.filter((e) => e.grille_en_attente);
+    if (!enAttente.length) continue;
+    const noms = enAttente.map((e) => e.grille_en_attente!.id).join(', ');
+    parMatiere.set(m.matiere, [
+      ...(parMatiere.get(m.matiere) ?? []),
+      {
+        id: `${m.matiere}-version-en-attente`,
+        titre: `Trancher : garder la grille actuelle de ${m.label} ou passer à la nouvelle`,
+        pourquoi:
+          `Une version plus récente existe (${noms}) mais dort en brouillon. Les copies sont notées avec l'ancienne : le travail fait sur la nouvelle ne sert à rien tant que personne ne choisit.`,
+        comment:
+          'La base n’accepte qu’une grille active par épreuve : activer la nouvelle REMPLACE l’ancienne, elle ne s’y ajoute pas. Décide, dis-le-moi, je bascule.',
+        acteur: 'humain',
+        bloquant: false,
+        ou: { label: 'Ouvrir la matière', href: lienPilotage(m.matiere, undefined) },
+      },
+    ]);
+  }
+
   // Une matière ouverte au dépôt sans aucune session vendue n'est pas une
   // anomalie ; une session vendue sans matière ouverte, si.
   for (const m of etat.matieres) {
