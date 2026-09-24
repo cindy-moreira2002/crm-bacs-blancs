@@ -652,6 +652,24 @@ export function DetailMatiereVue({
         </Section>
       )}
 
+      {/* Maths, physique-chimie, SVT : AUCUN barème prédéfini (règle de Cindy).
+          Les grilles « de compétences » restent en base parce que le dépôt
+          s'aiguille par elles vers le barème du sujet — mais leurs points ne
+          comptent pour rien, et les afficher faisait croire à un barème commun. */}
+      {moteurAttendu(detail.matiere) === 'bareme_sujet' ? (
+        <Section
+          titre="Pas de barème commun"
+          sousTitre="Chaque sujet arrive avec son barème, question par question, et le classeur du professeur qui en est tiré. C’est lui, et lui seul, qui donne la note."
+        >
+          <p className="text-sm text-gray-600">
+            Les barèmes des sujets sont ci-dessus, et se relisent dans{' '}
+            <Link href="/direction/bareme" className="text-purple-700 hover:underline">
+              Barèmes par sujet
+            </Link>
+            .
+          </p>
+        </Section>
+      ) : (
       <Section
         titre={
           moteurAttendu(detail.matiere) === 'grille_generique'
@@ -671,6 +689,7 @@ export function DetailMatiereVue({
           {detail.grilles.length === 0 && <p className="text-sm text-red-600">Aucun barème en base pour cette matière.</p>}
         </div>
       </Section>
+      )}
 
       {detail.grilles_redigees.length > 0 && (
         <Section

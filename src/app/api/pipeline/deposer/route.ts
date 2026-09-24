@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pipelineDb, pipelineManquant, MATIERE_PAR_DEFAUT } from '@/lib/pipeline';
+import { examenOuvertDeLaFiche } from '@/lib/ficheDepot';
 import { accesDepot, verifierQuotaDepot } from '@/lib/accesDepot';
 import { sujetDeCorrection } from '@/lib/bacsBlancs';
 
@@ -125,6 +126,10 @@ export async function POST(req: NextRequest) {
       complet = { exam_id, exam_format: examen.exam_format, groupe_copie_id };
     }
 
+    // Une copie déposée sur la fiche d'un sujet noté au barème du sujet est
+    // reliée à son examen : c'est là que `correct-copy-bareme` lit le barème.
+    const examDeLaFiche = complet ? null : await examenOuvertDeLaFiche(String(subject_id));
+
     const { data: correction, error } = await db
       .from('corrections')
       .insert({
@@ -142,6 +147,7 @@ export async function POST(req: NextRequest) {
         teacher_email: prof_email ? String(prof_email).trim() : acces.email,
         matiere: matiere || MATIERE_PAR_DEFAUT,
         source: 'crm',
+        ...(examDeLaFiche ? { exam_id: examDeLaFiche } : {}),
         ...(complet ?? {}),
       })
       .select('id, status')

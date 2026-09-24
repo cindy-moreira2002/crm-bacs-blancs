@@ -38,6 +38,7 @@ import {
 } from '../src/lib/bareme';
 import { LABELS_MATIERES } from '../src/lib/matieres';
 import { CE_QUI_SE_DEFINIT, moteurAttendu } from '../src/lib/moteurs';
+import { synchroniserFicheDepot } from '../src/lib/ficheDepot';
 
 type FichierBareme = {
   exam: {
@@ -148,6 +149,12 @@ async function principal() {
     });
     console.log(`· Barème ${version.version} enregistré.`);
   }
+
+  // 3 bis. La fiche de dépôt, reliée à l'examen. Brouillon tant que les
+  //    corrections ne sont pas ouvertes : c'est « Ouvrir les corrections » qui
+  //    la rend visible dans « Déposer une copie ».
+  const fiche = await synchroniserFicheDepot(examId);
+  console.log(`· Fiche de dépôt ${fiche.fiche} (${fiche.visible ? 'visible au dépôt' : 'visible à l’ouverture des corrections'}).`);
 
   // 4. La vérification qui fait autorité : celle de la base, la même que
   //    rejoue `bareme_verrouiller()`. Celle du TypeScript ne bloque rien.

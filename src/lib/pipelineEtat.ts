@@ -740,8 +740,15 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
         e.gabarit?.status === 'active' &&
         e.sujets.some((s) => s.status === 'active');
       const pretes = exs.filter(epreuvePrete).length;
+      // Au barème du sujet (maths, PC, SVT), les « épreuves » ne sont que des
+      // grilles d'aiguillage : un seul sujet ouvert suffit pour que la matière
+      // corrige. Exiger un sujet par type d'exercice la disait à moitié fermée.
       const visibilite: MatiereEtat['visibilite'] =
-        exs.length === 0 || pretes === 0 ? 'draft' : pretes === exs.length ? 'active' : 'partielle';
+        exs.length === 0 || pretes === 0
+          ? 'draft'
+          : pretes === exs.length || moteurAttendu(matiere) === 'bareme_sujet'
+            ? 'active'
+            : 'partielle';
 
       // D'ou sort la note ici ? Trois moteurs peuvent y prétendre :
       //   - un barème propre au sujet, dès que ses corrections sont ouvertes ;

@@ -24,6 +24,7 @@ import {
   type SaisieQuestion,
 } from '@/lib/bareme';
 import { pipelineDb } from '@/lib/pipeline';
+import { synchroniserFicheDepot } from '@/lib/ficheDepot';
 import { gardeAdmin, erreur } from '../../garde';
 
 export const dynamic = 'force-dynamic';
@@ -90,8 +91,12 @@ export async function POST(
         return NextResponse.json({ controles: await verrouillerBareme(corps.version_id, garde.auteur) });
       }
 
-      case 'ouvrir_corrections':
-        return NextResponse.json({ resultat: await ouvrirCorrections(examId, garde.auteur) });
+      case 'ouvrir_corrections': {
+        const resultat = await ouvrirCorrections(examId, garde.auteur);
+        // Sans fiche visible, le sujet n'apparaît pas dans « Déposer une copie ».
+        const fiche = await synchroniserFicheDepot(examId);
+        return NextResponse.json({ resultat, fiche });
+      }
 
       case 'nouvelle_version': {
         if (!corps.version_id || !corps.version) {

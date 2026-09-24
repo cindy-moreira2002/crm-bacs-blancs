@@ -47,11 +47,12 @@ export const GUIDELINES: Record<string, Guideline> = {
     url: SHEET('1Mc3JaTOJEYiYlGPy8JGCw_q_0Az9BeOozFkvMvCjn30'),
     titre: 'Guideline correction épreuve bac philo V0',
   },
-  maths: {
-    url: SHEET('1TB7tp1ZQ65swxN53k8lNYYX8QRjcXdRRaXKruNeNxDw'),
-    titre: 'Guideline correction épreuve bac spé maths V0',
-    note: 'Épreuve à questions numérotées : la guideline dit COMMENT compter, le barème du sujet dit COMBIEN vaut chaque question (/direction/bareme). La version 1ère tronc commun est ici : https://docs.google.com/spreadsheets/d/1k3Bt0d818xUCaBzp9zJwtgN2RMoR--_BW1w7ki8bV0E/edit',
-  },
+  // Pas de classeur commun en maths (règle de Cindy, 24 septembre 2026) :
+  // chaque sujet est livré avec SON classeur, tiré de son barème
+  // (`bareme2classeur.py` du skill generer-sujet-bac). Son lien se pose sur
+  // le bac blanc (`sheet_correction_url`). L'ancienne guideline par
+  // compétences : SHEET('1TB7tp1ZQ65swxN53k8lNYYX8QRjcXdRRaXKruNeNxDw').
+  maths: { url: null, titre: 'classeur livré avec le sujet — à poser sur le bac blanc' },
   ses: {
     url: SHEET('1mHcvJNt6ONZw85_AMoKIDeL1Oi3YnNkdfhKYjzGkE4w'),
     titre: 'Guideline correction épreuve bac SES V0',
