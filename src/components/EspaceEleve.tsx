@@ -135,6 +135,27 @@ async function chargerSujets(): Promise<SujetEleveVue[]> {
   }
 }
 
+/** Ce que renvoie /api/eleve/code-epreuve. Un code par bac blanc à venir. */
+type CodeEpreuveVue = {
+  session_id: string;
+  matiere: string;
+  date_epreuve: string;
+  code: string;
+  ouvert: boolean;
+};
+
+/** Jamais bloquant : pas de codes configurés → rien à afficher, pas d'erreur. */
+async function chargerCodesEpreuve(): Promise<CodeEpreuveVue[]> {
+  try {
+    const r = await fetch('/api/eleve/code-epreuve');
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.codes ?? []) as CodeEpreuveVue[];
+  } catch {
+    return [];
+  }
+}
+
 function fmtHeure(iso: string) {
   return new Date(iso).toLocaleTimeString('fr-FR', {
     timeZone: 'Europe/Paris',
@@ -549,12 +570,66 @@ const FAQ_ITEMS: FaqItem[] = [
   },
 ];
 
+/**
+ * Le code de l'épreuve de l'élève, et quand s'en servir.
+ *
+ * Il ne sert qu'une fois, au moment d'ouvrir sa copie : tout le reste de la
+ * journée, l'ordinateur et le téléphone restent ouverts sans rien redemander.
+ * C'est exactement ce que dit l'encadré — un élève qui referme l'application
+ * une heure avant la fin ne doit pas croire qu'il a perdu sa copie.
+ */
+function CodeDeLEpreuve({ code }: { code: CodeEpreuveVue | null }) {
+  if (!code) return null;
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: '12px 14px',
+        borderRadius: 14,
+        background: '#FFF8E1',
+        border: '1.5px solid #F2D98C',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '.85rem', fontWeight: 800, color: '#7A5B00' }}>
+          🔑 Ton code pour ce bac blanc
+        </span>
+        <code
+          style={{
+            fontSize: '1.15rem',
+            fontWeight: 800,
+            letterSpacing: '.18em',
+            background: '#fff',
+            border: '1px solid #E4D3A0',
+            borderRadius: 10,
+            padding: '6px 12px',
+            color: '#1B3FAB',
+          }}
+        >
+          {code.code}
+        </code>
+        {code.ouvert && (
+          <span style={{ fontSize: '.78rem', color: '#7A5B00' }}>déjà utilisé ✓</span>
+        )}
+      </div>
+      <p style={{ margin: '8px 0 0', fontSize: '.8rem', lineHeight: 1.5, color: '#7A5B00' }}>
+        Tu le tapes <strong>une seule fois</strong>, le jour de l’épreuve, quand tu cliques sur
+        « Écrire ma copie » sur l’ordinateur où tu vas travailler. Ensuite, plus rien ne te sera
+        demandé de la journée : tu peux fermer l’application, éteindre ton téléphone ou changer de
+        Wi-Fi, ta copie t’attend. <strong>Il ne marche que sur un seul ordinateur</strong> — si tu
+        dois en changer, préviens ton professeur, il le débloque en un clic.
+      </p>
+    </div>
+  );
+}
+
 export function EspaceEleve() {
   const [email, setEmail]               = useState('');
   const [copies, setCopies]             = useState<Copie[] | null>(null);
   const [inscriptions, setInscriptions] = useState<Inscription[] | null>(null);
   // Le sujet de l'épreuve, ouvert automatiquement quelques minutes avant.
   const [sujets, setSujets]             = useState<SujetEleveVue[]>([]);
+  const [codesEpreuve, setCodesEpreuve] = useState<CodeEpreuveVue[]>([]);
   const [packs, setPacks]               = useState<PackVue[]>([]);
   const [loading, setLoading]           = useState(false);
   // Connexion en deux temps : l'adresse identifie, le code envoyé par e-mail
@@ -605,6 +680,16 @@ export function EspaceEleve() {
     chargerSujets().then((l) => { if (!annule) setSujets(l); });
     return () => { annule = true; };
   }, [now, etape, prochaineOuverture]);
+
+  // Le code de l'épreuve est chargé dès l'entrée dans l'espace, pas à
+  // l'approche de l'heure : l'élève doit pouvoir le noter à l'avance, et le
+  // retrouver ici s'il l'a perdu le matin même.
+  useEffect(() => {
+    if (etape !== 'entree') return;
+    let annule = false;
+    chargerCodesEpreuve().then((l) => { if (!annule) setCodesEpreuve(l); });
+    return () => { annule = true; };
+  }, [etape]);
 
   // Aperçu : ?demo=1 → élève fictif complet (notes, copies) ; ?demo=nouveau →
   // élève qui vient de s'inscrire (aucune copie), pour voir les états vides.
@@ -1005,6 +1090,10 @@ export function EspaceEleve() {
               ensuite le QR code affiché avec ton téléphone, il devient ton stylo.
             </p>
           )}
+          {/* Le code de l'épreuve : sous le bouton qui l'utilise, et nulle part
+              ailleurs. L'élève l'a sous les yeux au moment où il en a besoin,
+              et le même code lui est rappelé par mail avant l'épreuve. */}
+          <CodeDeLEpreuve code={codesEpreuve.find((c) => c.matiere === prochain.matiere) ?? null} />
         </div>
       )}
 

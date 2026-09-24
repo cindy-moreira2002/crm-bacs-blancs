@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { IconeDiscord, LiaisonDiscord } from '@/components/LiaisonDiscord';
 import { SujetEtRetour } from '@/components/SujetEtRetour';
+import type { CodeEpreuve } from '@/lib/ecritureAcces';
 import type { EleveSession, SessionEnrichie } from '@/lib/espaceProf';
 
 /** Toutes les dix secondes : assez pour ne pas faire attendre un élève. */
@@ -220,6 +221,139 @@ function DocEleve({
         ✎
       </button>
     </span>
+  );
+}
+
+/**
+ * Les codes de l'épreuve — un par élève, à dicter au début.
+ *
+ * Un seul endroit pour les codes : ils ne sont pas repris sur la ligne de
+ * l'élève, sinon il y aurait deux vérités à comparer le jour J. Le bloc reste
+ * replié tant qu'on ne l'ouvre pas — il ne sert que dix minutes, au début.
+ *
+ * « Débloquer » est le filet de sécurité : un code ne sert qu'une fois, donc un
+ * ordinateur qui plante en pleine épreuve laisserait l'élève dehors. Le
+ * professeur le libère, l'élève le ressaisit sur son nouveau poste.
+ */
+function CodesEpreuve({ sessionId }: { sessionId: string }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [codes, setCodes] = useState<CodeEpreuve[] | null>(null);
+  const [moi, setMoi] = useState<CodeEpreuve | null>(null);
+  const [actif, setActif] = useState(true);
+  const [encours, setEncours] = useState<string | null>(null);
+
+  const charger = useCallback(async () => {
+    const res = await fetch(`/api/prof/sessions/${sessionId}/codes`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = (await res.json()) as {
+      actif: boolean;
+      moi: CodeEpreuve | null;
+      codes: CodeEpreuve[];
+    };
+    setActif(data.actif);
+    setMoi(data.moi ?? null);
+    setCodes(data.codes ?? []);
+  }, [sessionId]);
+
+  async function debloquer(code: string) {
+    if (!confirm(`Débloquer le code ${code} ?\n\nL’élève pourra le saisir à nouveau, sur un autre appareil.`)) return;
+    setEncours(code);
+    const res = await fetch(`/api/prof/sessions/${sessionId}/codes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    setEncours(null);
+    if (res.ok) void charger();
+    else alert('Déblocage impossible. Réessaie dans un instant.');
+  }
+
+  if (!actif) return null;
+
+  return (
+    <section className="mb-5 rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <button
+        // Les codes se chargent à l'ouverture du bloc, pas au rendu de la
+        // console : ils ne servent qu'au début de l'épreuve, et les demander
+        // créerait les codes d'un bac blanc qu'on ne fait qu'entrouvrir.
+        onClick={() => {
+          const prochain = !ouvert;
+          setOuvert(prochain);
+          if (prochain) void charger();
+        }}
+        className="w-full flex items-center justify-between px-5 py-4 text-left"
+      >
+        <span className="font-bold text-gray-900">🔑 Codes de l’épreuve</span>
+        <span className="text-sm text-gray-500">
+          {ouvert ? 'Masquer' : 'Mon code, et celui de chaque élève'}
+        </span>
+      </button>
+
+      {ouvert && (
+        <div className="px-5 pb-5">
+          {/* Mon code d'abord : c'est celui dont le professeur a besoin pour
+              lui-même, et il n'est écrit nulle part ailleurs. */}
+          {moi && (
+            <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-bold text-blue-900">Mon code de surveillance</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <code className="rounded-lg bg-white px-3 py-1.5 text-lg font-bold tracking-widest text-blue-900 border border-blue-200">
+                  {moi.code}
+                </code>
+                <span className="text-sm text-blue-900/80">
+                  {moi.ouvert_le ? `ouvert à ${heureCourte(moi.ouvert_le)}` : 'pas encore ouvert'}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-blue-900/80">
+                À saisir une fois, sur l’ordinateur d’où tu suis les copies. Il
+                les ouvre <strong>toutes</strong>, et reste valable jusqu’au soir.
+              </p>
+            </div>
+          )}
+
+          <p className="mb-3 text-sm text-gray-600">
+            Chaque élève a son code, et il le trouve déjà dans son espace élève —
+            tu n’as rien à dicter. Il ne s’ouvre qu’une fois, sur un seul
+            appareil, et reste valable toute la journée, même si son téléphone
+            s’éteint. Tu le retrouves ici s’il l’a perdu.
+          </p>
+          {codes === null ? (
+            <p className="text-sm text-gray-500">Chargement…</p>
+          ) : codes.length === 0 ? (
+            <p className="text-sm text-gray-500">Aucun code pour ce bac blanc.</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {codes.map((c) => (
+                <div key={c.code} className="flex flex-wrap items-center gap-3 py-2.5">
+                  <span className="font-semibold text-gray-900 flex-1 min-w-[9rem]">
+                    {c.eleve_nom ?? c.copie_id}
+                  </span>
+                  <code className="rounded-lg bg-gray-100 px-3 py-1.5 text-base font-bold tracking-widest text-gray-900">
+                    {c.code}
+                  </code>
+                  <span className="text-sm text-gray-500 min-w-[9rem]">
+                    {c.ouvert_le ? `ouvert à ${heureCourte(c.ouvert_le)}` : 'pas encore ouvert'}
+                    {c.liberations > 0 && ` · débloqué ${c.liberations}×`}
+                  </span>
+                  <button
+                    onClick={() => debloquer(c.code)}
+                    disabled={!c.ouvert_le || encours === c.code}
+                    title={
+                      c.ouvert_le
+                        ? 'L’élève pourra ressaisir son code sur un autre appareil.'
+                        : 'Rien à débloquer : ce code n’a pas encore servi.'
+                    }
+                    className="px-3 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    {encours === c.code ? '…' : 'Débloquer'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -612,6 +746,8 @@ export function SessionProf({
       <div className="mb-5">
         <LiaisonDiscord pourquoi="C’est ce qui t’ouvre la zone Équipe et les salles de tes élèves : sans compte relié, tu vois les liens mais tu ne peux pas entrer." />
       </div>
+
+      <CodesEpreuve sessionId={session.id} />
 
       {/* --- Mes élèves : UNE seule liste, et tout y est ---------------
           Il y avait un onglet « Copies » qui reprenait les mêmes élèves avec

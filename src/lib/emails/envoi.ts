@@ -16,6 +16,8 @@
  *  - **la limite quotidienne est respectée**, les messages indispensables
  *    passant avant les relances commerciales.
  */
+import { codeCopie } from '@/lib/codeCopie';
+import { codeEpreuveEleve, codesDisponibles } from '@/lib/ecritureAcces';
 import { emailsDb } from './client';
 import { chargerReglages, envoiDesactive, validationManuelle, type Reglages } from './reglages';
 import { construireEmail } from './modeles';
@@ -351,6 +353,23 @@ async function preparer(
     };
     if (ligne.destinataire_role === 'parent' && ligne.variables?.first_name) {
       variables.first_name = ligne.variables.first_name;
+    }
+
+    // Le code de l'épreuve ne part que dans le rappel de la veille — le message
+    // qui rappelle le déroulé — et il est lu MAINTENANT, pas à la planification
+    // cinq jours plus tôt : un code débloqué entre-temps ne doit pas partir
+    // périmé. L'élève a le même dans son espace ; c'est la même source.
+    if (ligne.type === 'rappel_veille' && session && codesDisponibles()) {
+      const matiere = session.matiere ?? inscription.matiere ?? '';
+      const copieId = codeCopie(inscription.nom ?? '', matiere);
+      if (copieId) {
+        const acces = await codeEpreuveEleve(
+          session.id,
+          { copieId, nom: inscription.nom ?? '', matiere },
+          (session.date_epreuve ?? '').slice(0, 10),
+        );
+        if (acces) variables.exam_code = acces.code;
+      }
     }
   } else if (ligne.session_id) {
     // Message prof : on vérifie au moins que la session n'a pas été annulée.

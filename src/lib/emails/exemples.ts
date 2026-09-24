@@ -25,6 +25,9 @@ export const VARIABLES_EXEMPLE: Record<string, string> = {
   connection_time: '8 h 45',
   teacher_name: 'Camille Durand',
   student_space_url: 'https://espaces.matineesdubac.fr/espace-eleve',
+  // Le code de l'épreuve : présent dans l'aperçu pour qu'on voie l'encadré du
+  // rappel de la veille tel que l'élève le recevra.
+  exam_code: 'K7M2-P4X9',
   teacher_space_url: 'https://espaces.matineesdubac.fr/espace-prof',
   // Forme réelle d'une adresse de salle Discord : serveur, puis salon.
   video_room_url: 'https://discord.com/channels/000000000000000000/111111111111111111',

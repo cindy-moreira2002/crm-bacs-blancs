@@ -573,6 +573,21 @@ const rappel_veille: Modele = {
           'Téléphone chargé si tu utilises la copie numérique',
         ],
       },
+      // Le code n'apparaît que s'il existe : tant que les codes d'épreuve ne
+      // sont pas en service, le message est exactement celui d'avant.
+      ...(h.a('exam_code')
+        ? [
+            {
+              type: 'encadre' as const,
+              titre: `🔑 Ton code pour cette épreuve : ${h.t('exam_code')}`,
+              lignes: [
+                'Tu le tapes <strong>une seule fois</strong>, demain, en ouvrant ta copie sur l’ordinateur où tu vas écrire.',
+                'Ensuite, plus rien ne te sera demandé de la journée : tu peux fermer l’application ou éteindre ton téléphone, ta copie t’attend.',
+                'Il ne marche que sur un seul ordinateur — si tu dois en changer, préviens ton professeur.',
+              ],
+            },
+          ]
+        : []),
     ],
     bouton: h.a('video_room_url')
       ? { libelle: 'Mon salon visio', url: h.r('video_room_url') }
