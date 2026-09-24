@@ -559,7 +559,18 @@ export function lireGuidelineCorrigee(table: string[][]): {
   const lire = (ligne: number, colonne: number | null) =>
     colonne === null ? '' : ((table[ligne] ?? [])[colonne] ?? '').trim();
 
-  const copies = colonnes.map((colonne) => {
+  // Le classeur prévoit plus de colonnes que d'élèves : une colonne restée
+  // « Élève 7 » sans aucune case cochée n'est pas une copie. Un vrai nom sans
+  // case, lui, reste — le prof doit voir qu'il a oublié de corriger.
+  const colonnesUtiles = colonnes.filter(
+    (colonne) =>
+      !/^[ée]l[èe]ve\s*\d+$/i.test(colonne.nom) ||
+      guideline.criteres.some((c) =>
+        c.niveaux.some((n) => estCochee(lire(n.ligne, colonne.colonneCase))),
+      ),
+  );
+
+  const copies = colonnesUtiles.map((colonne) => {
     const avertissements: string[] = [];
     const criteres: CritereCoche[] = guideline.criteres.map((c) => {
       const cochees: number[] = [];
