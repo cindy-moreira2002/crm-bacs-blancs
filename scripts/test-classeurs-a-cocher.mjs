@@ -1,5 +1,5 @@
 /**
- * Classeurs V1 « à cocher » : français, philo, maths spé, SES, HLP, LLCER anglais.
+ * Classeurs V1 « à cocher » : français, philo, maths spé, SES, HLP, LLCER anglais, HGGSP.
  *
  * Les fixtures sont l'export CSV des classeurs produits par
  * `scripts/faire-classeurs-a-cocher.py`, tels que Google Sheets les rend
@@ -25,9 +25,10 @@ const CLASSEURS = [
   { nom: 'philo-v1-a-cocher.csv', criteres: 25, parties: [/DISSERTATION/, /EXPLICATION/] },
   { nom: 'maths-specialite-v1-a-cocher.csv', criteres: 6, parties: [/COMPÉTENCES/] },
   { nom: 'ses-v1-a-cocher.csv', criteres: 21, parties: [/DISSERTATION/, /COMPOSÉE/] },
-  // HLP et LLCER : l'élève traite les deux parties, qui font 20 ensemble.
+  // HLP, LLCER et HGGSP : l'élève traite les deux parties, qui font 20 ensemble.
   { nom: 'hlp-v1-a-cocher.csv', criteres: 15, parties: [/INTERPRÉTATION/, /ESSAI/], points: [10, 10] },
   { nom: 'anglais-llcer-v1-a-cocher.csv', criteres: 15, parties: [/SYNTHÈSE/, /TRADUCTION/], points: [16, 4] },
+  { nom: 'hggsp-v1-a-cocher.csv', criteres: 20, parties: [/DISSERTATION/, /ÉTUDE CRITIQUE/], points: [10, 10] },
 ];
 
 /** Coche, pour l'élève `k`, le palier choisi par `choisir` dans chaque critère de `partie`. */

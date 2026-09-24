@@ -15,7 +15,7 @@ est repris tel quel du classeur V0_2. Seules trois choses de FORME changent :
      point, sort du tableau de barème et devient une note au correcteur.
 
 Et on ajoute la zone de correction (trois élèves, « niveau ? » + commentaire),
-que le classeur V0_2 n'avait pas.
+que le classeur V0_2 n'avait pas — 12 élèves, comme les autres matières.
 """
 
 import csv
@@ -29,7 +29,7 @@ from openpyxl.utils import get_column_letter
 
 SOURCE = '/Users/cindymoreira/crm-bacs-blancs/scripts/fixtures/guidelines/hggsp-v0-2.csv'
 SORTIE = sys.argv[1] if len(sys.argv) > 1 else 'HGGSP.xlsx'
-NB_ELEVES = 3
+NB_ELEVES = 12
 
 RE_PTS = re.compile(r'^[—–-]?\s*/\s*(\d+(?:[,.]\d+)?)\s*$')
 RE_LETTRE = re.compile(r'^([A-Z])[.)]\s+(.{3,})$')
@@ -218,9 +218,10 @@ def ecrire(parties, notes_bas, ajouts_zero, sous_criteres_crees):
 
     put(4, 1, 'Mode d’emploi', bold=True)
     put(4, 2,
-        'Écrire le nom de chaque élève en ligne 2, puis cocher UNE case « niveau ? » '
-        'par critère — celle du palier atteint. Une case se coche avec x, oui, 1 ou '
-        'une vraie case à cocher. Le commentaire est facultatif. '
+        'Remplacer « Élève 1 », « Élève 2 »… en ligne 2 par le prénom et le nom de '
+        'chaque élève, puis cocher UNE case « niveau ? » par critère — celle du palier '
+        'atteint. Une colonne restée « Élève N » sans case cochée est ignorée à l’import. '
+        'Le commentaire est facultatif. '
         'Ne rien écrire dans les colonnes A à E : c’est le barème.',
         size=9, italic=True)
 
@@ -289,8 +290,8 @@ def ecrire(parties, notes_bas, ajouts_zero, sous_criteres_crees):
         "5 sur 20. Les descripteurs de niveau 0 sont écrits en gris : à relire.",
         "« Production graphique facultative » n'avait aucun point : elle est passée en note "
         "au correcteur, ci-dessus, au lieu d'être ignorée en silence.",
-        "La zone de correction (nom de l'élève, « niveau ? », commentaire) a été ajoutée : "
-        "le classeur V0_2 était un barème seul, sans rien à cocher.",
+        "La zone de correction (nom de l'élève, « niveau ? », commentaire) a été ajoutée, "
+        "pour 12 élèves : le classeur V0_2 était un barème seul, sans rien à cocher.",
     ]:
         put(ligne, 1, texte, size=9, italic=True)
         ws.cell(row=ligne, column=1).alignment = Alignment(wrap_text=True, vertical='top')
