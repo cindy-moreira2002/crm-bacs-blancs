@@ -1,5 +1,5 @@
 /**
- * Classeurs V1 « à cocher » de français, philosophie et maths spécialité.
+ * Classeurs V1 « à cocher » : français, philo, maths spé, SES, HLP, LLCER anglais.
  *
  * Les fixtures sont l'export CSV des classeurs produits par
  * `scripts/faire-classeurs-a-cocher.py`, tels que Google Sheets les rend
@@ -24,6 +24,10 @@ const CLASSEURS = [
   { nom: 'francais-v1-a-cocher.csv', criteres: 28, parties: [/COMMENTAIRE/, /DISSERTATION/] },
   { nom: 'philo-v1-a-cocher.csv', criteres: 25, parties: [/DISSERTATION/, /EXPLICATION/] },
   { nom: 'maths-specialite-v1-a-cocher.csv', criteres: 6, parties: [/COMPÉTENCES/] },
+  { nom: 'ses-v1-a-cocher.csv', criteres: 21, parties: [/DISSERTATION/, /COMPOSÉE/] },
+  // HLP et LLCER : l'élève traite les deux parties, qui font 20 ensemble.
+  { nom: 'hlp-v1-a-cocher.csv', criteres: 15, parties: [/INTERPRÉTATION/, /ESSAI/], points: [10, 10] },
+  { nom: 'anglais-llcer-v1-a-cocher.csv', criteres: 15, parties: [/SYNTHÈSE/, /TRADUCTION/], points: [16, 4] },
 ];
 
 /** Coche, pour l'élève `k`, le palier choisi par `choisir` dans chaque critère de `partie`. */
@@ -53,7 +57,7 @@ for (const cl of CLASSEURS) {
       const somme = guideline.criteres
         .filter((c) => c.partie === guideline.parties[i].libelle)
         .reduce((s, c) => s + c.max, 0);
-      assert.equal(Math.round(somme * 100) / 100, 20);
+      assert.equal(Math.round(somme * 100) / 100, cl.points?.[i] ?? 20);
     });
     const codes = guideline.criteres.map((c) => c.code);
     assert.equal(new Set(codes).size, codes.length, 'codes uniques');
@@ -76,7 +80,8 @@ for (const cl of CLASSEURS) {
   });
 
   test(`${cl.nom} : tout en haut = 20, tout en bas = 0, sur la partie traitée`, () => {
-    const premiere = cl.parties[0];
+    // Épreuve au choix : on ne coche que la première partie. Sinon, tout.
+    const premiere = cl.points ? /./ : cl.parties[0];
     const [h] = lireGuidelineCorrigee(cocher(t, 0, haut, premiere)).copies;
     assert.equal(h.total, 20);
     assert.equal(h.bareme, 20, 'la partie non traitée est ignorée');

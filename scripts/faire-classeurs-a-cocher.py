@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Reconstruit les classeurs de correction de FRANÇAIS, PHILOSOPHIE et MATHS
-SPÉCIALITÉ dans la mise en forme « élèves en colonnes » que le CRM lit
+Reconstruit les classeurs de correction de FRANÇAIS, PHILOSOPHIE, MATHS
+SPÉCIALITÉ, SES, HLP et LLCER ANGLAIS dans la mise en forme « élèves en colonnes » que le CRM lit
 (celle de SES, des maths de première et d'HGGSP V1).
 
 Les classeurs V0 sont des barèmes seuls : le professeur a les critères sous
@@ -44,10 +44,16 @@ RE_PARTIE = re.compile(r'^PARTIE\s+[IVX]+\b', re.I)
 
 DESCRIPTEUR_ZERO = "Rien d'exploitable sur ce critère."
 
+# Critères livrés sans aucun palier, à qui on en a donné deux (0 et le maximum).
+paliers_crees = []
+
 # Ce qui, dans un export V0, n'est plus le barème : on s'arrête de lire les
-# critères. Les lignes « ⚠️ » et les puces qui suivent deviennent des notes.
+# critères. Les lignes « ⚠️ » et les puces qui suivent deviennent des notes,
+# l'échelle globale et les règles de correction aussi, ligne à ligne — sinon
+# « 18–20 » serait lu comme un palier du dernier critère.
 RE_FIN = re.compile(
-    r'^(BARÈME SYNTHÉTIQUE|Vérification du barème|Questions à prise d.initiative|💡)',
+    r'^(BARÈME SYNTHÉTIQUE|Vérification du barème|Questions à prise d.initiative|💡'
+    r'|Échelle globale|Règles de correction)',
     re.I,
 )
 
@@ -91,7 +97,31 @@ CLASSEURS = [
         'partie_implicite': (re.compile(r'^EXERCICES\s*:', re.I),
                              'PARTIE I — COMPÉTENCES MATHÉMATIQUES'),
     },
+    # Ces trois-là avaient déjà la zone élèves, mais pour 3 élèves seulement
+    # (et SES gardait ses paliers en fourchette). Titre et intro : repris du
+    # classeur d'origine.
+    {
+        'fichier': 'Guideline correction SES V1.xlsx',
+        'feuille': 'Correction SES',
+        'sources': [('ses.csv', None, None)],
+    },
+    {
+        'fichier': 'Guideline correction HLP V1.xlsx',
+        'feuille': 'Correction HLP',
+        'sources': [('hlp.csv', None, None)],
+    },
+    {
+        'fichier': 'Guideline correction LLCER anglais V1.xlsx',
+        'feuille': 'Correction LLCER anglais',
+        'sources': [('anglais-llcer.csv', None, None)],
+    },
 ]
+
+
+def entete_source(nom):
+    """Titre (ligne 2) et intro (ligne 3) d'un classeur déjà mis en forme."""
+    rows = list(csv.reader(io.open(os.path.join(FIXTURES, nom), encoding='utf8')))
+    return rows[1][0].strip(), rows[2][0].strip()
 
 
 # --------------------------------------------------------------------------
@@ -113,7 +143,7 @@ def lire_source(nom, partie_forcee, points_forces, config, notes_bas):
 
     parties = []
     partie = famille = critere = None
-    fini = False
+    fini = tout_garder = False
 
     if partie_forcee:
         partie = {'titre': partie_forcee, 'points': points_forces, 'familles': []}
@@ -132,11 +162,14 @@ def lire_source(nom, partie_forcee, points_forces, config, notes_bas):
 
         if RE_FIN.match(tete):
             fini = True
+            tout_garder = bool(re.match(r'^(Échelle globale|Règles de correction)', tete, re.I))
             if not tete.upper().startswith(('BARÈME SYNTHÉTIQUE', 'VÉRIFICATION')):
-                notes_bas.append(tete)
+                notes_bas.append(tete.upper() if tout_garder else tete)
             continue
         if fini:
-            if tete.startswith(('⚠️', '•')) or tete.upper().startswith('IMPORTANT'):
+            if tout_garder:
+                notes_bas.append(' — '.join(pleines))
+            elif tete.startswith(('⚠️', '•')) or tete.upper().startswith('IMPORTANT'):
                 notes_bas.append(tete)
             continue
 
@@ -168,6 +201,12 @@ def lire_source(nom, partie_forcee, points_forces, config, notes_bas):
                 partie['familles'].append(famille)
             critere = {'titre': tete, 'points': points, 'paliers': []}
             famille['criteres'].append(critere)
+            continue
+
+        # SES : « Attendus | … » sous le critère. Gardé : il sert de
+        # descripteur au critère qui n'a aucun palier (« 2. Présentation »).
+        if tete.lower().startswith('attendus') and second and critere is not None:
+            critere['attendus'] = second
             continue
 
         if (RE_VAL.match(tete) or RE_PLAGE.match(tete)) and second:
@@ -202,6 +241,7 @@ def num(txt):
 def corriger(parties):
     ajouts_zero = 0
     sous_criteres_crees = []
+    global paliers_crees
     for partie in parties:
         for famille in partie['familles']:
             for critere in famille['criteres']:
@@ -224,6 +264,14 @@ def corriger(parties):
                 if paliers and not any(num(p['valeur']) == 0 for p in paliers):
                     paliers.insert(0, {'valeur': '0', 'texte': DESCRIPTEUR_ZERO, 'ajoute': True})
                     ajouts_zero += 1
+                if not paliers and critere.get('attendus'):
+                    maxi = RE_PTS.match(critere['points']).group(1)
+                    paliers = [
+                        {'valeur': '0', 'texte': DESCRIPTEUR_ZERO, 'ajoute': True},
+                        {'valeur': maxi, 'texte': critere['attendus'], 'ajoute': True},
+                    ]
+                    ajouts_zero += 1
+                    paliers_crees.append(critere['titre'])
                 critere['paliers'] = paliers
     return ajouts_zero, sous_criteres_crees
 
@@ -356,6 +404,10 @@ def ecrire(config, parties, notes_bas, ajouts_zero, sous_criteres_crees, sortie)
             f"{len(sous_criteres_crees)} bloc(s) portaient leurs paliers directement "
             f"({', '.join(t.split('.')[0] for t in sous_criteres_crees)}) : ils ont reçu un "
             "sous-critère numéroté, sinon le CRM les rangeait sous le bloc précédent.")
+    if paliers_crees:
+        changements.append(
+            f"{', '.join(paliers_crees)} n'avait aucun niveau à cocher : deux niveaux lui ont été "
+            "donnés, 0 et le maximum, décrit par ses « Attendus ». En gris : à relire.")
     if len(config['sources']) > 1:
         changements.append(
             "Les pages séparées de la V0 sont réunies sur une seule page, une partie par "
@@ -423,6 +475,9 @@ def ecrire(config, parties, notes_bas, ajouts_zero, sous_criteres_crees, sortie)
 
 
 def construire(config, dossier):
+    paliers_crees.clear()
+    if 'titre' not in config:
+        config['titre'], config['intro'] = entete_source(config['sources'][0][0])
     notes_bas = []
     parties = []
     for nom, partie, points in config['sources']:
