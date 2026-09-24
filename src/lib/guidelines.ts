@@ -65,7 +65,6 @@ export const GUIDELINES: Record<string, Guideline> = {
       'un vrai palier 0. La page à cocher est « Correction HGGSP » ; l’onglet « Vérification du ' +
       'barème » doit afficher 20,00 et un écart de 0.',
   },
-  'histoire-geo': { url: null, titre: 'Guideline correction histoire-géographie' },
   hlp: { url: null, titre: 'Guideline correction HLP' },
   svt: { url: null, titre: 'Guideline correction SVT' },
   'physique-chimie': { url: null, titre: 'Guideline correction physique-chimie' },

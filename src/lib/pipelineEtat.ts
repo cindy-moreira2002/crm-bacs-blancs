@@ -26,6 +26,13 @@ import type { StructExamen } from './pipelineVerifs';
 // les lire sans embarquer ce module, qui touche la base en service_role.
 import { LABELS_MATIERES, labelExercice, labelMatiere } from './matieres';
 export { LABELS_MATIERES, labelExercice, labelMatiere };
+
+/**
+ * Matières retirées de l'offre. Leurs grilles, sujets et gabarits sont passés
+ * en `archived` dans le pipeline ; les rouvrir = les repasser en `active`,
+ * remettre la clé dans `LABELS_MATIERES` et la retirer d'ici.
+ */
+const MATIERES_FERMEES = new Set(['histoire-geo']);
 import { moteurAttendu, type MoteurNote } from './moteurs';
 import { BREVET_ACTIF } from './sessions';
 export { MOTEUR_ATTENDU, CE_QUI_SE_DEFINIT, LIBELLE_MOTEUR, moteurAttendu } from './moteurs';
@@ -697,6 +704,9 @@ export async function chargerEtatPipeline(): Promise<SnapshotPipeline> {
     // tout — ni dans le pilotage de la correction, ni dans la to-do, ni dans les
     // compteurs. Les données restent en base, intactes.
     .filter(([matiere]) => BREVET_ACTIF || !matiere.startsWith('brevet_'))
+    // Une matière fermée (histoire-géo, le 24 septembre 2026) garde ses
+    // données en base, archivées, mais ne remonte plus nulle part.
+    .filter(([matiere]) => !MATIERES_FERMEES.has(matiere))
     .map(([matiere, exs]) => {
       exs.sort((a, b) => a.label.localeCompare(b.label, 'fr'));
       const tousSujets = exs.flatMap((e) => e.sujets);

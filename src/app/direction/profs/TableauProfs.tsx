@@ -39,7 +39,6 @@ const MATIERES = [
   'Physique-Chimie',
   'SVT',
   'SES',
-  'Histoire-Géographie',
   'HGGSP',
   'HLP',
   'Anglais',

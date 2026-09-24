@@ -44,7 +44,6 @@ const TOUTES_LES_SESSIONS: Session[] = [
   { matiere: 'Français',        date: '2026-09-06', heure: '9h — 13h', places: 8 },
   { matiere: 'Mathématiques',   date: '2026-09-13', heure: '9h — 12h', places: 6 },
   { matiere: 'Philosophie',     date: '2026-09-20', heure: '9h — 13h', places: 10 },
-  { matiere: 'Histoire-Géo',    date: '2026-09-27', heure: '9h — 13h', places: 5 },
   { matiere: 'SES',             date: '2026-10-04', heure: '9h — 12h', places: 8 },
 
   // ── Les Matinées du Brevet (classe de 3e) ──
@@ -69,7 +68,6 @@ const TOUTES_LES_MATIERES_ENSEIGNEES: string[] = [
   'Français',
   'Philosophie',
   'Mathématiques',
-  'Histoire-Géo',
   'SES',
   'HGGSP',
   'HLP',

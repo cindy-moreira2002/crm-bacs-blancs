@@ -12,7 +12,6 @@ export const LABELS_MATIERES: Record<string, string> = {
   philosophie: 'Philosophie',
   maths: 'Mathématiques',
   'physique-chimie': 'Physique-Chimie',
-  'histoire-geo': 'Histoire-Géo',
   ses: 'SES',
   svt: 'SVT',
   hggsp: 'HGGSP',

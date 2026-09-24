@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 
-type Matiere = 'Français' | 'Philosophie' | 'Mathématiques' | 'Histoire-Géo' | 'SES' | 'Spécialité 1' | 'Spécialité 2';
+type Matiere = 'Français' | 'Philosophie' | 'Mathématiques' | 'SES' | 'Spécialité 1' | 'Spécialité 2';
 
-const MATIERES: Matiere[] = ['Français', 'Philosophie', 'Mathématiques', 'Histoire-Géo', 'SES', 'Spécialité 1', 'Spécialité 2'];
+const MATIERES: Matiere[] = ['Français', 'Philosophie', 'Mathématiques', 'SES', 'Spécialité 1', 'Spécialité 2'];
 
 const IMPRESSIONS = ['Très insuffisant', 'Fragile', 'Satisfaisant', 'Bon', 'Très bon'];
 

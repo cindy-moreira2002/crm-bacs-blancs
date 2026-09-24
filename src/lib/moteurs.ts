@@ -38,7 +38,6 @@ export const MOTEUR_ATTENDU: Record<string, MoteurNote> = {
   // critères ne dépendent pas du texte tombé le jour de l'épreuve.
   francais: 'grille_generique',
   philosophie: 'grille_generique',
-  'histoire-geo': 'grille_generique',
   ses: 'grille_generique',
   hlp: 'grille_generique',
 
