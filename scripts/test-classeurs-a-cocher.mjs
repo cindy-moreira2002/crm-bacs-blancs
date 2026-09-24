@@ -29,6 +29,9 @@ const CLASSEURS = [
   { nom: 'hlp-v1-a-cocher.csv', criteres: 15, parties: [/INTERPRÉTATION/, /ESSAI/], points: [10, 10] },
   { nom: 'anglais-llcer-v1-a-cocher.csv', criteres: 15, parties: [/SYNTHÈSE/, /TRADUCTION/], points: [16, 4] },
   { nom: 'hggsp-v1-a-cocher.csv', criteres: 20, parties: [/DISSERTATION/, /ÉTUDE CRITIQUE/], points: [10, 10] },
+  // Classeur tiré du barème d'un sujet (skill generer-sujet-bac, bareme2classeur.py) :
+  // « 0,25 | Différence calculée » est un palier, pas la fin du barème.
+  { nom: 'bareme-sujet-maths-a-cocher.csv', criteres: 75, parties: [/EX1/, /EX2/, /EX3/, /EX4/], points: [5, 5, 6, 4] },
 ];
 
 /** Coche, pour l'élève `k`, le palier choisi par `choisir` dans chaque critère de `partie`. */

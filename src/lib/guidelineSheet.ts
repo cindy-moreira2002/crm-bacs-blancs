@@ -278,7 +278,10 @@ export function lireGuideline(table: string[][], colonneMinEleve = 0): Guideline
     const pleines = cells.filter((c) => c !== '');
     if (pleines.length === 0) continue;
 
-    const bascule = sectionFinale(cells[0]) ?? sectionFinale(cells[1] ?? '');
+    // Une ligne de palier (« 0,25 | Différence calculée ») n'est jamais un
+    // titre de section, même si son descripteur en a l'air.
+    const estPalier = nombreFr(cells[0]) !== null || RE_PALIER_PLAGE.test(cells[0]);
+    const bascule = sectionFinale(cells[0]) ?? (estPalier ? null : sectionFinale(cells[1] ?? ''));
     if (bascule) {
       section = bascule;
       critere = null;
