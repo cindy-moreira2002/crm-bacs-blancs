@@ -26,7 +26,7 @@ const STATUT_COLORS: Record<string, string> = {
  */
 export default async function EcolesPartenairesPage() {
   const garde = await gardeAdminPage();
-  if (garde.etat === "anonyme") redirect("/devenir-coach");
+  if (garde.etat === "anonyme") redirect("/devenir-coach?connexion");
   if (garde.etat !== "ok") return <EcranGarde garde={garde} />;
 
   await seedPartnerSchoolsIfEmpty();

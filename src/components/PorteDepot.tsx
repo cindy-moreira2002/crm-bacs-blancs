@@ -46,7 +46,7 @@ export function PorteDepot({ codeActif }: { codeActif: boolean }) {
       </p>
 
       <a
-        href="/devenir-coach"
+        href="/devenir-coach?connexion"
         className="mt-6 block w-full text-center bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-xl px-4 py-3 transition"
       >
         Me connecter à mon espace prof

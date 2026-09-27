@@ -15,7 +15,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
 
   const { prof } = await profCourant();
-  if (!prof) redirect('/devenir-coach');
+  if (!prof) redirect('/devenir-coach?connexion');
 
   const session = await chargerSessionAutorisee(prof, id);
   if (!session) notFound();

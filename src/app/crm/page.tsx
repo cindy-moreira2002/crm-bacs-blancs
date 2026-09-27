@@ -25,7 +25,7 @@ type Props = {
  */
 export default async function CrmPage({ searchParams }: Props) {
   const garde = await gardeAdminPage();
-  if (garde.etat === "anonyme") redirect("/devenir-coach");
+  if (garde.etat === "anonyme") redirect("/devenir-coach?connexion");
   if (garde.etat !== "ok") return <EcranGarde garde={garde} />;
 
   const params = await searchParams;

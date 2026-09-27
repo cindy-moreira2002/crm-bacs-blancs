@@ -9,7 +9,7 @@ export default async function ImportPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
 
   const { prof } = await profCourant();
-  if (!prof) redirect('/devenir-coach');
+  if (!prof) redirect('/devenir-coach?connexion');
 
   const session = await chargerSessionAutorisee(prof, id);
   if (!session) notFound();

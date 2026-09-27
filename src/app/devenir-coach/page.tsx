@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { ConnexionProf } from '@/components/ConnexionProf';
+import { CandidatureProf } from '@/components/CandidatureProf';
 import { profConnecte } from '@/lib/authProf';
 
 export const dynamic = 'force-dynamic';
@@ -22,10 +22,16 @@ const ARGUMENTS = [
   },
 ];
 
-export default async function DevenirCoachPage() {
+export default async function DevenirCoachPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ connexion?: string }>;
+}) {
   // Déjà connecté → on ne fait pas remplir un formulaire pour rien.
   const moi = await profConnecte();
   if (moi) redirect('/espace-prof');
+  // ?connexion : on arrive d'un espace protégé, le prof a déjà un compte.
+  const { connexion } = await searchParams;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-50 to-gray-50 py-12 px-4">
@@ -51,7 +57,7 @@ export default async function DevenirCoachPage() {
           ))}
         </div>
 
-        <ConnexionProf />
+        <CandidatureProf ongletInitial={connexion !== undefined ? 'connexion' : 'candidature'} />
       </div>
     </div>
   );

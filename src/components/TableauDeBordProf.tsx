@@ -169,7 +169,7 @@ export function TableauDeBordProf({
 
   const seDeconnecter = async () => {
     await fetch('/api/prof/deconnexion', { method: 'POST' });
-    window.location.href = '/devenir-coach';
+    window.location.href = '/devenir-coach?connexion';
   };
 
   const quitterUsurpation = async () => {

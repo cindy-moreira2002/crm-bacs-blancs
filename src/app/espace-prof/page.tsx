@@ -41,7 +41,7 @@ export default async function EspaceProfPage() {
   }
 
   const { prof, usurpePar } = await profCourant();
-  if (!prof) redirect('/devenir-coach');
+  if (!prof) redirect('/devenir-coach?connexion');
 
   const [sessions, revenus] = await Promise.all([
     chargerSessions(prof),

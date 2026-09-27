@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function CorrectionsPage() {
   const { prof } = await profCourant();
-  if (!prof) redirect('/devenir-coach');
+  if (!prof) redirect('/devenir-coach?connexion');
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
