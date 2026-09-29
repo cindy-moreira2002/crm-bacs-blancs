@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { LiaisonDiscord } from '@/components/LiaisonDiscord';
 import type { BlocsSessions, Revenus, SessionEnrichie } from '@/lib/espaceProf';
 import type { Professeur } from '@/lib/authProf';
+import { GAIN_PAR_ELEVE, GAIN_PAR_MATINEE, SEUIL_COACH } from '@/lib/reglesProf';
 
 type Onglet = 'ensemble' | 'mes-bacs' | 'disponibles' | 'profil';
 
@@ -92,6 +93,119 @@ function CarteSession({
   );
 }
 
+/**
+ * Les règles du jeu, en haut de la vue d'ensemble : ce que le prof doit
+ * savoir avant tout le reste (reprend les slides « Ambassadeur » et
+ * « Devenir coach »). La jauge dit où il en est.
+ */
+function ReglesDuJeu({ inscrits, code }: { inscrits: number; code: string }) {
+  const debloque = inscrits >= SEUIL_COACH;
+  const pct = Math.min(100, Math.round((inscrits / SEUIL_COACH) * 100));
+  return (
+    <section className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+      <h2 className="font-bold text-gray-900 mb-4">Comment ça marche</h2>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl bg-orange-50 border border-orange-200 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-orange-700">Étape 1 · Ambassadeur</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">{GAIN_PAR_ELEVE} € <span className="text-base font-semibold">net</span></p>
+          <p className="text-sm text-gray-700">par élève inscrit grâce à toi</p>
+          <ul className="mt-3 space-y-1.5 text-sm text-gray-700">
+            <li>• Tes élèves s’inscrivent avec ton lien ou ton code <span className="font-mono font-semibold">{code}</span>.</li>
+            <li>• Les {GAIN_PAR_ELEVE} € te sont dus dès que l’élève a réglé sa matinée.</li>
+            <li>• Aucun plafond : 6 élèves sur une matinée = {6 * GAIN_PAR_ELEVE} € en plus.</li>
+          </ul>
+        </div>
+
+        <div className="rounded-xl bg-purple-50 border border-purple-200 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-purple-700">Étape 2 · Coach bac blanc</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">{GAIN_PAR_MATINEE} € <span className="text-base font-semibold">net minimum</span></p>
+          <p className="text-sm text-gray-700">par matinée de 3 à 4 h, soit environ 20 €/h</p>
+          <ul className="mt-3 space-y-1.5 text-sm text-gray-700">
+            <li>• S’ouvre dès que <strong>{SEUIL_COACH} élèves</strong> se sont inscrits avec ton code.</li>
+            <li>• Temps pleinement payé : aucun trajet, aucune prospection, aucune gestion des familles.</li>
+            <li>• Les {GAIN_PAR_ELEVE} € par élève recommandé s’ajoutent aux {GAIN_PAR_MATINEE} €.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-semibold text-gray-800">
+            {debloque ? '✅ Tu peux coacher des bacs blancs' : '🔒 Accès coach'}
+          </span>
+          <span className="font-mono text-gray-600">{Math.min(inscrits, SEUIL_COACH)}/{SEUIL_COACH} élèves</span>
+        </div>
+        <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden">
+          <div className={`h-full ${debloque ? 'bg-green-500' : 'bg-purple-500'}`} style={{ width: `${pct}%` }} />
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          {debloque
+            ? 'Choisis ton bac blanc dans l’onglet « Sessions disponibles ».'
+            : `Encore ${SEUIL_COACH - inscrits} élève${SEUIL_COACH - inscrits > 1 ? 's' : ''} à faire inscrire avec ton code pour débloquer les sessions de coach.`}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/** Formulaire « Changer mon mot de passe » (onglet Mon profil). */
+function ChangerMotDePasse() {
+  const [ancien, setAncien] = useState('');
+  const [nouveau, setNouveau] = useState('');
+  const [etat, setEtat] = useState<{ ok: boolean; texte: string } | null>(null);
+  const [envoi, setEnvoi] = useState(false);
+
+  const valider = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEnvoi(true);
+    setEtat(null);
+    try {
+      const res = await fetch('/api/prof/mot-de-passe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ancien, nouveau }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setEtat({ ok: false, texte: data.error || 'Erreur.' });
+        return;
+      }
+      setAncien('');
+      setNouveau('');
+      setEtat({ ok: true, texte: 'Mot de passe changé ✓' });
+    } catch {
+      setEtat({ ok: false, texte: 'Erreur de connexion.' });
+    } finally {
+      setEnvoi(false);
+    }
+  };
+
+  return (
+    <form onSubmit={valider} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <label className="text-xs text-gray-600">
+        Mot de passe actuel
+        <input type="password" required autoComplete="current-password" value={ancien}
+          onChange={(e) => setAncien(e.target.value)}
+          className="mt-1 w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg" />
+      </label>
+      <label className="text-xs text-gray-600">
+        Nouveau (10 caractères, lettres et chiffres)
+        <input type="password" required minLength={10} autoComplete="new-password" value={nouveau}
+          onChange={(e) => setNouveau(e.target.value)}
+          className="mt-1 w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg" />
+      </label>
+      <button type="submit" disabled={envoi}
+        className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-50">
+        {envoi ? '…' : 'Changer'}
+      </button>
+      {etat && (
+        <p className={`sm:col-span-3 text-xs font-medium ${etat.ok ? 'text-green-700' : 'text-red-700'}`}>{etat.texte}</p>
+      )}
+    </form>
+  );
+}
+
 function Vide({ texte }: { texte: string }) {
   return (
     <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-8 text-center text-gray-400 text-sm">
@@ -120,6 +234,8 @@ export function TableauDeBordProf({
   const [copie, setCopie] = useState(false);
 
   const prochaine = sessions.aVenir[0] ?? null;
+  // Même règle que l'API (/api/prof/sessions) : l'admin n'y est pas soumise.
+  const coachDebloque = prof.role === 'admin' || revenus.eleves_parraines >= SEUIL_COACH;
 
   const copierLien = async () => {
     await navigator.clipboard.writeText(lienAffiliation);
@@ -272,6 +388,8 @@ export function TableauDeBordProf({
       {/* --- Vue d'ensemble --- */}
       {onglet === 'ensemble' && (
         <div className="space-y-6">
+          <ReglesDuJeu inscrits={revenus.eleves_parraines} code={prof.code_affiliation} />
+
           {/* Lien d'affiliation */}
           <section className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
             <h2 className="font-bold text-gray-900 mb-1">Mon lien d’affiliation</h2>
@@ -443,6 +561,13 @@ export function TableauDeBordProf({
           <p className="text-sm text-gray-500 mb-1">
             Uniquement les bacs blancs de tes matières : {(prof.matieres ?? []).join(', ') || '—'}.
           </p>
+          {!coachDebloque && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">
+              🔒 Pour t’inscrire comme coach, fais d’abord inscrire <strong>{SEUIL_COACH} élèves</strong> avec
+              ton code <span className="font-mono font-semibold">{prof.code_affiliation}</span> — tu en es
+              à {revenus.eleves_parraines}/{SEUIL_COACH}. Tu peux déjà regarder les dates.
+            </div>
+          )}
           {sessions.disponibles.length ? (
             sessions.disponibles.map((s) => {
               const complet = s.nb_coachs >= s.coachs_recherches;
@@ -451,10 +576,10 @@ export function TableauDeBordProf({
                   action={
                     <button
                       onClick={() => seCoacher(s)}
-                      disabled={busy === s.id || complet}
+                      disabled={busy === s.id || complet || !coachDebloque}
                       className="px-5 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {busy === s.id ? '…' : complet ? 'Coachs au complet' : 'S’inscrire comme coach'}
+                      {busy === s.id ? '…' : complet ? 'Coachs au complet' : !coachDebloque ? `🔒 ${revenus.eleves_parraines}/${SEUIL_COACH} élèves` : 'S’inscrire comme coach'}
                     </button>
                   }
                 />
@@ -490,11 +615,11 @@ export function TableauDeBordProf({
 
           <div className="mt-6 p-4 rounded-xl bg-gray-50 border border-gray-200">
             <h3 className="font-semibold text-gray-800 text-sm mb-1">Mot de passe</h3>
-            <p className="text-xs text-gray-500 leading-relaxed">
+            <p className="text-xs text-gray-500 leading-relaxed mb-3">
               Ton mot de passe est chiffré : personne ne peut le relire, pas même
-              l’administratrice. Pour le changer ou en cas d’oubli, écris à
-              l’administratrice — elle peut t’en définir un nouveau, que tu modifieras ensuite.
+              l’administratrice. En cas d’oubli, écris-lui : elle t’en définit un nouveau.
             </p>
+            {!usurpePar && <ChangerMotDePasse />}
           </div>
 
           <div className="mt-4 p-4 rounded-xl bg-gray-50 border border-gray-200">

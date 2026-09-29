@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { crmAdmin, profCourant } from '@/lib/authProf';
 import { chargerSessions } from '@/lib/espaceProf';
+import { SEUIL_COACH } from '@/lib/reglesProf';
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -38,6 +39,21 @@ export async function POST(req: NextRequest) {
         .eq('professeur_id', prof.id);
       if (error) throw error;
       return NextResponse.json({ success: true, inscrit: false });
+    }
+
+    // Règle du jeu : on devient coach après avoir fait inscrire SEUIL_COACH
+    // élèves avec son code. Vérifié ici, pas seulement grisé à l'écran.
+    if (prof.role !== 'admin') {
+      const { count } = await db
+        .from('inscriptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('code_affiliation', prof.code_affiliation);
+      if ((count ?? 0) < SEUIL_COACH) {
+        return NextResponse.json(
+          { error: `Pour devenir coach, fais d’abord inscrire ${SEUIL_COACH} élèves avec ton code (${count ?? 0}/${SEUIL_COACH} pour l’instant).` },
+          { status: 403 },
+        );
+      }
     }
 
     const sessions = await chargerSessions(prof);
