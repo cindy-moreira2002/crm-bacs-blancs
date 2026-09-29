@@ -19,6 +19,7 @@
  * Rien n'est inventé : si un constat n'a pas de traduction connue, il est
  * repris tel quel plutôt que masqué. Une tâche invisible ne se fait jamais.
  */
+import { chargerFileCindy } from './fileCindy';
 import { chargerSante, type AnomalieGlobale } from './pipelineSante';
 import type { CibleDiag } from './pipelineVerifs';
 import { chargerEtatPipeline, labelMatiere, type MatiereEtat } from './pipelineEtat';
@@ -516,6 +517,26 @@ export async function chargerTodo(): Promise<TodoPipeline> {
     liste.push(t);
     parMatiere.set(a.matiere, liste);
   });
+
+  // Matières sans prof relecteur : ce que l'IA n'a pas su trancher seule.
+  // Une file muette serait une copie qui n'arrive jamais à l'élève.
+  try {
+    const file = await chargerFileCindy();
+    if (file.length) {
+      general.unshift({
+        id: 'file-cindy',
+        titre: `Regarder ${file.length} copie${file.length > 1 ? 's' : ''} que l’IA n’a pas su trancher`,
+        pourquoi:
+          'SES, HLP, LLCER anglais, SVT et physique-chimie n’ont pas de prof relecteur : l’IA a relu, recorrigé une fois, relu la copie une fois — le doute reste. Sans toi, ces copies n’avancent pas.',
+        comment: 'Pour chacune : ouvrir la copie, puis « C’est bon, je garde » ou « Corriger quand même ».',
+        acteur: 'humain',
+        bloquant: true,
+        ou: { label: 'Ouvrir la liste', href: '/direction/correction#a-regarder' },
+      });
+    }
+  } catch {
+    // Colonnes du SQL 58 absentes ou base muette : la liste des tâches reste utile sans.
+  }
 
   for (const m of etat.matieres) {
     const sup = [...tachesMoteur(m), ...tachesRedigees(m)];

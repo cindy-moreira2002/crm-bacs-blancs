@@ -99,6 +99,9 @@ type Correction = {
   human_review_required: boolean | null;
   created_at: string;
   result_json: Record<string, unknown> | null;
+  /** SQL 58 : l'IA n'a pas su trancher seule (matières sans prof relecteur). */
+  a_regarder_cindy: boolean | null;
+  a_regarder_vu_le: string | null;
 };
 
 type Inscription = {
@@ -116,7 +119,8 @@ type Inscription = {
 
 const CHAMPS_CORRECTION =
   'id, status, matiere, student_name, student_email, est_etalon, moteur, rubric_id, max_score, ' +
-  'max_analytique, groupe_copie_id, human_review_required, created_at, result_json';
+  'max_analytique, groupe_copie_id, human_review_required, created_at, result_json, ' +
+  'a_regarder_cindy, a_regarder_vu_le';
 
 // ── Note ─────────────────────────────────────────────────────────────────
 
@@ -458,6 +462,11 @@ async function principal() {
   if (correction.status === 'corrected_review' && note.source !== 'professeur') {
     console.log('⚠️  Correction marquée « à relire » et aucune note de prof : elle part telle quelle.');
   }
+  if (correction.a_regarder_cindy && !correction.a_regarder_vu_le) {
+    console.log('⚠️  Copie dans la file « À regarder par toi » (/direction/correction) : l’IA n’a pas su trancher seule.');
+  }
+  const relectureIa = (correction.result_json?.relecture_ia ?? null) as { passe?: number; verdict?: string } | null;
+  if (relectureIa) console.log(`Deuxième lecture IA : passe ${relectureIa.passe ?? '?'}, ${relectureIa.verdict ?? '?'}`);
   const remplacee = (existante?.remarques?.pipeline as { correction_id?: string } | undefined)?.correction_id;
   console.log(`Ligne copies : ${!existante ? 'créée'
     : remplacee && remplacee !== correction.id ? `mise à jour (${existante.id}) — remplace la correction ${remplacee}`

@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { CorrectionLigne, MatiereEtat, RetourProf, SnapshotPipeline } from '@/lib/pipelineEtat';
+import { FileCindy } from './FileCindy';
 import { DetailMatiereVue } from './DetailMatiere';
 import { ExplicationPipeline } from './ExplicationPipeline';
 import { SanteSystemeVue } from './SanteSysteme';
@@ -39,6 +40,7 @@ function pastilleStatutCorrection(status: string) {
   if (status === 'corrected_review') return <Pastille ton="orange">corrigée · relecture conseillée</Pastille>;
   if (status === 'corrected') return <Pastille ton="vert">corrigée</Pastille>;
   if (status === 'transcribed') return <Pastille ton="bleu">transcrite…</Pastille>;
+  if (status === 'queued_review' || status === 'reviewing') return <Pastille ton="bleu">2ᵉ lecture IA…</Pastille>;
   if (status === 'uploaded') return <Pastille ton="bleu">déposée…</Pastille>;
   return <Pastille ton="gris">{status}</Pastille>;
 }
@@ -1097,6 +1099,10 @@ export function TableauDeBordCorrection() {
         {erreur && (
           <p className="text-xs text-red-600">Dernier rafraîchissement en erreur : {erreur} (données affichées : précédentes)</p>
         )}
+
+        {/* La file humaine des matières sans prof relecteur : en tête, car
+            c'est la seule chose ici qui attend une décision. */}
+        {!matiereOuverte && <FileCindy />}
 
         {matiereOuverte && (
           <DetailMatiereVue
