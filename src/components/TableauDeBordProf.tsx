@@ -349,11 +349,17 @@ export function TableauDeBordProf({
         {coachDebloque ? (
           <LiaisonDiscord pourquoi="Tu as atteint 3 élèves grâce à ton code promo : relie ton compte pour entrer sur notre Discord et t’inscrire en tant que coach." />
         ) : (
-          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4 text-indigo-900">
+            <p className="text-lg sm:text-xl font-bold leading-snug">
+              Tu pourras te connecter sur Discord quand les Matinées du Bac commenceront… Un peu de
+              patience, tu seras tenu·e au courant !
+            </p>
+            <p className="mt-2 text-sm">
             🔒 Dès que tu auras atteint <strong>{SEUIL_COACH} élèves</strong> amenés grâce à ton code promo{' '}
             <span className="font-mono font-semibold">{prof.code_affiliation}</span>, tu pourras avoir accès
             à notre Discord pour t’inscrire en tant que coach{' '}
             <span className="text-indigo-700">({Math.min(revenus.eleves_parraines, SEUIL_COACH)}/{SEUIL_COACH})</span>.
+            </p>
           </div>
         )}
       </div>
