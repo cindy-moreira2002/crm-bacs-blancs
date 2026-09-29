@@ -9,5 +9,5 @@
 export const SEUIL_COACH = 3;
 /** Net versé au prof par élève inscrit avec son code, une fois la matinée réglée. */
 export const GAIN_PAR_ELEVE = 10;
-/** Net minimum versé au coach pour une matinée de bac blanc (3 à 4 h). */
+/** Net minimum versé au coach pour une matinée de bac blanc (4 h). */
 export const GAIN_PAR_MATINEE = 85;

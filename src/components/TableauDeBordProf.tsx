@@ -120,9 +120,9 @@ function ReglesDuJeu({ inscrits, code }: { inscrits: number; code: string }) {
         <div className="rounded-xl bg-purple-50 border border-purple-200 p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-purple-700">Étape 2 · Coach bac blanc</p>
           <p className="mt-2 text-3xl font-bold text-gray-900">{GAIN_PAR_MATINEE} € <span className="text-base font-semibold">net minimum</span></p>
-          <p className="text-sm text-gray-700">par matinée de 3 à 4 h, soit environ 20 €/h</p>
+          <p className="text-sm text-gray-700">par matinée de 4 h, soit environ 20 €/h</p>
           <ul className="mt-3 space-y-1.5 text-sm text-gray-700">
-            <li>• S’ouvre dès que <strong>{SEUIL_COACH} élèves</strong> se sont inscrits avec ton code.</li>
+            <li>• Possible à partir de l’utilisation de ton code promo par <strong>{SEUIL_COACH} élèves</strong>. Dès que tu auras atteint {SEUIL_COACH} élèves amenés grâce à ton code promo, tu pourras avoir accès à notre Discord pour t’inscrire en tant que coach.</li>
             <li>• Temps pleinement payé : aucun trajet, aucune prospection, aucune gestion des familles.</li>
             <li>• Les {GAIN_PAR_ELEVE} € par élève recommandé s’ajoutent aux {GAIN_PAR_MATINEE} €.</li>
           </ul>
@@ -141,7 +141,7 @@ function ReglesDuJeu({ inscrits, code }: { inscrits: number; code: string }) {
         </div>
         <p className="mt-2 text-xs text-gray-500">
           {debloque
-            ? 'Choisis ton bac blanc dans l’onglet « Sessions disponibles ».'
+            ? 'Tu as atteint 3 élèves grâce à ton code promo : tu as accès à notre Discord pour t’inscrire en tant que coach.'
             : `Encore ${SEUIL_COACH - inscrits} élève${SEUIL_COACH - inscrits > 1 ? 's' : ''} à faire inscrire avec ton code pour débloquer les sessions de coach.`}
         </p>
       </div>
