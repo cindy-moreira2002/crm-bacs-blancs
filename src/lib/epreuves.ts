@@ -64,6 +64,31 @@ export const COMPOSITIONS: Record<string, CompositionEpreuve[]> = {
       note: 'Les deux parties sont passées par le même élève et s’additionnent. La synthèse se rédige en anglais à partir des trois documents ; la traduction porte sur un passage d’environ 500 signes tiré du dossier. Une traduction rendue seule est donc notée sur 4, et ce n’est pas un bug.',
     },
   ],
+  // Ajouté le 20 septembre 2026, au format de la note de service du 11-9-2026
+  // (BO spécial n° 4 du 17 septembre 2026, NOR MENE2622653N), qui entre en
+  // vigueur À LA SESSION 2027 — donc dès nos bacs blancs. Elle abroge le texte
+  // de 2020 : l'écrit ne se répartit plus en 7 + 8, mais en 6 + 7, plus DEUX
+  // POINTS de maîtrise de la langue, nouveaux et communs à toutes les épreuves
+  // du bac et du brevet (NOR MENE2623195N). 6 + 7 + 2 = 15.
+  //
+  // Les 5 points qui manquent pour faire 20 sont ceux de l'ECE : une heure en
+  // salle de TP devant deux examinateurs, notée sur 20 puis ramenée à 5. Il n'y
+  // a pas de copie, donc rien à corriger ici — un bac blanc de SVT se note sur
+  // 15, et c'est la note juste. La ramener sur 20 inventerait 5 points que
+  // personne n'a évalués.
+  svt: [
+    {
+      nom: 'Écrit de SVT',
+      total: 15,
+      parties: [
+        { exercise_type: 'svt_exercice_1', libelle: 'Exercice 1 — Mobilisation des connaissances', points: 6 },
+        { exercise_type: 'svt_exercice_2', libelle: 'Exercice 2 — Pratique du raisonnement scientifique', points: 7 },
+        { exercise_type: 'svt_maitrise_langue', libelle: 'Maîtrise de la langue (normes orthographiques et syntaxiques)', points: 2 },
+      ],
+      note: 'Depuis la session 2027 : exercice 1 sur 6 points, exercice 2 sur 7 points, et 2 points dédiés aux normes orthographiques et syntaxiques — 6 + 7 + 2 = 15. Les 5 points restants de l’épreuve du bac sont ceux de l’ECE, passée en salle de TP devant deux examinateurs : Les Matinées du Bac ne corrigent que l’écrit, donc une copie se note sur 15, jamais sur 20.',
+    },
+  ],
+
   hggsp: [
     {
       nom: 'Épreuve d’HGGSP',
@@ -76,6 +101,44 @@ export const COMPOSITIONS: Record<string, CompositionEpreuve[]> = {
     },
   ],
 };
+
+/**
+ * Les épreuves qui ne valent pas 20 sans avoir, pour autant, des parties de
+ * valeur fixe.
+ *
+ * La SVT est ce cas dès qu'on lui dépose autre chose qu'un de ses deux
+ * exercices : l'écrit vaut 15 points et il faut pouvoir le dire, même quand
+ * l'exercice déposé n'est pas reconnu.
+ *
+ * Une matière peut figurer ici ET dans `COMPOSITIONS` : la composition est
+ * alors utilisée quand l'exercice déposé est une partie connue, et cette
+ * échelle sert de repli pour tout le reste (sujet complet, exercice inconnu).
+ */
+export const ECHELLES: Record<string, { nom: string; total: number; note: string }> = {
+  svt: {
+    nom: 'Écrit de SVT',
+    total: 15,
+    note: 'Exercice 1 sur 6, exercice 2 sur 7, et 2 points de maîtrise de la langue. L’ECE (5 points) se passe en salle de TP devant deux examinateurs : il n’y a pas de copie à corriger.',
+  },
+  // La physique-chimie N'EST PLUS notée sur 15, et c'est pour cela qu'elle ne
+  // figure pas ici. La note de service du 11-9-2026 (NOR MENE2622644N, session
+  // 2027) a changé le calcul : l'écrit est noté SUR 20 (trois exercices, dont
+  // 2 points de maîtrise de la langue), l'ECE sur 20 elle aussi, et la note
+  // finale vaut 0,8 × écrit + 0,2 × ECE. Une copie de physique-chimie se note
+  // donc sur 20 comme les autres : il n'y a plus d'échelle à expliquer.
+};
+
+/**
+ * Sur combien de points se note une copie de cette matière.
+ *
+ * 20 partout, SAUF la SVT : son écrit vaut 15 points, les 5 autres étant ceux
+ * de l'ECE, qu'aucune copie ne porte. Écrire 20 pour la SVT ferait échouer la
+ * vérification du barème (« le total vaut 15 au lieu de 20 ») sur un barème
+ * pourtant juste — c'est arrivé le 20 septembre 2026, au premier sujet de SVT.
+ */
+export function maxScoreEpreuve(matiere: string): number {
+  return ECHELLES[matiere]?.total ?? 20;
+}
 
 /** L'épreuve dont cet exercice est une partie, s'il en est une. */
 export function compositionDe(matiere: string, exerciseType: string): CompositionEpreuve | null {
@@ -100,7 +163,14 @@ export function partieDe(matiere: string, exerciseType: string): PartieEpreuve |
 export function expliquerEchelle(matiere: string, exerciseType: string): string | null {
   const composition = compositionDe(matiere, exerciseType);
   const partie = partieDe(matiere, exerciseType);
-  if (!composition || !partie) return null;
+
+  // Pas de partie reconnue : l'épreuve entière, ou un exercice qu'on ne sait
+  // pas rattacher. Reste à dire l'essentiel — sur combien la copie est notée.
+  if (!composition || !partie) {
+    const echelle = ECHELLES[matiere];
+    if (!echelle) return null;
+    return `${echelle.nom} : la copie est notée sur ${echelle.total}, pas sur 20. ${echelle.note}`;
+  }
 
   const detail = composition.parties.map((p) => `${p.points}`).join(' + ');
   return (

@@ -50,6 +50,45 @@ qu'en novembre 2026. À poser avant la mise en service réelle.
 Le contrôle `npm run test:guideline` fige ces chiffres : si un classeur change
 de barème ou de mise en page, il tombe.
 
+### Les deux classeurs écrits ici (20 septembre 2026)
+
+Anglais LLCER et HLP n'avaient aucun classeur : l'espace prof affichait « ce
+classeur n'existe pas encore ». Les deux barèmes ont donc été **écrits dans le
+dépôt**, au format « élèves en colonnes », prêts à ouvrir dans Google Sheets.
+
+| Matière | Fichier | Barème | Critères |
+|---|---|---|---|
+| LLCER Anglais | `scripts/fixtures/guidelines/anglais-llcer.csv` | synthèse /16 (compréhension 5 · mise en relation 5 · langue 6) + traduction /4 | 15 |
+| HLP | `scripts/fixtures/guidelines/hlp.csv` | interprétation /10 (compréhension 4 · analyse 4 · expression 2) + essai /10 (problématisation 3 · argumentation 5 · expression 2) | 15 |
+
+Les deux portent une échelle globale indicative et un tableau « le correcteur ne
+fait pas / le correcteur fait ». **Chaque critère a un vrai palier 0** — sans
+lui, une copie cochée partout au plus bas ne peut pas descendre sous un
+plancher, c'est le défaut qu'avait le premier classeur d'HGGSP.
+
+Six tests les figent dans `npm run test:guideline` : parties à 16+4 et 10+10,
+palier 0 et palier au maximum sur chaque critère, copie cochée tout en haut =
+20, tout en bas = 0.
+
+**Ce qu'il reste à faire, et par qui.** Cindy ouvre chaque CSV dans Google
+Sheets (Fichier → Importer), remplace la colonne `FALSE` par de vraies cases à
+cocher, partage le classeur, puis donne le lien : il s'écrit alors dans
+`src/lib/guidelines.ts`, où l'URL de ces deux matières vaut encore `null`.
+
+### SVT et physique-chimie : pas de classeur, deux guides de comptage
+
+`importer-guideline.mjs` **refuse** ces deux matières, et c'est voulu : leur
+barème n'existe que dans le sujet du jour (`/direction/bareme`). Ce qui tient
+lieu de guideline, c'est le **« comment compter »**, à la racine du dépôt :
+
+| Fichier | Ce qu'il dit |
+|---|---|
+| `GUIDE_COMPTAGE_SVT.md` (+ PDF) | copie **sur 15** (ex. 1 /7 + ex. 2 /8), ECE non corrigée · extraire / interpréter / mettre en relation · restitution, schémas, QCM · erreur entraînée jamais payée deux fois |
+| `GUIDE_COMPTAGE_PHYSIQUE_CHIMIE.md` (+ PDF) | copie **sur 15**, ECE non corrigée · résolution de problème notée par étapes (s'approprier / analyser / réaliser / valider), jamais tout ou rien · unités, chiffres significatifs, protocole |
+
+Ils sont le pendant du classeur de maths : la guideline dit **comment** compter,
+le barème du sujet dit **combien** vaut chaque question.
+
 ---
 
 ## 3. Les trois mises en page acceptées

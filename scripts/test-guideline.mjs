@@ -393,3 +393,58 @@ test('épreuve au choix : la partie non traitée ne divise pas la note', () => {
   assert.ok(eleve.avertissements.some((a) => /partie ignorée/i.test(a)));
   assert.ok(!eleve.criteres.some((c) => c.partie !== partie1));
 });
+
+// --- 4. Les grilles écrites ici : anglais LLCER et HLP ----------------
+//
+// Ces deux classeurs n'ont pas été tapés par un professeur : ils ont été
+// écrits le 20 septembre 2026 pour combler les deux matières qui n'avaient
+// aucune guideline. Ils doivent donc respecter au moins ce que le pipeline
+// attend d'un classeur — sinon la grille entre en base fausse, et personne ne
+// s'en aperçoit avant la première copie.
+
+for (const [fichier, matiere, totaux] of [
+  ['guidelines/anglais-llcer.csv', 'LLCER Anglais', [16, 4]],
+  ['guidelines/hlp.csv', 'HLP', [10, 10]],
+]) {
+  const table = lireCsv(lireFixture(fichier));
+  const colonnes = repererElevesColonnes(table);
+  const g = lireGuideline(table, Math.min(...colonnes.map((c) => c.colonneCase)));
+
+  test(`${matiere} : les deux parties valent ${totaux.join(' + ')}`, () => {
+    assert.equal(g.parties.length, 2);
+    assert.deepEqual(
+      g.parties.map((p) => p.points),
+      totaux,
+    );
+    for (const [i, partie] of g.parties.entries()) {
+      const somme = g.criteres
+        .filter((c) => c.partie === partie.libelle)
+        .reduce((s, c) => s + c.max, 0);
+      assert.equal(Math.round(somme * 100) / 100, totaux[i], `somme de « ${partie.libelle} »`);
+    }
+    assert.equal(g.total, 20);
+  });
+
+  test(`${matiere} : chaque critère a un vrai palier 0 et un palier au maximum`, () => {
+    for (const c of g.criteres) {
+      assert.ok(c.niveaux.length >= 3, `« ${c.libelle} » : ${c.niveaux.length} palier(s)`);
+      assert.equal(Math.min(...c.niveaux.map((n) => n.points)), 0, `« ${c.libelle} » sans palier 0`);
+      assert.equal(
+        Math.max(...c.niveaux.map((n) => n.points)),
+        c.max,
+        `« ${c.libelle} » : le palier le plus haut ne vaut pas le maximum`,
+      );
+    }
+  });
+
+  test(`${matiere} : une copie cochée au plus haut vaut 20, au plus bas 0`, () => {
+    const haut = table.map((l) => [...l]);
+    const bas = table.map((l) => [...l]);
+    for (const c of g.criteres) {
+      haut[c.niveaux[c.niveaux.length - 1].ligne][colonnes[0].colonneCase] = 'TRUE';
+      bas[c.niveaux[0].ligne][colonnes[0].colonneCase] = 'TRUE';
+    }
+    assert.equal(lireGuidelineCorrigee(haut).copies[0].total, 20);
+    assert.equal(lireGuidelineCorrigee(bas).copies[0].total, 0);
+  });
+}

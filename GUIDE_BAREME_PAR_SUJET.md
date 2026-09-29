@@ -6,8 +6,9 @@ note. Les autres matières continuent de fonctionner exactement comme avant.
 
 > **Ce n'est pas une migration à terminer.** Un barème par bac blanc n'a de sens
 > que là où les points dépendent des questions posées : maths, physique-chimie,
-> brevet. Une épreuve rédigée — français, philosophie, histoire-géo, SES, HLP,
-> SVT — se juge sur une grille écrite UNE FOIS pour l'épreuve : les critères
+> SVT (décision du 16 août 2026 : les épreuves à questions numérotées reviennent
+> au barème du sujet), brevet. Une épreuve rédigée — français, philosophie,
+> SES, HLP — se juge sur une grille écrite UNE FOIS pour l'épreuve : les critères
 > d'un commentaire ne changent pas selon que le texte est de Hugo ou de
 > Colette, donc un nouveau bac blanc n'y demande que son sujet. L'HGGSP a son
 > propre cas, la grille rédigée (voir `GUIDE_HGGSP_V2.md`). La répartition

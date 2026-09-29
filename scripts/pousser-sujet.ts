@@ -5,6 +5,12 @@
  *   npm run sujet:pousser -- <bareme.json> --sujet <sujet.md> --corrige <dossier.md>
  *   npm run sujet:pousser -- <bareme.json> --verifier-seulement
  *
+ * VERSIONS. Si le JSON porte `version.version` (ex. "1.1") et que l'examen n'a
+ * pas encore cette version, le script la crée par `bareme_nouvelle_version()`
+ * — copie complète de la version en vigueur, qui reste intacte et verrouillée —
+ * puis y écrit le barème. C'est le seul moyen propre de modifier un barème
+ * déjà verrouillé : les copies déjà corrigées gardent leur version.
+ *
  * Pourquoi ce script existe. Les sujets et leurs barèmes s'écrivent dans Claude
  * Code, sur l'abonnement déjà payé — jamais par l'Edge Function
  * `propose-bareme`, qui appelle l'API Anthropic et la facture. Restait à les
@@ -33,10 +39,13 @@ import {
   enregistrerBareme,
   listerExamens,
   majExamen,
+  nouvelleVersion,
   verifierEnBase,
   type SaisieQuestion,
+  type VersionBareme,
 } from '../src/lib/bareme';
 import { LABELS_MATIERES } from '../src/lib/matieres';
+import { pipelineDb } from '../src/lib/pipeline';
 import { CE_QUI_SE_DEFINIT, moteurAttendu } from '../src/lib/moteurs';
 import { synchroniserFicheDepot } from '../src/lib/ficheDepot';
 
@@ -50,6 +59,7 @@ type FichierBareme = {
     session?: string | null;
     date_epreuve?: string | null;
   };
+  version?: { version?: string; commentaire?: string | null };
   exercices?: { code: string; titre?: string | null; ordre?: number }[];
   questions: SaisieQuestion[];
 };
@@ -59,6 +69,11 @@ const AUTEUR = 'claude-code:generer-sujet-bac';
 function argument(nom: string): string | null {
   const i = process.argv.indexOf(`--${nom}`);
   return i > -1 ? process.argv[i + 1] ?? null : null;
+}
+
+/** Un drapeau sans valeur (`--verifier-seulement`), où qu'il soit placé. */
+function drapeau(nom: string): boolean {
+  return process.argv.includes(`--${nom}`);
 }
 
 function lireTexte(chemin: string | null): string | null {
@@ -132,17 +147,42 @@ async function principal() {
   }
 
   const vue = await chargerVueExamen(examId);
-  const version = vue?.bareme?.version;
+  let version: VersionBareme | undefined = vue?.bareme?.version;
   if (!version) throw new Error("Cet examen n'a aucune version de barème.");
+
+  // 2 bis. La version demandée par le fichier, si elle diffère de celle en
+  //    vigueur : on la reprend si elle existe, sinon on la crée par copie.
+  const voulue = f.version?.version?.trim();
+  if (voulue && voulue !== version.version) {
+    const existante = vue!.versions.find((v) => v.version === voulue);
+    if (existante) {
+      version = existante;
+      console.log(`· Version ${voulue} déjà présente (${existante.statut}), elle est reprise.`);
+    } else if (drapeau('verifier-seulement')) {
+      throw new Error(`La version ${voulue} n'existe pas encore : relancer sans --verifier-seulement pour la créer.`);
+    } else {
+      const base = version;
+      const id = await nouvelleVersion(base.id, voulue, AUTEUR);
+      const vue2 = await chargerVueExamen(examId);
+      version = vue2!.versions.find((v) => v.id === id)!;
+      console.log(
+        `· Version ${voulue} créée à partir de la ${base.version} (${base.statut}) — la ${base.version} reste intacte.`,
+      );
+    }
+    if (f.version?.commentaire && version.statut !== 'locked') {
+      await pipelineDb().from('bareme_versions').update({ commentaire: f.version.commentaire }).eq('id', version.id);
+    }
+  }
+
   if (version.statut === 'locked') {
     throw new Error(
       `La version ${version.version} est verrouillée : les copies déjà corrigées gardent la leur. ` +
-        'Créer une nouvelle version depuis /direction/bareme avant de réécrire ce barème.',
+        'Mettre un nouveau numéro dans version.version du JSON (ex. "1.1") : le script créera la nouvelle version.',
     );
   }
 
   // 3. Le barème.
-  if (!argument('verifier-seulement')) {
+  if (!drapeau('verifier-seulement')) {
     await enregistrerBareme(version.id, {
       exercices: f.exercices,
       questions: f.questions.map((q, i) => ({ ...q, ordre: q.ordre ?? i })),
@@ -167,7 +207,7 @@ async function principal() {
 
   console.log(
     c.ok
-      ? `\n✅ Prêt à relire : /direction/bareme/${examId}\n   Le sujet reste en brouillon. C'est un professeur qui le valide, puis « Verrouiller cette version ».`
+      ? `\n✅ Version ${version.version} prête à relire : /direction/bareme/${examId}\n   Elle reste en brouillon. C'est un professeur qui la valide, puis « Verrouiller cette version ».`
       : `\n⛔ ${c.blocages.length} blocage(s) : le barème ne pourra pas être verrouillé tant qu'ils sont là.`,
   );
   if (!c.ok) process.exitCode = 2;

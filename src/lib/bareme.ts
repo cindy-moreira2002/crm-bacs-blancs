@@ -8,6 +8,7 @@
  * Les RÈGLES, elles, ne sont pas ici : elles sont dans `baremeNoyau.ts`,
  * partagé avec l'Edge Function de correction et testé hors ligne.
  */
+import { maxScoreEpreuve } from '@/lib/epreuves';
 import { pipelineDb } from '@/lib/pipeline';
 import {
   verifierBareme,
@@ -352,7 +353,7 @@ export async function creerExamen(entree: {
       version: '1.0',
       matiere: entree.matiere,
       statut: 'draft',
-      max_score: 20,
+      max_score: maxScoreEpreuve(entree.matiere),
       cree_par: entree.auteur,
     })
     .select('*')
@@ -422,7 +423,7 @@ export async function enregistrerBareme(
 
   const { data: version } = await db
     .from('bareme_versions')
-    .select('statut')
+    .select('statut, matiere, max_score')
     .eq('id', versionId)
     .maybeSingle();
   if (!version) throw new Error('Version de barème introuvable.');
@@ -430,6 +431,19 @@ export async function enregistrerBareme(
     throw new Error(
       'Ce barème est verrouillé. Crée une nouvelle version pour le modifier : les copies déjà corrigées doivent garder la leur.',
     );
+  }
+
+  // Sur combien de points se note cette épreuve. Une version créée avant que
+  // la SVT n'entre dans le projet porte encore 20 : on la réaligne ici, sinon
+  // `bareme_verifier()` refuse un barème de 15 points pourtant exact.
+  const v = version as { matiere: string; max_score: number };
+  const attendu = maxScoreEpreuve(v.matiere);
+  if (Number(v.max_score) !== attendu) {
+    const { error } = await db
+      .from('bareme_versions')
+      .update({ max_score: attendu })
+      .eq('id', versionId);
+    if (error) throw new Error(`Mise à l'échelle du barème : ${error.message}`);
   }
 
   // --- Exercices --------------------------------------------------
