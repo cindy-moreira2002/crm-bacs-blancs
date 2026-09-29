@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { gardeApiProfDetail } from '@/lib/gardeAcces';
 import { eleveConnecte } from '@/lib/authEleve';
 import { autoriserCopie } from '@/lib/accesCopie';
+import { dossierUrlDeCopie } from '@/lib/copiesPipeline';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -128,7 +129,14 @@ export async function GET(req: NextRequest) {
     }
     if (error) throw error;
 
-    return NextResponse.json({ copies: data });
+    // Correction publiée depuis le pipeline (npm run correction:publier) : le
+    // dossier se lit sur /dossier/<correction_id>, pas en PDF stocké.
+    const copies = ((data ?? []) as unknown as Record<string, unknown>[]).map((c) => ({
+      ...c,
+      dossier_url: dossierUrlDeCopie(c.remarques),
+    }));
+
+    return NextResponse.json({ copies });
   } catch (err) {
     console.error('❌ Erreur liste copies:', err);
     return NextResponse.json({ error: 'Erreur lecture' }, { status: 500 });

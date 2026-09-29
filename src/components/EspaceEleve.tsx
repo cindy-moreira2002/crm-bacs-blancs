@@ -19,6 +19,8 @@ type Copie = {
   note: number | null;
   fichier_nom: string | null;
   pdf_pret: boolean;
+  // Dossier du pipeline de correction (/dossier/<id>), posé par /api/copies.
+  dossier_url?: string | null;
   created_at: string;
 };
 
@@ -1226,7 +1228,12 @@ export function EspaceEleve() {
                         📄 Ma copie
                       </a>
                     )}
-                    {c?.pdf_pret && (
+                    {c?.dossier_url ? (
+                      <a href={c.dossier_url} target="_blank" rel="noreferrer"
+                        style={{ fontSize: '.78rem', fontWeight: 800, color: '#fff', background: 'linear-gradient(135deg,#7C3AED,#581C87)', padding: '7px 14px', borderRadius: 100, textDecoration: 'none' }}>
+                        📘 Mon dossier de correction
+                      </a>
+                    ) : c?.pdf_pret && (
                       <a href={`/api/copies/pdf?id=${c.id}`}
                         style={{ fontSize: '.78rem', fontWeight: 800, color: '#fff', background: 'linear-gradient(135deg,#7C3AED,#581C87)', padding: '7px 14px', borderRadius: 100, textDecoration: 'none' }}>
                         📘 Mon dossier de correction
