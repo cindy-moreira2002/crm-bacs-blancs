@@ -14,7 +14,7 @@
  */
 import { pipelineDb } from '@/lib/pipeline';
 import { chargerSujets, type SujetCopie } from '@/lib/sujet';
-import type { NiveauCritere, PorteeErreur, TypeImpact } from '@/lib/hggspNoyau';
+import { cibleErreur, type EntreeTaxonomie, type Grille, type NiveauCritere, type PorteeErreur, type TypeExercice, type TypeImpact } from '@/lib/hggspNoyau';
 
 export type PalierV2 = { points: number; niveau: NiveauCritere; description: string };
 
@@ -246,6 +246,23 @@ export async function chargerRelectureHggsp(): Promise<DonneesHggsp | null> {
     message_pedagogique: t.message_pedagogique ?? '',
     relecture_humaine: t.relecture_humaine === true,
   }));
+
+  // La taxonomie est écrite dans les codes de la V2 ; la page montre les
+  // critères de la grille ACTIVE. On traduit donc chaque critère principal (et
+  // son plafond) comme le fait le correcteur (noyau, §4 bis).
+  for (const t of taxonomie) {
+    for (const g of grilles) {
+      const exercice = g.exercise_type as TypeExercice;
+      if (!t.critere_principal[exercice]) continue;
+      const cible = cibleErreur(t as unknown as EntreeTaxonomie, { ...g, matiere: 'hggsp', exercise_type: exercice } as Grille);
+      if (!cible.converti || !cible.critere) continue;
+      t.critere_principal = { ...t.critere_principal, [exercice]: cible.critere };
+      if (cible.plafond_score !== null) {
+        t.plafond_score = cible.plafond_score;
+        t.plafond_niveau = null;
+      }
+    }
+  }
 
   /* ------------------------------------------------- Les copies étalons */
   const { data: etalonsBruts } = await db

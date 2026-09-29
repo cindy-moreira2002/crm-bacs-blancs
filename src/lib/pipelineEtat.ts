@@ -368,6 +368,9 @@ export async function chargerGrillesRedigees(): Promise<Map<string, GrilleRedige
   const { data: grilles, error } = await db
     .from('grilles_redigees')
     .select('id, matiere, exercise_type, version, libelle, statut, max_analytique, max_officiel, valide_par, verrouille_le')
+    // Une grille archivée ne note plus : elle reste en base pour relire les
+    // anciennes copies, pas pour réclamer une relecture ou un verrouillage.
+    .neq('statut', 'archived')
     .order('matiere')
     .order('exercise_type');
   if (error || !grilles?.length) return parMatiere;

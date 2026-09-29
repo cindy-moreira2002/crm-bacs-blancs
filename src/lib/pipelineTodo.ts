@@ -414,11 +414,14 @@ function tachesRedigees(m: MatiereEtat): Tache[] {
         ou: { label: 'commande', commande: `node scripts/lien-relecture.mjs ${m.matiere}` },
       });
     }
-    if (g.corrections_humaines === 0 && g.etalons > 0) {
+    if (g.corrections_humaines === 0) {
       taches.push({
         id: `${m.matiere}-etalons-${g.id}`,
         titre: `Faire noter 3 vraies copies de « ${g.label} » par un prof`,
-        pourquoi: `Les ${g.etalons} copies de référence de cette grille sont inventées. Aucun prof n’a jamais vérifié que la note tombe juste.`,
+        pourquoi:
+          g.etalons > 0
+            ? `Les ${g.etalons} copies de référence de cette grille sont inventées. Aucun prof n’a jamais vérifié que la note tombe juste.`
+            : 'Cette grille n’a encore aucune copie de référence notée dans ses propres critères : le correcteur se cale sur les étalons inventés de la grille précédente, ramenés à son échelle.',
         acteur: 'humain',
         comment:
           'Une copie faible, une moyenne, une bonne. Tu me donnes les notes et les commentaires du prof, je les pose en base.',

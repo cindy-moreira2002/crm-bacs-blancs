@@ -160,6 +160,8 @@ export function DossierRelectureHggsp({
 
 function OngletEpreuve({ grilles }: { grilles: GrilleV2[] }) {
   const total = grilles.reduce((s, g) => s + g.max_officiel, 0);
+  // V3 (classeur des profs) : l'échelle de travail EST l'échelle officielle.
+  const directSur10 = grilles.length > 0 && grilles.every((g) => g.max_analytique === g.max_officiel);
   return (
     <div className="space-y-6">
       <Carte titre="Ce que dit le texte officiel">
@@ -183,18 +185,34 @@ function OngletEpreuve({ grilles }: { grilles: GrilleV2[] }) {
       </Carte>
 
       <Carte titre="Pourquoi deux notes, et comment on passe de l’une à l’autre">
-        <p className="text-gray-700 leading-relaxed">
-          Une matière rédigée se corrige mal sur 10 : les critères tomberaient sur des huitièmes de
-          point. Nous notons donc chaque exercice sur une <strong>échelle analytique interne de 20
-          points</strong>, au quart de point, puis nous convertissons automatiquement :
-        </p>
-        <div className="mt-4 rounded-xl bg-purple-50 border border-purple-100 p-5 space-y-2 font-mono text-sm text-purple-900">
-          <p>note_officielle_exercice = note_analytique_interne ÷ 2</p>
-          <p>note_finale = officielle(dissertation) + officielle(étude critique)</p>
-        </div>
-        <p className="text-gray-700 mt-4">
-          Deux notes sur 20 ne sont <strong>jamais</strong> additionnées.
-        </p>
+        {directSur10 ? (
+          <>
+            <p className="text-gray-700 leading-relaxed">
+              Chaque exercice est noté <strong>directement sur 10</strong>, au quart de point, avec
+              la grille du classeur que cochent les professeurs : les mêmes sous-critères, les mêmes
+              paliers. Aucune conversion n’intervient.
+            </p>
+            <div className="mt-4 rounded-xl bg-purple-50 border border-purple-100 p-5 space-y-2 font-mono text-sm text-purple-900">
+              <p>note_officielle_exercice = somme des critères (sur 10)</p>
+              <p>note_finale = officielle(dissertation) + officielle(étude critique)</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-gray-700 leading-relaxed">
+              Une matière rédigée se corrige mal sur 10 : les critères tomberaient sur des huitièmes de
+              point. Nous notons donc chaque exercice sur une <strong>échelle analytique interne de 20
+              points</strong>, au quart de point, puis nous convertissons automatiquement :
+            </p>
+            <div className="mt-4 rounded-xl bg-purple-50 border border-purple-100 p-5 space-y-2 font-mono text-sm text-purple-900">
+              <p>note_officielle_exercice = note_analytique_interne ÷ 2</p>
+              <p>note_finale = officielle(dissertation) + officielle(étude critique)</p>
+            </div>
+            <p className="text-gray-700 mt-4">
+              Deux notes sur 20 ne sont <strong>jamais</strong> additionnées.
+            </p>
+          </>
+        )}
 
         <div className="mt-5 overflow-x-auto">
           <table className="w-full text-sm border border-gray-200 rounded-xl overflow-hidden">
@@ -217,8 +235,9 @@ function OngletEpreuve({ grilles }: { grilles: GrilleV2[] }) {
                   Entraînement à un seul exercice
                 </td>
                 <td className="px-4 py-3 text-gray-700">
-                  « Note d’entraînement à l’étude critique : 12 / 20. Équivalent dans une épreuve
-                  complète : 6 / 10. »
+                  {directSur10
+                    ? '« Note d’entraînement à l’étude critique : 6 / 10. »'
+                    : '« Note d’entraînement à l’étude critique : 12 / 20. Équivalent dans une épreuve complète : 6 / 10. »'}
                 </td>
               </tr>
             </tbody>
@@ -235,7 +254,7 @@ function OngletEpreuve({ grilles }: { grilles: GrilleV2[] }) {
         </p>
         <p className="text-gray-700 mt-3 leading-relaxed">
           La note est la <strong>somme des réussites observées</strong> critère par critère. On ne
-          part jamais de 20 pour retrancher les erreurs : les erreurs types servent à expliquer
+          part jamais du maximum pour retrancher les erreurs : les erreurs types servent à expliquer
           pourquoi un niveau supérieur n’est pas atteint.
         </p>
         {grilles[0] && (

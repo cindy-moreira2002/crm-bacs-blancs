@@ -26,6 +26,7 @@ import {
   TAXONOMIE,
   construireResultatExercice,
   consigneSysteme,
+  etalonPourGrille,
   schemaSortie,
   type EntreeTaxonomie,
   type FormatExamen,
@@ -339,17 +340,29 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Fiche sujet introuvable: ${sujetResult.error?.message ?? ''}`);
     }
 
-    // Seuls les etalons exprimes dans la grille v2 servent d'ancrage : ceux de
-    // l'ancienne grille parlent de criteres qui n'existent plus.
-    const etalons = (etalonsResult.data ?? []).filter(
-      (e) => (e.card_json as Record<string, unknown>)?.rubric_version === '2.0',
-    );
+    // Servent d'ancrage : les etalons ecrits dans la grille appliquee, et ceux
+    // de la v2 (note ramenee a l'echelle de la grille par etalonPourGrille).
+    // Ceux de la v1 parlent de criteres qui n'existent plus.
+    const etalons = (etalonsResult.data ?? []).filter((e) => {
+      const version = String((e.card_json as Record<string, unknown>)?.rubric_version ?? '');
+      return version === '2.0' || version === String(grille.version);
+    });
     if (etalons.length < 3) {
       throw new Error(
-        `Moins de trois copies étalons v2 sont reliées au sujet ${correction.subject_id} (${etalons.length}). ` +
+        `Moins de trois copies étalons (v2 ou ${grille.version}) sont reliées au sujet ${correction.subject_id} (${etalons.length}). ` +
           'Lance scripts/apply-hggsp.mjs --apply.',
       );
     }
+    const etalonsLus = etalons.map((e) =>
+      etalonPourGrille(
+        {
+          id: String(e.id),
+          score: e.score === null ? null : Number(e.score),
+          card_json: (e.card_json ?? {}) as Record<string, unknown>,
+        },
+        grille,
+      ),
+    );
 
     let exam: Record<string, unknown> | null = null;
     if (correction.exam_id) {
@@ -406,17 +419,7 @@ Deno.serve(async (req: Request) => {
       sujet: sujetResult.data.card_json,
       nombre_documents: documents,
       format_examen: format,
-      etalons: etalons.map((e) => {
-        const carte = (e.card_json ?? {}) as Record<string, unknown>;
-        return {
-          id: e.id,
-          note_analytique: e.score,
-          niveau: carte.niveau,
-          criterion_scores: carte.criterion_scores,
-          description: carte.description,
-          avertissement: carte.warning,
-        };
-      }),
+      etalons: etalonsLus,
     };
 
     const anthropicPayload = await callAnthropic(apiKey, {
@@ -477,10 +480,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const etalonDesigne = etalons.find((e) => e.id === reponse.benchmark_comparison?.closest_etalon_id);
-    const etalonProche = etalonDesigne
-      ? { libelle: String(etalonDesigne.id), note: Number(etalonDesigne.score) }
-      : null;
+    const etalonDesigne = etalonsLus.find((e) => e.id === reponse.benchmark_comparison?.closest_etalon_id);
+    const etalonProche =
+      etalonDesigne && etalonDesigne.note_analytique !== null
+        ? { libelle: etalonDesigne.id, note: etalonDesigne.note_analytique }
+        : null;
 
     const resultat = construireResultatExercice({
       examId: (correction.exam_id as string) ?? null,

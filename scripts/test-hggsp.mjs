@@ -30,6 +30,10 @@ import {
   taxonomiePour,
   chercherTaxonomie,
   criterePrincipal,
+  critereResolu,
+  cibleErreur,
+  ecartEtalonMax,
+  etalonPourGrille,
   convertirEnOfficiel,
   noteFinaleExamen,
   phraseNote,
@@ -1002,4 +1006,107 @@ test('une erreur transversale vise le bon critère dans chaque exercice', () => 
   const conclusion = chercherTaxonomie('HGGSP_TR_11');
   assert.equal(criterePrincipal(conclusion, 'hggsp_dissertation'), 'ARGUMENTATION');
   assert.equal(criterePrincipal(conclusion, 'hggsp_etude_critique'), 'ORGANISATION_ARGUMENTATION');
+});
+
+/* ================================================================== */
+/*  12. La V3 (grille du classeur, sur 10) lit la taxonomie de la V2  */
+/* ================================================================== */
+
+/** Une V3 miniature : mêmes codes et maxima que le classeur des profs. */
+function grilleV3(exercice) {
+  const crit = (code, max, ordre) => ({
+    code,
+    libelle: code,
+    evaluer: [],
+    max_points: max,
+    ordre,
+    paliers: [
+      { points: 0, niveau: 'nul', description: 'rien' },
+      { points: max / 2, niveau: 'fragile', description: 'moitié' },
+      { points: max, niveau: 'tres_satisfaisant', description: 'tout' },
+    ],
+  });
+  const criteres =
+    exercice === 'hggsp_dissertation'
+      ? [['P1.A.1', 1.5], ['P1.A.2', 0.5], ['P1.B.1', 1.5], ['P1.B.2', 1], ['P1.C.1', 1], ['P1.C.2', 1.5], ['P1.C.3', 0.5], ['P1.D.1', 0.75], ['P1.D.2', 0.75], ['P1.E.1', 0.75], ['P1.E.2', 0.25]]
+      : [['P2.A.1', 1.5], ['P2.B.1', 1], ['P2.B.2', 1.5], ['P2.C.1', 1], ['P2.C.2', 1.5], ['P2.D.1', 1.5], ['P2.E.1', 1], ['P2.F.1', 0.75], ['P2.F.2', 0.25]];
+  return {
+    id: exercice === 'hggsp_dissertation' ? 'HGGSP_DISSERTATION_V3' : 'HGGSP_ETUDE_CRITIQUE_V3',
+    matiere: 'hggsp',
+    exercise_type: exercice,
+    version: '3',
+    libelle: 'V3',
+    principe: '',
+    max_analytique: 10,
+    max_officiel: 10,
+    criteres: criteres.map(([c, m], i) => crit(c, m, i + 1)),
+    garde_fous: [],
+  };
+}
+
+test('V3 : chaque critère visé par la taxonomie existe dans la grille', () => {
+  for (const exercice of ['hggsp_dissertation', 'hggsp_etude_critique']) {
+    const g = grilleV3(exercice);
+    for (const e of taxonomiePour(exercice)) {
+      const principal = criterePrincipal(e, exercice);
+      if (!principal) continue;
+      assert.ok(critereResolu(principal, g), `${e.code} → ${principal} introuvable en V3`);
+    }
+  }
+  // La V2 n'est pas touchée : ses codes se résolvent sur eux-mêmes.
+  assert.equal(critereResolu('CONNAISSANCES', GRILLE_DISSERTATION), 'CONNAISSANCES');
+});
+
+test('V3 : les plafonds sont ramenés à la taille du nouveau critère', () => {
+  const diss = grilleV3('hggsp_dissertation');
+  // Plafond de niveau « insuffisant » (1 / 4 en V2) → 25 % de 1,5 → 0,25.
+  const sansProblematique = cibleErreur(chercherTaxonomie('HGGSP_DIS_05'), diss);
+  assert.equal(sansProblematique.critere, 'P1.A.1');
+  assert.equal(sansProblematique.plafond_score, 0.25);
+
+  const ec = grilleV3('hggsp_etude_critique');
+  // Plafond de score 2,5 / 5 en V2 → 50 % de 1,5 → 0,75.
+  const sansCritique = cibleErreur(chercherTaxonomie('HGGSP_EC_09'), ec);
+  assert.equal(sansCritique.critere, 'P2.C.2');
+  assert.equal(sansCritique.plafond_score, 0.75);
+
+  const criteres = ec.criteres.map((c) => ({
+    criterion_id: c.code,
+    libelle: c.code,
+    score: c.max_points,
+    max_score: c.max_points,
+    level: 'tres_satisfaisant',
+    level_label: '',
+    observed_strengths: [],
+    observed_weaknesses: [],
+    evidence: [],
+    feedback: '',
+    human_review_required: false,
+  }));
+  const { criteres: apres, motifs } = appliquerErreurs(ec, criteres, [
+    { taxonomy_code: 'HGGSP_EC_09', evidence: [], confidence: 0.9, is_consequence: false },
+  ]);
+  assert.equal(apres.find((c) => c.criterion_id === 'P2.C.2').score, 0.75);
+  assert.ok(!motifs.some((m) => m.code === 'code_hors_taxonomie'), 'aucun code ne doit tomber hors grille');
+});
+
+test('V3 : les étalons V2 sont ramenés sur 10 et l’écart toléré aussi', () => {
+  const g = grilleV3('hggsp_dissertation');
+  assert.equal(ecartEtalonMax(g), 1.5);
+  assert.equal(ecartEtalonMax(GRILLE_DISSERTATION), 3);
+  const e = etalonPourGrille(
+    { id: 'E1', score: 13, card_json: { rubric_version: '2.0', max_analytique: 20, criterion_scores: { CONNAISSANCES: 3 } } },
+    g,
+  );
+  assert.equal(e.note_analytique, 6.5);
+  assert.equal(e.criterion_scores, undefined);
+  const meme = etalonPourGrille({ id: 'E2', score: 13, card_json: { rubric_version: '2.0' } }, GRILLE_DISSERTATION);
+  assert.equal(meme.note_analytique, 13);
+});
+
+test('V3 : la consigne nomme les critères de la V3, jamais ceux de la V2', () => {
+  const consigne = consigneSysteme(grilleV3('hggsp_etude_critique'), { deuxDocuments: true });
+  assert.ok(consigne.includes('critère : P2.D.1'));
+  assert.ok(!/critère : (PRELEVEMENT|ANALYSE_CRITIQUE|EXPLICATION_CONNAISSANCES|EXPRESSION)\b/.test(consigne));
+  assert.ok(!consigne.includes('À évaluer : .'));
 });

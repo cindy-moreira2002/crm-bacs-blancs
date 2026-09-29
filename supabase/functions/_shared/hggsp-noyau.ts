@@ -1359,6 +1359,89 @@ export function criterePrincipal(entree: EntreeTaxonomie, exercice: TypeExercice
   return entree.critere_principal[exercice] ?? null;
 }
 
+/* ------------------------------------------------------------------ */
+/*  4 bis. La taxonomie devant une grille qui n'est plus la V2         */
+/*                                                                    */
+/*  La taxonomie (43 codes, en base comme ici) nomme les critères de   */
+/*  la V2 : ANALYSE_PROBLEMATISATION, CONNAISSANCES… La V3 — celle du  */
+/*  classeur des profs, active depuis le 29 septembre 2026 — les       */
+/*  découpe en sous-critères P1.A.1, P1.B.1… sur 10 points. Plutôt que  */
+/*  de réécrire 43 règles, on dit ici OÙ chaque critère V2 se retrouve  */
+/*  dans la V3, et on ramène les plafonds à la taille du nouveau        */
+/*  critère (même proportion du maximum, arrondie au quart inférieur). */
+/* ------------------------------------------------------------------ */
+
+/** Critère V2 → critère de la grille du classeur (V3) qui en porte l'essentiel. */
+export const CORRESPONDANCE_CRITERES: Record<TypeExercice, Record<string, string>> = {
+  hggsp_dissertation: {
+    ANALYSE_PROBLEMATISATION: 'P1.A.1',
+    CONNAISSANCES: 'P1.B.1',
+    ARGUMENTATION: 'P1.C.2',
+    EXEMPLES: 'P1.C.3',
+    EXPRESSION: 'P1.E.1',
+  },
+  hggsp_etude_critique: {
+    CONSIGNE_PROBLEMATISATION: 'P2.A.1',
+    PRELEVEMENT: 'P2.B.2',
+    EXPLICATION_CONNAISSANCES: 'P2.D.1',
+    ANALYSE_CRITIQUE: 'P2.C.2',
+    ORGANISATION_ARGUMENTATION: 'P2.E.1',
+    EXPRESSION: 'P2.F.1',
+  },
+};
+
+/** Le critère de CETTE grille que désigne un code (V2 ou natif), ou null. */
+export function critereResolu(code: string | null | undefined, grille: Grille): string | null {
+  if (!code) return null;
+  if (grille.criteres.some((c) => c.code === code)) return code;
+  const cible = CORRESPONDANCE_CRITERES[grille.exercise_type]?.[code];
+  return cible && grille.criteres.some((c) => c.code === cible) ? cible : null;
+}
+
+function quartInferieur(n: number): number {
+  return Math.floor(n * 4 + 1e-9) / 4;
+}
+
+/**
+ * Où une erreur type agit dans CETTE grille, et avec quel plafond.
+ *
+ * Critère présent tel quel : rien ne change. Critère V2 retrouvé par la
+ * correspondance : un plafond de score est ramené en proportion, et un plafond
+ * de NIVEAU devient un plafond de score — les paliers de la V3 ne portent pas
+ * les mêmes niveaux, mais « pas au-delà de 3 points sur 4 » se traduit sans
+ * ambiguïté en « pas au-delà de 75 % du nouveau critère ».
+ */
+export function cibleErreur(
+  entree: EntreeTaxonomie,
+  grille: Grille,
+): { critere: string | null; plafond_score: number | null; plafond_niveau: NiveauCritere | null; converti: boolean } {
+  const principal = criterePrincipal(entree, grille.exercise_type);
+  const critere = critereResolu(principal, grille);
+  if (!principal || !critere || critere === principal) {
+    return { critere, plafond_score: entree.plafond_score, plafond_niveau: entree.plafond_niveau, converti: false };
+  }
+
+  const cible = grille.criteres.find((c) => c.code === critere)!;
+  const ancien = GRILLES[grille.exercise_type].criteres.find((c) => c.code === principal);
+  if (!ancien) {
+    return { critere, plafond_score: null, plafond_niveau: null, converti: true };
+  }
+
+  let plafond: number | null = null;
+  if (entree.type_impact === 'criterion_score_cap' && entree.plafond_score !== null) {
+    plafond = entree.plafond_score;
+  } else if (entree.type_impact === 'criterion_level_cap' && entree.plafond_niveau) {
+    plafond = plafondDuNiveau(ancien, entree.plafond_niveau);
+  }
+
+  return {
+    critere,
+    plafond_score: plafond === null ? null : quartInferieur((plafond * cible.max_points) / ancien.max_points),
+    plafond_niveau: null,
+    converti: true,
+  };
+}
+
 /* ================================================================== */
 /*  5. Conversion analytique → officielle                             */
 /* ================================================================== */
@@ -1420,8 +1503,18 @@ export function niveauPour(critere: Critere, score: number): Palier {
 /** Score maximal autorisé par un plafond de NIVEAU. */
 export function plafondDuNiveau(critere: Critere, niveau: NiveauCritere): number | null {
   const palier = critere.paliers.find((p) => p.niveau === niveau);
-  return palier ? palier.points : null;
+  if (palier) return palier.points;
+  // Les grilles du classeur ne portent pas tous les niveaux (un critère sur
+  // 0,75 n'a que trois paliers) : on retient le plus haut palier qui ne
+  // dépasse pas le niveau demandé.
+  const rang = ORDRE_NIVEAUX.indexOf(niveau);
+  const sous = critere.paliers
+    .filter((p) => ORDRE_NIVEAUX.indexOf(p.niveau) <= rang)
+    .sort((a, b) => b.points - a.points);
+  return sous.length ? sous[0].points : null;
 }
+
+const ORDRE_NIVEAUX: NiveauCritere[] = ['nul', 'insuffisant', 'fragile', 'moyen', 'satisfaisant', 'tres_satisfaisant'];
 
 /**
  * Normalise les critères rendus par le modèle contre la grille.
@@ -1591,10 +1684,15 @@ export function appliquerErreurs(
 
     // Un code de l'autre exercice ne désigne AUCUN critère ici : il ne peut ni
     // plafonner, ni être rattaché au critère que le modèle propose au hasard.
+    // Le critère visé est lu DANS la grille appliquée : la taxonomie parle
+    // encore les codes de la V2, `cibleErreur` les traduit (§4 bis).
+    const cible = horsPortee ? null : cibleErreur(entree, grille);
     const critereVise = horsPortee
       ? null
-      : criterePrincipal(entree, grille.exercise_type) ??
-        (brut.criterion_id && parCode.has(brut.criterion_id) ? brut.criterion_id : null);
+      : cible?.critere ??
+        (criterePrincipal(entree, grille.exercise_type) === null && brut.criterion_id && parCode.has(brut.criterion_id)
+          ? brut.criterion_id
+          : null);
     const critere = critereVise ? parCritere.get(critereVise) ?? null : null;
     const def = critereVise ? parCode.get(critereVise) ?? null : null;
 
@@ -1630,11 +1728,8 @@ export function appliquerErreurs(
         impact = 'informational_only';
       } else {
         const valeur =
-          entree.type_impact === 'criterion_score_cap'
-            ? entree.plafond_score
-            : entree.plafond_niveau
-              ? plafondDuNiveau(def, entree.plafond_niveau)
-              : null;
+          cible?.plafond_score ??
+          (cible?.plafond_niveau ? plafondDuNiveau(def, cible.plafond_niveau) : null);
 
         if (valeur === null) {
           effet = 'Plafond non applicable : valeur absente de la taxonomie.';
@@ -1649,13 +1744,13 @@ export function appliquerErreurs(
           critere.level_label = LIBELLES_NIVEAU[palier.niveau];
           effet = `Score du critère ramené de ${avant} à ${critere.score} (plafond ${code}).`;
           plafondsAppliques.add(code);
-          if (entree.type_impact === 'criterion_score_cap') cap = arrondi(valeur);
-          else capNiveau = entree.plafond_niveau;
+          if (entree.type_impact === 'criterion_score_cap' || cible?.converti) cap = arrondi(valeur);
+          if (entree.type_impact === 'criterion_level_cap') capNiveau = entree.plafond_niveau;
         } else {
           effet = `Plafond ${valeur} non atteint : le score observé (${critere.score}) est déjà en dessous.`;
           plafondsAppliques.add(code);
-          if (entree.type_impact === 'criterion_score_cap') cap = arrondi(valeur);
-          else capNiveau = entree.plafond_niveau;
+          if (entree.type_impact === 'criterion_score_cap' || cible?.converti) cap = arrondi(valeur);
+          if (entree.type_impact === 'criterion_level_cap') capNiveau = entree.plafond_niveau;
         }
       }
     } else if (impact === 'evidence_not_rewarded') {
@@ -1764,8 +1859,58 @@ export function detecterDoublesSanctions(evenements: EvenementErreur[]): MotifRe
 /** Sous ce seuil, la correction part systématiquement en relecture. */
 export const SEUIL_CONFIANCE = 0.85;
 
-/** Écart aux étalons comparables au-delà duquel un humain revoit la note. */
+/** Écart aux étalons comparables au-delà duquel un humain revoit la note (échelle sur 20). */
 export const ECART_ETALON_MAX = 3;
+
+/** Le même écart, ramené à l'échelle de la grille : 3 sur 20, donc 1,5 sur 10. */
+export function ecartEtalonMax(grille: Grille): number {
+  return arrondi((ECART_ETALON_MAX * grille.max_analytique) / 20);
+}
+
+/**
+ * Un étalon, lu à l'échelle de la grille appliquée.
+ *
+ * Les 56 étalons ont été écrits dans la V2 (note sur 20, critères
+ * ANALYSE_PROBLEMATISATION…). Devant une autre grille, leur note est ramenée
+ * en proportion et leur détail par critère est retiré : il nommerait des
+ * critères que le correcteur ne doit pas utiliser.
+ */
+export function etalonPourGrille(
+  etalon: { id: string; score: number | null; card_json: Record<string, unknown> | null },
+  grille: Grille,
+): {
+  id: string;
+  note_analytique: number | null;
+  niveau: unknown;
+  criterion_scores: unknown;
+  description: unknown;
+  avertissement: unknown;
+} {
+  const carte = etalon.card_json ?? {};
+  const memeGrille = String(carte.rubric_version ?? '') === String(grille.version);
+  const echelle = Number(carte.analytical_max ?? carte.max_analytique ?? 20) || 20;
+  const note =
+    etalon.score === null || etalon.score === undefined
+      ? null
+      : memeGrille
+        ? Number(etalon.score)
+        : arrondiQuart((Number(etalon.score) * grille.max_analytique) / echelle);
+  return {
+    id: etalon.id,
+    note_analytique: note,
+    niveau: carte.niveau,
+    criterion_scores: memeGrille ? carte.criterion_scores : undefined,
+    description: carte.description,
+    avertissement: memeGrille
+      ? carte.warning
+      : [
+          carte.warning,
+          `Étalon écrit dans la grille ${String(carte.rubric_version ?? 'précédente')} (sur ${echelle}) : sa note est ramenée sur ${grille.max_analytique}, son détail par critère n'est pas transposable.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+  };
+}
 
 export function motifsRelectureHumaine(entree: {
   grille: Grille;
@@ -1826,9 +1971,11 @@ export function motifsRelectureHumaine(entree: {
 
   // Copie presque entièrement hors sujet : jamais notée automatiquement.
   const horsSujet = evenements.filter((e) => e.taxonomy_code === 'HGGSP_TR_05');
-  const analyse = criteres.find(
-    (c) => c.criterion_id === 'ANALYSE_PROBLEMATISATION' || c.criterion_id === 'CONSIGNE_PROBLEMATISATION',
+  const codeAnalyse = critereResolu(
+    grille.exercise_type === 'hggsp_dissertation' ? 'ANALYSE_PROBLEMATISATION' : 'CONSIGNE_PROBLEMATISATION',
+    grille,
   );
+  const analyse = criteres.find((c) => c.criterion_id === codeAnalyse);
   if (horsSujet.length > 0 && analyse && analyse.score <= analyse.max_score * 0.25) {
     motifs.push({
       code: 'copie_presque_hors_sujet',
@@ -1885,10 +2032,11 @@ export function motifsRelectureHumaine(entree: {
     });
   }
 
-  if (entree.etalonProche && Math.abs(entree.noteAnalytique - entree.etalonProche.note) > ECART_ETALON_MAX) {
+  const ecartMax = ecartEtalonMax(grille);
+  if (entree.etalonProche && Math.abs(entree.noteAnalytique - entree.etalonProche.note) > ecartMax) {
     motifs.push({
       code: 'ecart_aux_etalons',
-      message: `Note ${entree.noteAnalytique} / ${grille.max_analytique} contre ${entree.etalonProche.note} pour l’étalon comparable « ${entree.etalonProche.libelle} » : écart supérieur à ${ECART_ETALON_MAX} points.`,
+      message: `Note ${entree.noteAnalytique} / ${grille.max_analytique} contre ${entree.etalonProche.note} pour l’étalon comparable « ${entree.etalonProche.libelle} » : écart supérieur à ${ecartMax} points.`,
     });
   }
 
@@ -2205,7 +2353,7 @@ export function consigneSysteme(
   lignes.push('GRILLE');
   for (const c of grille.criteres) {
     lignes.push(`• ${c.code} — ${c.libelle} (max ${c.max_points})`);
-    lignes.push(`  À évaluer : ${c.evaluer.join(' ; ')}.`);
+    if (c.evaluer.length) lignes.push(`  À évaluer : ${c.evaluer.join(' ; ')}.`);
     for (const p of c.paliers) {
       lignes.push(`  ${p.points} — ${p.description}`);
     }
@@ -2216,15 +2364,20 @@ export function consigneSysteme(
     "Tu signales les erreurs observées avec les codes ci-dessous, et uniquement ceux-là. Une erreur n'est PAS une soustraction de points : elle explique pourquoi un niveau supérieur n'est pas atteint. Seuls les codes marqués « plafond » agissent mécaniquement sur le score, et le système les applique lui-même.",
   );
   for (const e of taxo) {
+    const cible = cibleErreur(e, grille);
     const impact =
-      e.type_impact === 'criterion_score_cap'
+      (e.type_impact === 'criterion_score_cap' || e.type_impact === 'criterion_level_cap') && cible.converti
+        ? cible.plafond_score === null
+          ? LIBELLES_IMPACT[e.type_impact]
+          : `plafond du critère à ${cible.plafond_score}`
+        : e.type_impact === 'criterion_score_cap'
         ? `plafond du critère à ${e.plafond_score}`
         : e.type_impact === 'criterion_level_cap'
           ? `plafond au niveau « ${e.plafond_niveau} »`
           : e.type_impact === 'contextual_range'
             ? `fourchette indicative ${e.impact_min}–${e.impact_max}`
             : LIBELLES_IMPACT[e.type_impact];
-    const critere = criterePrincipal(e, grille.exercise_type);
+    const critere = cible.critere;
     lignes.push(
       `• ${e.code} — ${e.libelle} : ${e.description} [critère : ${critere ?? 'aucun'} ; impact : ${impact}]`,
     );
@@ -2245,7 +2398,7 @@ export function consigneSysteme(
     lignes.push('');
     lignes.push('PRODUCTION GRAPHIQUE (facultative)');
     lignes.push(
-      "Depuis la session 2026, une illustration pertinente (croquis, schéma) peut valoriser « Construction et argumentation » ou « Exemples précis et exploités », sans dépasser le maximum du critère. Son absence ne pénalise jamais. Une production décorative ou sans rapport n'est pas valorisée. Si tu ne peux pas l'interpréter, demande une relecture humaine. Renseigne production_graphique.",
+      `Depuis la session 2026, une illustration pertinente (croquis, schéma) peut valoriser ${nomCritere('ARGUMENTATION', grille)} ou ${nomCritere('EXEMPLES', grille)}, sans dépasser le maximum du critère. Son absence ne pénalise jamais. Une production décorative ou sans rapport n'est pas valorisée. Si tu ne peux pas l'interpréter, demande une relecture humaine. Renseigne production_graphique.`,
     );
   }
 
@@ -2253,7 +2406,7 @@ export function consigneSysteme(
     lignes.push('');
     lignes.push('PRÉLEVER, EXPLIQUER, CRITIQUER');
     lignes.push(
-      "Ces trois gestes sont notés dans TROIS critères distincts. Une copie qui prélève correctement mais n'explique ni ne critique garde ses points de prélèvement : tu ne mets jamais presque zéro à toute la partie documentaire au motif que la critique manque.",
+      `Ces trois gestes sont notés dans TROIS critères distincts${grille.criteres.some((c) => c.code === 'PRELEVEMENT') ? '' : ` (${['PRELEVEMENT', 'EXPLICATION_CONNAISSANCES', 'ANALYSE_CRITIQUE'].map((c) => nomCritere(c, grille)).join(', ')})`}. Une copie qui prélève correctement mais n'explique ni ne critique garde ses points de prélèvement : tu ne mets jamais presque zéro à toute la partie documentaire au motif que la critique manque.`,
     );
     if (options.deuxDocuments) {
       lignes.push('');
@@ -2265,6 +2418,15 @@ export function consigneSysteme(
   }
 
   return lignes.join('\n');
+}
+
+/** « Libellé » (CODE) du critère de la grille qui porte un critère V2. */
+function nomCritere(codeV2: string, grille: Grille): string {
+  const code = critereResolu(codeV2, grille);
+  const c = grille.criteres.find((x) => x.code === code);
+  if (!c) return `« ${codeV2} »`;
+  // Grille V2 : le texte d'origine, mot pour mot (sa consigne est figée en base).
+  return c.code === codeV2 ? `« ${c.libelle} »` : `« ${c.libelle} » (${c.code})`;
 }
 
 /** Schéma JSON attendu du modèle (utilisé tel quel par l'Edge Function). */

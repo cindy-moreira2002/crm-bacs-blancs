@@ -16,9 +16,10 @@
 //
 //  Il verifie, dans cet ordre :
 //    1. les tables de la couche redigee repondent ;
-//    2. les 2 grilles sont conformes au noyau, criteres et descripteurs
-//       compris, ET la consigne systeme stockee est bien celle que le
-//       noyau construit (sinon le correcteur lit un autre bareme) ;
+//    2. la grille ACTIVE de chaque exercice (V3 depuis le 2026-09-29) :
+//       echelle, paliers 0 et max, taxonomie lisible, consigne stockee =
+//       celle du noyau, grille_verifier() ; et les V2 du noyau, conformes
+//       et archivees ;
 //    3. la taxonomie des 43 erreurs types est complete ;
 //    4. le routage : une seule grille active par exercice, moteur
 //       'criteres_rediges', v1 archivee ;
@@ -36,6 +37,9 @@ import {
   GRILLE_ETUDE_CRITIQUE,
   TAXONOMIE,
   consigneSysteme,
+  critereResolu,
+  criterePrincipal,
+  taxonomiePour,
 } from '../supabase/functions/_shared/hggsp-noyau.ts';
 
 const ROOT = resolve(dirname(new URL(import.meta.url).pathname), '..');
@@ -113,7 +117,7 @@ async function compter(table, filtre = '') {
 
 /* ------------------------------------------------------------------ */
 
-console.log('\n═══ HGGSP v2 — vérification en base ═══');
+console.log('\n═══ HGGSP — vérification en base ═══');
 console.log(`Projet : ${BASE.replace(/^https:\/\//, '').split('.')[0]}\n`);
 
 // --- 1. Les tables ---------------------------------------------------
@@ -136,74 +140,132 @@ bilan(
   manquantes.length ? `manquantes : ${manquantes.join(', ')}` : '',
 );
 
-// --- 2. Les grilles, comparées au noyau ------------------------------
-console.log('\n2. Les grilles, comparées au noyau');
+// --- 2. Les grilles ---------------------------------------------------
+//
+// Depuis le 2026-09-29 (SQL 57), la grille ACTIVE de chaque exercice est la
+// V3 (classeur des profs, sur 10). Les V2 du noyau restent en base, archivées :
+// les anciennes copies les désignent encore. On vérifie donc :
+//   • la grille désignée par la grille de dépôt active, quelle qu'elle soit ;
+//   • les grilles du noyau, contre le noyau, où qu'elles en soient.
+console.log('\n2. Les grilles');
 
-for (const g of GRILLES) {
-  const enBase = await lire(
-    `grilles_redigees?select=*&id=eq.${g.id}`,
-  );
-  const ligne = enBase.data?.[0];
-  if (!ligne) {
-    bilan(false, `${g.id} présente en base`, enBase.erreur ?? 'absente');
+const depots = await lire('rubrics?select=id,exercise_type,status,grille_id&matiere=eq.hggsp&status=eq.active');
+const idsActifs = new Set((depots.data ?? []).map((r) => r.grille_id).filter(Boolean));
+
+/** La grille telle que la lit l'Edge Function, depuis la base. */
+async function grilleDepuisBase(ligne) {
+  const criteres = await lire(`grille_criteres?select=id,code,libelle,evaluer,max_points,ordre&grille_id=eq.${ligne.id}&order=ordre`);
+  const ids = (criteres.data ?? []).map((c) => `"${c.id}"`).join(',');
+  const descripteurs = ids
+    ? await lire(`grille_descripteurs?select=critere_id,points,niveau,description&critere_id=in.(${ids})&order=points`)
+    : { data: [] };
+  return {
+    id: ligne.id,
+    matiere: 'hggsp',
+    exercise_type: ligne.exercise_type,
+    version: ligne.version,
+    libelle: ligne.libelle,
+    principe: ligne.principe,
+    max_analytique: Number(ligne.max_analytique),
+    max_officiel: Number(ligne.max_officiel),
+    garde_fous: ligne.garde_fous ?? [],
+    criteres: (criteres.data ?? []).map((c) => ({
+      code: c.code,
+      libelle: c.libelle,
+      evaluer: Array.isArray(c.evaluer) ? c.evaluer : [],
+      max_points: Number(c.max_points),
+      ordre: Number(c.ordre),
+      paliers: (descripteurs.data ?? [])
+        .filter((d) => d.critere_id === c.id)
+        .map((d) => ({ points: Number(d.points), niveau: d.niveau, description: d.description })),
+    })),
+  };
+}
+
+for (const exercice of ['hggsp_dissertation', 'hggsp_etude_critique']) {
+  const depot = (depots.data ?? []).find((r) => r.exercise_type === exercice);
+  if (!depot?.grille_id) {
+    bilan(false, `${exercice} : une grille active`, 'aucune grille de dépôt active ne désigne de grille rédigée');
     continue;
   }
+  const enBase = await lire(`grilles_redigees?select=*&id=eq.${depot.grille_id}`);
+  const ligne = enBase.data?.[0];
+  if (!ligne) {
+    bilan(false, `${depot.grille_id} présente en base`, enBase.erreur ?? 'absente');
+    continue;
+  }
+  const g = await grilleDepuisBase(ligne);
+  bilan(true, `${exercice} : grille active ${g.id} (version ${g.version})`, `${g.criteres.length} critères, ${g.max_analytique} analytiques → ${g.max_officiel} officiels`);
 
-  bilan(
-    Number(ligne.max_analytique) === g.max_analytique && Number(ligne.max_officiel) === g.max_officiel,
-    `${g.id} : échelles`,
-    `${ligne.max_analytique} analytiques → ${ligne.max_officiel} officiels (noyau : ${g.max_analytique} → ${g.max_officiel})`,
-  );
+  const somme = g.criteres.reduce((n, c) => n + c.max_points, 0);
+  bilan(Math.abs(somme - g.max_analytique) < 0.001, `${g.id} : la somme des critères fait l'échelle`, `${somme} / ${g.max_analytique}`);
 
-  const criteres = await lire(`grille_criteres?select=id,code,max_points&grille_id=eq.${g.id}&order=ordre`);
-  const codesBase = (criteres.data ?? []).map((c) => c.code).sort();
-  const codesNoyau = g.criteres.map((c) => c.code).sort();
-  bilan(
-    JSON.stringify(codesBase) === JSON.stringify(codesNoyau),
-    `${g.id} : ${codesNoyau.length} critères`,
-    codesBase.length === codesNoyau.length ? '' : `base ${codesBase.length}, noyau ${codesNoyau.length}`,
-  );
+  const sansZero = g.criteres.filter((c) => !c.paliers.some((p) => p.points === 0)).map((c) => c.code);
+  bilan(sansZero.length === 0, `${g.id} : chaque critère peut valoir 0`, sansZero.join(', '));
+  const sansMax = g.criteres.filter((c) => !c.paliers.some((p) => p.points === c.max_points)).map((c) => c.code);
+  bilan(sansMax.length === 0, `${g.id} : chaque critère a son palier maximum`, sansMax.join(', '));
+  const muets = g.criteres.filter((c) => c.paliers.some((p) => /^[\d\s,.–-]*$/.test(p.description))).map((c) => c.code);
+  bilan(muets.length === 0, `${g.id} : aucun palier sans descripteur`, muets.join(', '));
 
-  // La somme des critères doit faire l'échelle analytique. Un écart d'un quart
-  // de point suffit à ce qu'une copie parfaite ne puisse pas avoir 20.
-  const somme = (criteres.data ?? []).reduce((n, c) => n + Number(c.max_points), 0);
-  bilan(
-    Math.abs(somme - g.max_analytique) < 0.001,
-    `${g.id} : la somme des critères fait l'échelle`,
-    `${somme} / ${g.max_analytique}`,
-  );
-
-  // Chaque critère du noyau a autant de paliers que de descripteurs en base.
-  const idsCriteres = (criteres.data ?? []).map((c) => `"${c.id}"`).join(',');
-  const descripteurs = idsCriteres
-    ? await lire(`grille_descripteurs?select=critere_id&critere_id=in.(${idsCriteres})`)
-    : { data: [] };
-  const attendus = g.criteres.reduce((n, c) => n + c.paliers.length, 0);
-  bilan(
-    (descripteurs.data ?? []).length === attendus,
-    `${g.id} : ${attendus} descripteurs de paliers`,
-    `base ${(descripteurs.data ?? []).length}`,
-  );
+  // Chaque code de la taxonomie doit tomber sur un critère de CETTE grille.
+  const perdus = taxonomiePour(exercice)
+    .map((e) => [e.code, criterePrincipal(e, exercice)])
+    .filter(([, c]) => c && !critereResolu(c, g))
+    .map(([code, c]) => `${code}→${c}`);
+  bilan(perdus.length === 0, `${g.id} : la taxonomie vise des critères de la grille`, perdus.join(', '));
 
   // LE contrôle qui compte : la consigne remise au correcteur est-elle bien
-  // celle que le noyau construit depuis cette grille ? Si elle a dérivé, le
-  // correcteur applique un barème que le code ne décrit plus.
-  const attendue = consigneSysteme(g);
+  // celle que le noyau construit depuis cette grille ?
+  const noyau = GRILLES.find((x) => x.id === g.id);
+  const attendue = noyau ? consigneSysteme(noyau) : consigneSysteme(g, { taxonomie: TAXONOMIE });
+  const stockee = (ligne.system_prompt ?? '').trim();
   bilan(
-    (ligne.system_prompt ?? '').trim() === attendue.trim(),
+    stockee === attendue.trim(),
     `${g.id} : la consigne système est celle du noyau`,
-    (ligne.system_prompt ?? '').trim() === attendue.trim()
-      ? ''
-      : 'la base a dérivé — rejouer node scripts/apply-hggsp.mjs',
+    stockee === attendue.trim() ? '' : stockee ? 'la base a dérivé du noyau' : 'aucune consigne stockée',
   );
 
-  // Statut : une grille non verrouillée produit des notes PROVISOIRES.
+  // Le contrôle de la base elle-même (utilisé par grille_verrouiller).
+  const rpc = await fetch(`${BASE}/rest/v1/rpc/grille_verifier`, {
+    method: 'POST',
+    headers: { apikey: CLE, Authorization: `Bearer ${CLE}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_grille: g.id }),
+  });
+  const verdict = rpc.ok ? await rpc.json() : null;
+  bilan(
+    verdict?.ok === true,
+    `${g.id} : grille_verifier() en base`,
+    verdict ? (verdict.blocages ?? []).map((b) => b.message).slice(0, 3).join(' · ') : `HTTP ${rpc.status}`,
+  );
+
   if (STATUTS_VERROUILLES.includes(ligne.statut)) {
     bilan(true, `${g.id} : statut ${ligne.statut}`, 'les notes sont définitives');
   } else {
     noter(
       `${g.id} : statut « ${ligne.statut} »${ligne.valide_par ? `, validée par ${ligne.valide_par}` : ', jamais validée par un professeur'} — toute note produite est PROVISOIRE (voir GUIDE_HGGSP_V2.md §5).`,
     );
+  }
+}
+
+// Les grilles du noyau (V2) : toujours conformes, et archivées si une autre note.
+for (const g of GRILLES) {
+  const enBase = await lire(`grilles_redigees?select=*&id=eq.${g.id}`);
+  const ligne = enBase.data?.[0];
+  if (!ligne) {
+    bilan(false, `${g.id} présente en base`, enBase.erreur ?? 'absente');
+    continue;
+  }
+  const criteres = await lire(`grille_criteres?select=code&grille_id=eq.${g.id}`);
+  const codesBase = (criteres.data ?? []).map((c) => c.code).sort();
+  const codesNoyau = g.criteres.map((c) => c.code).sort();
+  bilan(
+    JSON.stringify(codesBase) === JSON.stringify(codesNoyau) &&
+      (ligne.system_prompt ?? '').trim() === consigneSysteme(g).trim(),
+    `${g.id} : conforme au noyau (critères + consigne)`,
+    'les anciennes copies qui la désignent se re-corrigent à l’identique',
+  );
+  if (!idsActifs.has(g.id)) {
+    bilan(ligne.statut === 'archived', `${g.id} : archivée, plus aucune nouvelle copie`, `statut « ${ligne.statut} »`);
   }
 }
 

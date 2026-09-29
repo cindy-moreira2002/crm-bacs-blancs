@@ -204,8 +204,8 @@ function BandeauRedigees({
         <div>
           <h2 className="text-lg font-bold text-gray-900">📝 Les épreuves rédigées : grilles à critères</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Une grille par exercice, critère par critère. La copie est notée sur une échelle
-            analytique de 20 points, convertie automatiquement en note officielle. Tant que la grille
+            Une grille par exercice, critère par critère. La copie est notée sur l’échelle
+            analytique de la grille, convertie automatiquement en note officielle. Tant que la grille
             n’est pas verrouillée, chaque note est <strong>provisoire</strong>.
           </p>
         </div>
