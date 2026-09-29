@@ -5,7 +5,7 @@
  *   Vue d'ensemble · Mes bacs blancs · Sessions disponibles · Mon profil
  *
  * Toutes les données arrivent déjà calculées du serveur : ce composant ne parle
- * à l'API que pour deux actions (s'inscrire comme coach, se déconnecter).
+ * à l'API que pour se déconnecter et changer de mot de passe ; l'inscription comme coach se fait sur Discord.
  */
 import { useState } from 'react';
 import { LiaisonDiscord } from '@/components/LiaisonDiscord';
@@ -132,7 +132,7 @@ function ReglesDuJeu({ inscrits, code }: { inscrits: number; code: string }) {
       <div className="mt-4 rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between text-sm">
           <span className="font-semibold text-gray-800">
-            {debloque ? '✅ Tu peux coacher des bacs blancs' : '🔒 Accès coach'}
+            {debloque ? '✅ Accès au Discord ouvert' : '🔒 Accès au Discord'}
           </span>
           <span className="font-mono text-gray-600">{Math.min(inscrits, SEUIL_COACH)}/{SEUIL_COACH} élèves</span>
         </div>
@@ -228,9 +228,7 @@ export function TableauDeBordProf({
   usurpePar: string | null;
 }) {
   const [onglet, setOnglet] = useState<Onglet>('ensemble');
-  const [sessions, setSessions] = useState(blocs);
-  const [busy, setBusy] = useState('');
-  const [erreur, setErreur] = useState<string | null>(null);
+  const sessions = blocs;
   const [copie, setCopie] = useState(false);
 
   const prochaine = sessions.aVenir[0] ?? null;
@@ -251,36 +249,6 @@ export function TableauDeBordProf({
     await navigator.clipboard.writeText(prof.code_affiliation);
     setCodeCopie(true);
     setTimeout(() => setCodeCopie(false), 2000);
-  };
-
-  const seCoacher = async (session: SessionEnrichie) => {
-    setBusy(session.id);
-    setErreur(null);
-    try {
-      const res = await fetch('/api/prof/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: session.id, action: 'inscrire' }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setErreur(data.error || 'Erreur.');
-        return;
-      }
-      // Optimiste : la session bascule de « disponibles » vers « mes bacs blancs ».
-      setSessions((s) => ({
-        ...s,
-        disponibles: s.disponibles.filter((x) => x.id !== session.id),
-        aVenir: [...s.aVenir, { ...session, je_coache: true, nb_coachs: session.nb_coachs + 1 }].sort(
-          (a, b) => a.date_epreuve.localeCompare(b.date_epreuve),
-        ),
-      }));
-      setOnglet('mes-bacs');
-    } catch {
-      setErreur('Erreur de connexion.');
-    } finally {
-      setBusy('');
-    }
   };
 
   const seDeconnecter = async () => {
@@ -378,12 +346,18 @@ export function TableauDeBordProf({
           toutes les salles d'élèves : la reléguer dans un onglet reviendrait à
           la cacher. Le bloc disparaît de lui-même une fois le compte relié. */}
       <div className="mb-4">
-        <LiaisonDiscord pourquoi="C’est ce qui t’ouvre la zone Équipe et les salles de tes élèves : sans compte relié, tu vois les liens mais tu ne peux pas entrer." />
+        {coachDebloque ? (
+          <LiaisonDiscord pourquoi="Tu as atteint 3 élèves grâce à ton code promo : relie ton compte pour entrer sur notre Discord et t’inscrire en tant que coach." />
+        ) : (
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+            🔒 Dès que tu auras atteint <strong>{SEUIL_COACH} élèves</strong> amenés grâce à ton code promo{' '}
+            <span className="font-mono font-semibold">{prof.code_affiliation}</span>, tu pourras avoir accès
+            à notre Discord pour t’inscrire en tant que coach{' '}
+            <span className="text-indigo-700">({Math.min(revenus.eleves_parraines, SEUIL_COACH)}/{SEUIL_COACH})</span>.
+          </div>
+        )}
       </div>
 
-      {erreur && (
-        <div className="mb-4 p-3 rounded-lg bg-red-100 text-red-800 text-sm font-medium">{erreur}</div>
-      )}
 
       {/* --- Vue d'ensemble --- */}
       {onglet === 'ensemble' && (
@@ -561,30 +535,15 @@ export function TableauDeBordProf({
           <p className="text-sm text-gray-500 mb-1">
             Uniquement les bacs blancs de tes matières : {(prof.matieres ?? []).join(', ') || '—'}.
           </p>
-          {!coachDebloque && (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">
-              🔒 Pour t’inscrire comme coach, fais d’abord inscrire <strong>{SEUIL_COACH} élèves</strong> avec
-              ton code <span className="font-mono font-semibold">{prof.code_affiliation}</span> — tu en es
-              à {revenus.eleves_parraines}/{SEUIL_COACH}. Tu peux déjà regarder les dates.
-            </div>
-          )}
+          <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-4 text-sm text-indigo-900">
+            Les inscriptions comme coach se font uniquement sur notre Discord
+            {coachDebloque
+              ? '. Tu y as accès : relie ton compte avec le bouton Discord en haut de la page.'
+              : ` : il s’ouvre dès que ${SEUIL_COACH} élèves se sont inscrits grâce à ton code promo (${revenus.eleves_parraines}/${SEUIL_COACH}).`}
+            {' '}Voici les dates à venir dans tes matières.
+          </div>
           {sessions.disponibles.length ? (
-            sessions.disponibles.map((s) => {
-              const complet = s.nb_coachs >= s.coachs_recherches;
-              return (
-                <CarteSession key={s.id} session={s}
-                  action={
-                    <button
-                      onClick={() => seCoacher(s)}
-                      disabled={busy === s.id || complet || !coachDebloque}
-                      className="px-5 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {busy === s.id ? '…' : complet ? 'Coachs au complet' : !coachDebloque ? `🔒 ${revenus.eleves_parraines}/${SEUIL_COACH} élèves` : 'S’inscrire comme coach'}
-                    </button>
-                  }
-                />
-              );
-            })
+            sessions.disponibles.map((s) => <CarteSession key={s.id} session={s} />)
           ) : (
             <Vide texte="Aucun bac blanc ouvert dans tes matières pour le moment." />
           )}

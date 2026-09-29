@@ -26,6 +26,11 @@ export const MESSAGES_LIAISON: Record<string, { ton: 'ok' | 'erreur'; texte: str
     texte:
       'Compte relié, mais l’accès à ta salle n’a pas pu être posé. Préviens-nous : personne n’a besoin de recommencer, c’est à nous de le corriger.',
   },
+  'trois-eleves': {
+    ton: 'erreur',
+    texte:
+      'Le Discord s’ouvre quand 3 élèves se sont inscrits grâce à ton code promo.',
+  },
   refuse: {
     ton: 'erreur',
     texte: 'Liaison annulée sur Discord. Tu peux réessayer quand tu veux.',

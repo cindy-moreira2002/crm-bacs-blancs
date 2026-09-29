@@ -12,7 +12,8 @@
  * quelqu'un d'autre.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { encoderCookieSigne, OPTIONS_COOKIE, profConnecte, secretSessionPresent } from '@/lib/authProf';
+import { crmAdmin, encoderCookieSigne, OPTIONS_COOKIE, profConnecte, secretSessionPresent } from '@/lib/authProf';
+import { SEUIL_COACH } from '@/lib/reglesProf';
 import { eleveConnecte } from '@/lib/authEleve';
 import { discordConfigure, urlAutorisation } from '@/lib/discord/config';
 import { COOKIE_ETAT_DISCORD, VALIDITE_ETAT_S } from '@/lib/discord/liaison';
@@ -36,6 +37,16 @@ export async function GET(req: NextRequest) {
   const eleve = prof ? null : await eleveConnecte();
 
   if (!prof && !eleve) return echouer('connecte-toi', '/espace-eleve');
+
+  // Règle du jeu : un prof n'entre sur le Discord (où l'on s'inscrit comme
+  // coach) qu'après SEUIL_COACH élèves inscrits avec son code promo.
+  if (prof && prof.role !== 'admin') {
+    const { count } = await crmAdmin()
+      .from('inscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('code_affiliation', prof.code_affiliation);
+    if ((count ?? 0) < SEUIL_COACH) return echouer('trois-eleves', '/espace-prof');
+  }
 
   const role = prof ? 'prof' : 'eleve';
   const retour = prof ? '/espace-prof' : '/espace-eleve';
