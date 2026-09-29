@@ -273,8 +273,10 @@ export function TableauProfs({ monId }: { monId: string }) {
   };
 
   const definirMotDePasse = async (id: string) => {
-    if (motDePasse.length < 8) {
-      setErreur('Le mot de passe doit faire au moins 8 caractères.');
+    // Même règle que le serveur (verifierForceMotDePasse) : 10 caractères,
+    // au moins une lettre et un chiffre.
+    if (motDePasse.length < 10 || !/[a-zA-Z]/.test(motDePasse) || !/[0-9]/.test(motDePasse)) {
+      setErreur('Le mot de passe doit faire au moins 10 caractères, avec des lettres et au moins un chiffre.');
       return;
     }
     const ok = await modifier(
@@ -590,7 +592,7 @@ export function TableauProfs({ monId }: { monId: string }) {
                                       type="text"
                                       value={motDePasse}
                                       onChange={(e) => setMotDePasse(e.target.value)}
-                                      placeholder="Nouveau mot de passe"
+                                      placeholder="Nouveau mot de passe (10 caractères min.)"
                                       className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 text-sm"
                                     />
                                     <button
