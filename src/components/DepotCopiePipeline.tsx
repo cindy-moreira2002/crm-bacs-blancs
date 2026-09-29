@@ -77,7 +77,7 @@ const ETAPES: { cle: string; label: string; statuts: string[] }[] = [
   { cle: 'depot', label: 'Copie reçue', statuts: ['uploaded'] },
   { cle: 'lecture', label: 'Lecture de la copie', statuts: ['transcribing'] },
   { cle: 'transcrite', label: 'Copie transcrite', statuts: ['transcribed', 'transcription_review'] },
-  { cle: 'correction', label: 'Correction', statuts: ['correcting'] },
+  { cle: 'correction', label: 'Correction', statuts: ['correcting', 'queued_review', 'reviewing'] },
   { cle: 'corrigee', label: 'Copie notée', statuts: ['corrected', 'corrected_review'] },
   { cle: 'dossier', label: 'Dossier de l’élève', statuts: [] },
 ];

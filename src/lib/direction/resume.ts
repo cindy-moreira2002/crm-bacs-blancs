@@ -280,7 +280,7 @@ const ilYA = (jours: number) => new Date(Date.now() - jours * 86_400_000).toISOS
 const USD_PAR_COPIE = 0.22;
 
 /** Statuts d'une copie encore en cours de traitement. */
-const STATUTS_EN_COURS = ['uploaded', 'transcribing', 'transcribed', 'transcription_review', 'correcting'];
+const STATUTS_EN_COURS = ['uploaded', 'transcribing', 'transcribed', 'transcription_review', 'correcting', 'queued_review', 'reviewing'];
 
 const ok = (libelle: string): CaseEtat => ({ etat: 'ok', libelle });
 const attention = (libelle: string): CaseEtat => ({ etat: 'attention', libelle });

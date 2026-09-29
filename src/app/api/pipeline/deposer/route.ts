@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pipelineDb, pipelineManquant, MATIERE_PAR_DEFAUT } from '@/lib/pipeline';
 import { examenOuvertDeLaFiche } from '@/lib/ficheDepot';
-import { accesDepot, verifierQuotaDepot } from '@/lib/accesDepot';
+import { accesDepot, consommerBudgetIa, verifierQuotaDepot } from '@/lib/accesDepot';
 import { sujetDeCorrection } from '@/lib/bacsBlancs';
 
 export const dynamic = 'force-dynamic';
@@ -129,6 +129,14 @@ export async function POST(req: NextRequest) {
     // Une copie déposée sur la fiche d'un sujet noté au barème du sujet est
     // reliée à son examen : c'est là que `correct-copy-bareme` lit le barème.
     const examDeLaFiche = complet ? null : await examenOuvertDeLaFiche(String(subject_id));
+
+    // Plafond de dépense IA du jour, commun à toute la chaîne (SQL 58) : la
+    // copie n'est enregistrée que si la réserve couvre sa transcription et
+    // sa correction.
+    const budget = await consommerBudgetIa('depot');
+    if (!budget.ok) {
+      return NextResponse.json({ error: budget.message }, { status: 429 });
+    }
 
     const { data: correction, error } = await db
       .from('corrections')

@@ -31,6 +31,7 @@ import {
   secretSessionPresent,
 } from './authProf';
 import { pipelineDb, pipelineManquant } from './pipeline';
+import { UNITES_IA, type NatureDepense } from './relectureIaNoyau';
 
 export const COOKIE_DEPOT = 'mdb_depot';
 const DUREE_CODE_S = 60 * 60 * 12; // 12 h : une matinée de corrections, pas plus.
@@ -171,6 +172,55 @@ export async function verifierQuotaDepot(): Promise<Quota> {
     return {
       ...base, ok: false,
       message: "Impossible de vérifier le plafond de dépôts pour l'instant. Réessaie dans une minute.",
+    };
+  }
+}
+
+// --- Plafond de dépense IA, global et journalier ------------------------
+
+export type BudgetIa = { ok: boolean; message?: string; utilise?: number; max?: number };
+
+/**
+ * Réserve des « unités IA » sur le plafond du jour (heure de Paris) avant
+ * tout appel payant : dépôt, relance, dossier, et — côté base — deuxième
+ * lecture, recorrection et relance de transcription automatiques.
+ *
+ * Le compteur vit dans la base du pipeline (`ia_depenses`,
+ * `public.ia_budget_consommer`, SQL 58) pour que le CRM ET les automatismes
+ * de la base tirent sur la même réserve. Le plafond se règle en base :
+ * `update ia_reglages set plafond_jour = … ;` (400 unités par défaut, une
+ * unité ≈ un appel au modèle ≈ 0,07 $).
+ *
+ * Échec de lecture → refus (fail-closed), comme `verifierQuotaDepot`.
+ */
+export async function consommerBudgetIa(
+  nature: NatureDepense,
+  correctionId: string | null = null,
+  source = 'crm',
+): Promise<BudgetIa> {
+  if (pipelineManquant().length) return { ok: true };
+  try {
+    const { data, error } = await pipelineDb().rpc('ia_budget_consommer', {
+      p_nature: nature,
+      p_unites: UNITES_IA[nature],
+      p_correction_id: correctionId,
+      p_source: source,
+    });
+    if (error) throw error;
+    const r = (data ?? {}) as BudgetIa;
+    if (r.ok) return r;
+    return {
+      ...r,
+      ok: false,
+      message:
+        `Plafond de dépense IA du jour atteint (${r.utilise ?? '?'} / ${r.max ?? '?'} unités). ` +
+        'Réessaie demain, ou relève le plafond (ia_reglages.plafond_jour).',
+    };
+  } catch (err) {
+    console.error('❌ consommerBudgetIa', err);
+    return {
+      ok: false,
+      message: "Impossible de vérifier le plafond de dépense IA pour l'instant. Réessaie dans une minute.",
     };
   }
 }

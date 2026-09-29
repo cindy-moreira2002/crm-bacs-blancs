@@ -90,12 +90,16 @@ export const ETAPES = [
   { statuts: ['uploaded'], label: 'Copie reçue' },
   { statuts: ['transcribing'], label: 'Lecture de la copie' },
   { statuts: ['transcribed', 'transcription_review'], label: 'Copie transcrite' },
-  { statuts: ['correcting'], label: 'Correction en cours' },
+  // queued_review / reviewing : deuxième lecture par l'IA (SES, HLP, LLCER,
+  // SVT, PC — SQL 58). Pour le prof, c'est toujours « la correction ».
+  { statuts: ['correcting', 'queued_review', 'reviewing'], label: 'Correction en cours' },
   { statuts: ['corrected', 'corrected_review'], label: 'Copie corrigée' },
 ] as const;
 
 export const STATUTS_ECHEC = ['transcription_failed', 'correction_failed'];
 export const STATUTS_CORRIGE = ['corrected', 'corrected_review'];
+/** Deuxième lecture par l'IA en attente ou en cours : la note peut encore bouger. */
+export const STATUTS_RELECTURE_IA = ['queued_review', 'reviewing'];
 
 /**
  * Barème d'une grille, en points.

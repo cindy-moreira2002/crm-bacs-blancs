@@ -10,6 +10,7 @@
  * du prof ne doit jamais être perdu à cause d'une copie manquante.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { consommerBudgetIa } from '@/lib/accesDepot';
 import { crmAdmin, profCourant } from '@/lib/authProf';
 import { chargerElevesSession, chargerSessionAutorisee } from '@/lib/espaceProf';
 import { cleMatiere } from '@/lib/matieres';
@@ -187,6 +188,14 @@ export async function POST(req: NextRequest, { params }: Params) {
               erreurGrille.message,
             );
           }
+        }
+
+        const budget = await consommerBudgetIa('dossier', correction.id, 'generer-prof');
+        if (!budget.ok) {
+          console.warn('⚠️ Plafond IA atteint, dossier non généré :', eleve.nom, budget.message);
+          sansCopie.push(eleve.nom);
+          pipelineIndisponible = budget.message ?? 'Plafond de dépense IA du jour atteint.';
+          continue;
         }
 
         const { error } = await pipeline.rpc('crm_generer_dossier', {

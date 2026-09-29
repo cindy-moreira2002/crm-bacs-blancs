@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { baremeGrille, pipelineDb, pipelineManquant, STATUTS_CORRIGE, STATUTS_ECHEC } from '@/lib/pipeline';
-import { refuserSiPasAutorise } from '@/lib/accesDepot';
+import { baremeGrille, pipelineDb, pipelineManquant, STATUTS_CORRIGE, STATUTS_ECHEC, STATUTS_RELECTURE_IA } from '@/lib/pipeline';
+import { consommerBudgetIa, refuserSiPasAutorise } from '@/lib/accesDepot';
 
 export const dynamic = 'force-dynamic';
 
@@ -121,6 +121,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     const db = pipelineDb();
 
     if (action === 'relancer') {
+      const budget = await consommerBudgetIa('relance', id);
+      if (!budget.ok) return NextResponse.json({ error: budget.message }, { status: 429 });
+      // Une relance à la main est une décision humaine : les compteurs de
+      // relances automatiques (SQL 58) repartent de zéro et la copie quitte
+      // la file « à regarder ». Sans effet sur les matières avec prof.
+      await db
+        .from('corrections')
+        .update({ ia_relances_transcription: 0, ia_recorrections: 0, a_regarder_cindy: false })
+        .eq('id', id);
       const { error } = await db.rpc('crm_lancer_correction', { p_correction_id: id });
       if (error) throw error;
       return NextResponse.json({ ok: true, action });
@@ -135,12 +144,15 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (cErr || !correction) {
         return NextResponse.json({ error: 'Copie introuvable.' }, { status: 404 });
       }
-      if (!correction.result_json) {
+      if (!correction.result_json || STATUTS_RELECTURE_IA.includes(correction.status)) {
         return NextResponse.json(
           { error: "La correction n'est pas encore prête." },
           { status: 409 },
         );
       }
+
+      const budget = await consommerBudgetIa('dossier', id);
+      if (!budget.ok) return NextResponse.json({ error: budget.message }, { status: 429 });
 
       const { error } = await db.rpc('crm_generer_dossier', { p_correction_id: id });
       if (error) throw error;
