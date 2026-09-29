@@ -15,6 +15,7 @@
     "test:hggsp": "node --test scripts/test-hggsp.mjs",
     "test:guideline": "node --import tsx --test scripts/test-guideline.mjs",
     "test:epreuves": "node --import tsx --test scripts/test-epreuves.mjs",
+    "test:relecture-ia": "node --import tsx --test scripts/test-relecture-ia.mjs",
     "hggsp:verifier": "node scripts/verifier-hggsp-base.mjs",
     "test:sujets": "tsx scripts/test-sujets-eleves.ts",
     "sujet:pousser": "tsx scripts/pousser-sujet.ts",
