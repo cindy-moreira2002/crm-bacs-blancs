@@ -28,6 +28,7 @@
  * puisse relire et corriger avant de valider.
  */
 import type { EleveSession } from '@/lib/espaceProf';
+import { COMPOSITIONS, maxScoreEpreuve } from '@/lib/epreuves';
 import {
   estFeuilleACocher,
   estGuidelineACorriger,
@@ -226,7 +227,34 @@ export type RapportImport = {
  * Analyse le CSV au regard des élèves réellement inscrits.
  * Ne modifie rien : renvoie ce qui est prêt et ce qui bloque.
  */
-export function analyserGrille(csv: string, eleves: EleveSession[]): RapportImport {
+/**
+ * Sur quelle échelle garder la note d'une feuille, selon la matière.
+ *
+ * Toutes les copies ne se notent pas sur 20 (`src/lib/epreuves.ts`) : l'écrit
+ * de SVT vaut 15 points, une partie d'épreuve composée de SES vaut 4, 6 ou 10.
+ * Une feuille dont le barème est celui de l'épreuve, ou celui d'une de ses
+ * parties, est donc JUSTE telle quelle — la ramener sur 20 inventerait des
+ * points (5 en SVT, que seule l'ECE évalue). On ne convertit que ce qu'on ne
+ * sait pas rattacher, et vers l'échelle de la matière, pas vers 20 d'office.
+ *
+ * Sans matière connue, la règle d'avant s'applique : échelle 20.
+ */
+export function echelleFeuille(
+  matiere: string | null | undefined,
+  baremeFeuille: number,
+): { cible: number; convertir: boolean } {
+  const cible = matiere ? maxScoreEpreuve(matiere) : 20;
+  if (Math.abs(baremeFeuille - cible) <= 0.01) return { cible, convertir: false };
+  const parties = matiere ? (COMPOSITIONS[matiere] ?? []).flatMap((c) => c.parties) : [];
+  if (parties.some((p) => Math.abs(p.points - baremeFeuille) <= 0.01)) {
+    return { cible: baremeFeuille, convertir: false };
+  }
+  return { cible, convertir: true };
+}
+
+const virgule = (n: number) => String(n).replace('.', ',');
+
+export function analyserGrille(csv: string, eleves: EleveSession[], matiere?: string | null): RapportImport {
   const erreursFichier: string[] = [];
   const table = lireCsv(csv);
 
@@ -235,10 +263,10 @@ export function analyserGrille(csv: string, eleves: EleveSession[]): RapportImpo
   // plus récente, barème et correction sur la même page) et les élèves en
   // blocs de lignes.
   if (estGuidelineACorriger(table)) {
-    return analyserFeuilleCochee(lireGuidelineCorrigee(table).copies, eleves);
+    return analyserFeuilleCochee(lireGuidelineCorrigee(table).copies, eleves, matiere);
   }
   if (estFeuilleACocher(table)) {
-    return analyserFeuilleCochee(lireFeuilleACocher(table), eleves);
+    return analyserFeuilleCochee(lireFeuilleACocher(table), eleves, matiere);
   }
 
   if (table.length < 2) {
@@ -290,16 +318,18 @@ export function analyserGrille(csv: string, eleves: EleveSession[]): RapportImpo
       dejaPris.add(eleve.id);
     }
 
-    // Note : on accepte « 14 », « 14,5 », « 14/20 ».
+    // Note : on accepte « 14 », « 14,5 », « 14/20 » — et « 11/15 » en SVT,
+    // dont l'écrit se note sur 15 (src/lib/epreuves.ts).
     let note: number | null = null;
     const noteBrute = lire(colNote);
+    const maxNote = matiere ? maxScoreEpreuve(matiere) : 20;
     if (noteBrute) {
-      const nettoyee = noteBrute.replace(',', '.').replace(/\s*\/\s*20$/, '').trim();
+      const nettoyee = noteBrute.replace(',', '.').replace(new RegExp(`\\s*\\/\\s*${maxNote}$`), '').trim();
       const valeur = Number(nettoyee);
       if (Number.isNaN(valeur)) {
-        problemes.push(`Note illisible : « ${noteBrute} ». Attendu un nombre entre 0 et 20.`);
-      } else if (valeur < 0 || valeur > 20) {
-        problemes.push(`Note hors barème : ${valeur}. Attendu entre 0 et 20.`);
+        problemes.push(`Note illisible : « ${noteBrute} ». Attendu un nombre entre 0 et ${maxNote}.`);
+      } else if (valeur < 0 || valeur > maxNote) {
+        problemes.push(`Note hors barème : ${valeur}. Attendu entre 0 et ${maxNote}.`);
       } else {
         note = valeur;
       }
@@ -375,7 +405,11 @@ function valeurCritere(c: CopieCochee['criteres'][number]): string {
  * corrigée, par exemple), la note est ramenée sur 20 et la conversion est
  * écrite noir sur blanc — le prof la voit et peut la corriger à l'écran.
  */
-function analyserFeuilleCochee(copies: CopieCochee[], eleves: EleveSession[]): RapportImport {
+function analyserFeuilleCochee(
+  copies: CopieCochee[],
+  eleves: EleveSession[],
+  matiere?: string | null,
+): RapportImport {
   const erreursFichier: string[] = [];
 
   if (copies.length === 0) {
@@ -407,13 +441,16 @@ function analyserFeuilleCochee(copies: CopieCochee[], eleves: EleveSession[]): R
     let note: number | null = copie.bareme > 0 ? copie.total : null;
     if (copie.bareme <= 0) {
       problemes.push('Aucun critère lu dans ce bloc : la note ne peut pas être calculée.');
-    } else if (Math.abs(copie.bareme - 20) > 0.01) {
-      note = Math.round((copie.total * 20) / copie.bareme * 100) / 100;
-      problemes.push(
-        `Barème de la feuille : ${String(copie.bareme).replace('.', ',')} points. ` +
-          `Note ramenée sur 20 (${String(copie.total).replace('.', ',')} → ${String(note).replace('.', ',')}). ` +
-          'Corrige-la ci-dessous si l’épreuve se note autrement.',
-      );
+    } else {
+      const { cible, convertir } = echelleFeuille(matiere, copie.bareme);
+      if (convertir) {
+        note = Math.round((copie.total * cible) / copie.bareme * 100) / 100;
+        problemes.push(
+          `Barème de la feuille : ${virgule(copie.bareme)} points. ` +
+            `Note ramenée sur ${cible} (${virgule(copie.total)} → ${virgule(note)}). ` +
+            'Corrige-la ci-dessous si l’épreuve se note autrement.',
+        );
+      }
     }
 
     const criteres: Record<string, string> = {};

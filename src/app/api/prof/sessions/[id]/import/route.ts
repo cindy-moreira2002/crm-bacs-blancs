@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { profCourant } from '@/lib/authProf';
 import { chargerElevesSession, chargerSessionAutorisee } from '@/lib/espaceProf';
 import { analyserGrille } from '@/lib/importGrille';
+import { cleMatiere } from '@/lib/matieres';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const csv = await fichier.text();
     const eleves = await chargerElevesSession(session);
-    const rapport = analyserGrille(csv, eleves);
+    // La matière fixe l'échelle : une feuille de SVT sur 15 reste sur 15.
+    const rapport = analyserGrille(csv, eleves, cleMatiere(session.matiere));
 
     return NextResponse.json({ success: true, rapport, nomFichier: fichier.name });
   } catch (err) {

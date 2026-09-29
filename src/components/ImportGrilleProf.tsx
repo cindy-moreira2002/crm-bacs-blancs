@@ -9,6 +9,8 @@
  */
 import { useState } from 'react';
 import type { Colonne, LigneImportee, RapportImport } from '@/lib/importGrille';
+import { maxScoreEpreuve } from '@/lib/epreuves';
+import { cleMatiere } from '@/lib/matieres';
 
 type Resultat = {
   enregistrees: number;
@@ -38,6 +40,8 @@ export function ImportGrilleProf({
   const [resultat, setResultat] = useState<Resultat | null>(null);
 
   const criteres: Colonne[] = (rapport?.colonnes ?? []).filter((c) => c.role === 'critere');
+  // L'écrit de SVT se note sur 15 (src/lib/epreuves.ts), le reste sur 20.
+  const maxNote = maxScoreEpreuve(cleMatiere(matiere) ?? '');
 
   const deposer = async (fichier: File) => {
     setBusy(true);
@@ -81,7 +85,7 @@ export function ImportGrilleProf({
 
   /** Une ligne est générable si l'élève est reconnu et qu'il reste une note. */
   const generable = (l: LigneImportee) =>
-    !!l.eleveId && l.note != null && !Number.isNaN(l.note) && l.note >= 0 && l.note <= 20;
+    !!l.eleveId && l.note != null && !Number.isNaN(l.note) && l.note >= 0 && l.note <= maxNote;
 
   const pretes = lignes.filter(generable);
   const bloquees = lignes.filter((l) => !generable(l));
@@ -298,9 +302,9 @@ export function ImportGrilleProf({
 
                   <div className="space-y-3">
                     <label className="block">
-                      <span className="text-sm font-medium text-gray-700">Note /20</span>
+                      <span className="text-sm font-medium text-gray-700">Note /{maxNote}</span>
                       <input
-                        type="number" min={0} max={20} step={0.25}
+                        type="number" min={0} max={maxNote} step={0.25}
                         value={l.note ?? ''}
                         onChange={(e) => modifier(l.numero, '__note', e.target.value)}
                         className="mt-1 w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
