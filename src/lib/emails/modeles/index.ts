@@ -82,38 +82,37 @@ const preinscription_recue: Modele = {
   type: 'preinscription_recue',
   categorie: 'transactional',
   role: 'prospect',
-  requises: ['first_name', 'inscription_url'],
+  requises: ['first_name'],
   sujet: (h) =>
     h.a('subject_name')
-      ? `Ta demande pour le bac blanc de ${h.r('subject_name')} est bien arrivée`
-      : 'Ta demande est bien arrivée',
+      ? `Ta place pour le bac blanc de ${h.r('subject_name')} est réservée`
+      : 'Ta place est réservée',
   contenu: (h) => ({
-    titre: 'On a bien reçu ta demande 👋',
+    titre: 'Ta place est réservée 🎉',
     blocs: [
       { type: 'paragraphe', texte: `Bonjour ${h.t('first_name')},` },
       {
         type: 'paragraphe',
         texte: h.a('subject_name')
-          ? `Ta demande pour le bac blanc de <strong>${h.t('subject_name')}</strong> est enregistrée. Rien n'est encore réservé : il te reste une étape.`
-          : 'Ta demande est enregistrée. Rien n’est encore réservé : il te reste une étape.',
+          ? `Ta place pour le bac blanc de <strong>${h.t('subject_name')}</strong> est bien réservée. Tu n'as rien à payer pour l'instant.`
+          : 'Ta place est bien réservée. Tu n’as rien à payer pour l’instant.',
       },
       ...(h.a('session_date')
-        ? [{ type: 'fiche' as const, lignes: [['Date envisagée', h.t('session_date')]] as [string, string][] }]
+        ? [{ type: 'fiche' as const, lignes: [['Date', h.t('session_date')]] as [string, string][] }]
         : []),
       {
         type: 'liste',
         items: [
-          'Tu finalises ton inscription en 2 minutes avec le bouton ci-dessous',
-          'Tu reçois la confirmation, puis le lien de ton salon visio',
+          'Quelques jours avant le bac blanc, tu reçois un e-mail pour régler ta place',
+          'Une fois le paiement reçu, tu reçois ta convocation et le lien de ton salon visio',
           'Le jour J, tu composes depuis chez toi et un professeur t’accompagne',
         ],
       },
     ],
-    bouton: { libelle: 'Finaliser mon inscription', url: h.r('inscription_url') },
     apres: [
       {
         type: 'petit',
-        texte: 'Tu n’es engagé·e à rien tant que l’inscription n’est pas finalisée.',
+        texte: 'Un empêchement ? Réponds simplement à cet e-mail et on libère ta place.',
       },
     ],
   }),
@@ -835,8 +834,8 @@ const relance_interet: Modele = {
       {
         type: 'paragraphe',
         texte: h.a('subject_name')
-          ? `Tu t'es intéressé·e au bac blanc de <strong>${h.t('subject_name')}</strong> sans finaliser ton inscription. Il reste des places.`
-          : 'Tu t’es intéressé·e à nos bacs blancs sans finaliser ton inscription. Il reste des places.',
+          ? `Tu t'es intéressé·e au bac blanc de <strong>${h.t('subject_name')}</strong>. Il reste des places sur les prochaines dates.`
+          : 'Tu t’es intéressé·e à nos bacs blancs. Il reste des places sur les prochaines dates.',
       },
       {
         type: 'liste',
@@ -847,7 +846,7 @@ const relance_interet: Modele = {
         ],
       },
     ],
-    bouton: { libelle: 'Choisir ma date', url: h.r('inscription_url') },
+    bouton: { libelle: 'Voir les dates', url: h.r('inscription_url') },
   }),
 };
 
